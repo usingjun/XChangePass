@@ -64,7 +64,6 @@ public class User {
                 String userName,
                 String userNickname,
                 String userPhoneNumber,
-                Integer userAge,
                 Sex userSex,
                 PasswordEncoder passwordEncoder) {
         this.userEmail = new UserEmail(userEmail);
@@ -72,7 +71,6 @@ public class User {
         this.userName = new UserName(userName);
         this.userNickname = new UserNickname(userNickname);
         this.userPhoneNumber = new UserPhoneNumber(userPhoneNumber);
-        this.userAge = userAge;
         this.userSex = userSex;
         this.userType = Role.ROLE_USER;
     }
