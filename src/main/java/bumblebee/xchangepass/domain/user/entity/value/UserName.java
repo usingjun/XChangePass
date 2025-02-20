@@ -18,7 +18,7 @@ public class UserName {
     public static final String ERR_MSG = "실명은 특수문자를 제외한 2~5자리여야 합니다.";
     private static final Pattern PATTERN = Pattern.compile(REGEX);
 
-    @Column(name = "user_name", nullable = false, length = 10)
+    @Column(name = "user_name", nullable = false, length = 5)
     private String value;
 
     public UserName(final String name) {
