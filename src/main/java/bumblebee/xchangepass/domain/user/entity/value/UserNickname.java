@@ -6,7 +6,6 @@ import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.regex.Pattern;
 
@@ -14,18 +13,16 @@ import java.util.regex.Pattern;
 @EqualsAndHashCode
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Slf4j
 public class UserNickname {
-    public static final String REGEX = "^[ㄱ-ㅎ가-힣a-zA-Z0-9-_]{2,10}$";
-    public static final String ERR_MSG = "닉네임은 특수문자를 제외한 2~10자리여야 합니다.";
+    public static final String REGEX = "^[ㄱ-ㅎ가-힣a-zA-Z0-9-_]{2,15}$";
+    public static final String ERR_MSG = "닉네임은 특수문자를 제외한 2~15자리여야 합니다.";
     private static final Pattern PATTERN = Pattern.compile(REGEX);
 
-    @Column(name = "user_nickname", nullable = false, length = 30, unique = true)
+    @Column(name = "user_nickname", nullable = false, length = 15, unique = true)
     private String value;
 
     public UserNickname(final String nickname) {
         if (!PATTERN.matcher(nickname).matches()) {
-            log.error(ERR_MSG);
             throw new IllegalArgumentException(ERR_MSG);
         }
         this.value = nickname;

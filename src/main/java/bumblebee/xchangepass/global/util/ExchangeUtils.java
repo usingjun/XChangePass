@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.ExchangeRate.util;
+package bumblebee.xchangepass.global.util;
 
 import bumblebee.xchangepass.domain.ExchangeRate.dto.response.ExchangeDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.DefaultUriBuilderFactory;
-import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 import java.io.IOException;

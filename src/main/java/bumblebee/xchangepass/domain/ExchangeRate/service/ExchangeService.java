@@ -3,7 +3,7 @@ package bumblebee.xchangepass.domain.ExchangeRate.service;
 import bumblebee.xchangepass.domain.ExchangeRate.dto.response.ExchangeDto;
 import bumblebee.xchangepass.domain.ExchangeRate.entity.Exchange;
 import bumblebee.xchangepass.domain.ExchangeRate.repository.ExchangeRepository;
-import bumblebee.xchangepass.domain.ExchangeRate.util.ExchangeUtils;
+import bumblebee.xchangepass.global.util.ExchangeUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

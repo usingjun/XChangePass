@@ -120,9 +120,9 @@ jobs:
       - name: Transition Issue to In Progress
         run: |
           # Jira API 엔드포인트 및 인증 정보
-          jira_url="${{ env.JIRA_BASE_URL }}"
-          username="${{ env.JIRA_USER_EMAIL }}"  # Jira 계정 이메일
-          api_token="${{ env.JIRA_API_TOKEN }}"  # Jira API 토큰
+          jira_url="${{ secrets.JIRA_BASE_URL }}"
+          username="${{ secrets.JIRA_USER_EMAIL }}"  # Jira 계정 이메일
+          api_token="${{ secrets.JIRA_API_TOKEN }}"  # Jira API 토큰
             
           issue_key="${{ steps.create.outputs.issue }}"
           transition_id="21"  # '진행 중' 상태에 해당하는 Transition ID (실제 Jira에서 확인 필요)
@@ -138,11 +138,6 @@ jobs:
                 }' \
             "${jira_url}/rest/api/2/issue/${issue_key}/transitions"
           echo "Transitioned Jira Issue $issue_key to In Progress"  
-
-      - name: Checkout develop code
-        uses: actions/checkout@v4
-        with:
-          ref: develop
 
       - name: Update issue title
         uses: actions-cool/issues-helper@v3
