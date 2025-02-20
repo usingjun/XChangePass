@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.global.error;
 
 import bumblebee.xchangepass.global.exception.CommonException;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
@@ -18,8 +19,13 @@ public enum ErrorCode {
     /*기타*/
     ENTITY_FIELD_ACCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "G001", "엔티티 필드 접근 오류");
 
+    @Schema(description = "에러 코드", example = "U003")
     private final String code;
+
+    @Schema(description = "에러 메시지", example = "회원가입에 실패했습니다.")
     private final String message;
+
+    @Schema(description = "HTTP 상태 코드", example = "200, 400")
     private final HttpStatus status;
 
     ErrorCode(HttpStatus status,String code, String message) {
