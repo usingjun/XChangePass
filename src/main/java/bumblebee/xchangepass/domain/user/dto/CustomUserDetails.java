@@ -25,7 +25,7 @@ public class CustomUserDetails implements UserDetails {
         Collection<GrantedAuthority> authorities = new ArrayList<>();
 
         // member.getUserRole().name()의 값을 권한으로 추가
-        authorities.add(new SimpleGrantedAuthority(user.getUserRole().name()));
+//        authorities.add(new SimpleGrantedAuthority(user.getUserRole().name()));
 
         return authorities;
     }
@@ -34,7 +34,7 @@ public class CustomUserDetails implements UserDetails {
     @Override
     public String getPassword() {
 
-        return user.getUserPwd();
+        return user.getUserPwd().getValue();
     }
 
     public Long getId(){ //member의 id값 가져오기
@@ -45,7 +45,7 @@ public class CustomUserDetails implements UserDetails {
     @Override
     public String getUsername() {
 
-        return user.getUserEmail();
+        return user.getUserEmail().getValue();
     }
 
     @Override
