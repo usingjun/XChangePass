@@ -13,7 +13,10 @@ jobs:
       - name: PR 제목에서 JIRA 이슈 키 추출
         id: extract_jira_key
         run: |
-          JIRA_KEY=$(echo "${{ github.event.pull_request.title }}" | grep -oE 'KAN[[:space:]]*[0-9]+' | sed 's/ /-/g')
+          # 'KAN'의 대소문자 구분 없이 처리
+          if [ -z "$JIRA_KEY" ]; then
+          JIRA_KEY=$(echo "${{ github.event.pull_request.title }}" | grep -ioE 'KAN[[:space:]]*[0-9]+' | sed 's/ /-/g')
+          fi
           
           if [ -z "$JIRA_KEY" ]; then
             echo "JIRA 이슈 키를 찾을 수 없습니다."
