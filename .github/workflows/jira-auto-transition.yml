@@ -31,7 +31,7 @@ jobs:
           username="${{ secrets.JIRA_USER_EMAIL }}"  
           api_token="${{ secrets.JIRA_API_TOKEN }}"  
 
-          issue_key="${{ env.JIRA_KEY }}
+          issue_key="${{ env.JIRA_KEY }}"
           transition_id="2"
 
 
