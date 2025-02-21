@@ -27,10 +27,11 @@ jobs:
         uses: stefanbuck/github-issue-parser@v3
         id: issue-parser
         with:
-          template-path: |
-            .github/ISSUE_TEMPLATE/feature-form.yml
-            .github/ISSUE_TEMPLATE/refactor-form.yml
-            .github/ISSUE_TEMPLATE/bug-form.yml
+          template-path: ${{
+            contains(github.event.issue.title, '[Feat]') && '.github/ISSUE_TEMPLATE/feature-form.yml' ||
+            contains(github.event.issue.title, '[Refactor]') && '.github/ISSUE_TEMPLATE/refactor-form.yml' ||
+            contains(github.event.issue.title, '[Fix]') && '.github/ISSUE_TEMPLATE/bug-form.yml'
+            }}
 
       - name: Parse JSON Output
         id: parse-json
