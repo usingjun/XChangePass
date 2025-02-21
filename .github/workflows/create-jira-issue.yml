@@ -28,7 +28,7 @@ jobs:
         id: issue-parser
         with:
           template-path: |
-            .github/ISSUE_TEMPLATE/feature_form.yml
+            .github/ISSUE_TEMPLATE/feature-form.yml
             .github/ISSUE_TEMPLATE/refactor-form.yml
             .github/ISSUE_TEMPLATE/bug-form.yml
 
