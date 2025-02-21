@@ -25,13 +25,22 @@ jobs:
           echo "추출된 JIRA 이슈 키: $JIRA_KEY"
           echo "JIRA_KEY=$JIRA_KEY" >> $GITHUB_ENV  # 환경 변수 설정
 
-      - name: JIRA 이슈 상태를 "리뷰 중"으로 변경
+      - name: Transition Issue to In Progress
         run: |
-          curl -X POST "${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/$JIRA_KEY/transitions" \
-          -u "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          --data '{
-            "transition": {
-              "id": "2"  # "리뷰 중" 상태의 Transition ID (JIRA에서 확인 필요)
-            }
-          }'
+          jira_url="${{ secrets.JIRA_BASE_URL }}"
+          username="${{ secrets.JIRA_USER_EMAIL }}"  
+          api_token="${{ secrets.JIRA_API_TOKEN }}"  
+
+          issue_key="${{ steps.create.outputs.issue }}"
+          transition_id="2"
+
+          curl -X POST \
+            -u "${username}:${api_token}" \
+            -H "Content-Type: application/json" \
+            -d '{
+                   "transition": {
+                     "id": "'"$transition_id"'"
+                  }
+                }' \
+            "${jira_url}/rest/api/3/issue/${issue_key}/transitions"
+          echo "Transitioned Jira Issue $issue_key to In Progress"
