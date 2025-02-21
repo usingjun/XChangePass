@@ -31,8 +31,9 @@ jobs:
           username="${{ secrets.JIRA_USER_EMAIL }}"  
           api_token="${{ secrets.JIRA_API_TOKEN }}"  
 
-          issue_key="${{ steps.create.outputs.issue }}"
+          issue_key="${{ env.JIRA_KEY }}
           transition_id="2"
+
 
           curl -X POST \
             -u "${username}:${api_token}" \
