@@ -1,0 +1,47 @@
+name: Jira Issue Transition on PR
+
+on:
+  pull_request:
+    branches:
+      - develop  # develop 브랜치로 PR이 열리면 실행
+
+jobs:
+  update_jira:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: PR 제목에서 JIRA 이슈 키 추출
+        id: extract_jira_key
+        run: |
+          # 'KAN'의 대소문자 구분 없이 처리
+          if [ -z "$JIRA_KEY" ]; then
+          JIRA_KEY=$(echo "${{ github.event.pull_request.title }}" | grep -ioE 'KAN[[:space:]]*[0-9]+' | sed 's/ /-/g')
+          fi
+          
+          if [ -z "$JIRA_KEY" ]; then
+            echo "JIRA 이슈 키를 찾을 수 없습니다."
+            exit 1
+          fi
+          echo "추출된 JIRA 이슈 키: $JIRA_KEY"
+          echo "JIRA_KEY=$JIRA_KEY" >> $GITHUB_ENV  # 환경 변수 설정
+
+      - name: Transition Issue to In Progress
+        run: |
+          jira_url="${{ secrets.JIRA_BASE_URL }}"
+          username="${{ secrets.JIRA_USER_EMAIL }}"  
+          api_token="${{ secrets.JIRA_API_TOKEN }}"  
+
+          issue_key="${{ env.JIRA_KEY }}"
+          transition_id="2"
+
+
+          curl -X POST \
+            -u "${username}:${api_token}" \
+            -H "Content-Type: application/json" \
+            -d '{
+                   "transition": {
+                     "id": "'"$transition_id"'"
+                  }
+                }' \
+            "${jira_url}/rest/api/3/issue/${issue_key}/transitions"
+          echo "Transitioned Jira Issue $issue_key to In Progress"
