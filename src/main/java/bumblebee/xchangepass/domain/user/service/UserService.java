@@ -66,18 +66,12 @@ public class UserService {
     }
 
     /*
-    사용자 삭제
-    추후 소프트 리셋으로 변경 예정
+    사용자 삭제 요청 (Soft Delete)
      */
-    public void deleteUser(Long userId) {
-        if (!userRepository.existsById(userId)) {
-            throw ErrorCode.USER_NOT_FOUND.commonException();
-        }
+    public void softDeleteUser(Long userId) {
+        User existUser = userRepository.findById(userId)
+                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
-        try {
-            userRepository.deleteById(userId);
-        }catch (Exception e) {
-            throw ErrorCode.USER_NOT_DELETE.commonException();
-        }
+        existUser.softDelete();
     }
 }
