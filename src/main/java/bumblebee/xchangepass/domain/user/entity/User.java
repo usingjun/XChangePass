@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.SQLRestriction;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,6 +22,7 @@ import static lombok.AccessLevel.PROTECTED;
                 @UniqueConstraint(name = "unique_user_nickname", columnNames = "user_nickname"),
                 @UniqueConstraint(name = "unique_user_phonenumber", columnNames = "user_phonenumber")
        })
+@SQLRestriction("is_deleted = false")
 @NoArgsConstructor(access = PROTECTED)
 @EntityListeners(AuditingEntityListener.class)
 public class User {
@@ -56,6 +58,9 @@ public class User {
     @Enumerated(value = EnumType.STRING)
     private Role userType;
 
+    @Column(columnDefinition = "tinyint(1)")
+    private Boolean isDeleted;
+
     @CreatedDate
     @Column(name = "user_join_date")
     private LocalDateTime userJoinDate;
@@ -79,5 +84,11 @@ public class User {
         this.userAge = 0;
         this.userSex = userSex;
         this.userType = Role.ROLE_USER;
+        this.isDeleted = false;
+    }
+
+    public void softDelete() {
+        this.isDeleted = true;
+        userDeleteDate = LocalDateTime.now();
     }
 }
