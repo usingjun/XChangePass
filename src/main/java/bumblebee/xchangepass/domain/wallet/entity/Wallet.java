@@ -15,7 +15,7 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Table(name = "wallet")
 @Getter
-@NoArgsConstructor(access = PROTECTED)
+@NoArgsConstructor()
 @EntityListeners(AuditingEntityListener.class)
 public class Wallet {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -31,4 +31,9 @@ public class Wallet {
 
     @LastModifiedDate
     public LocalDateTime walletModifiedAt;
+
+    public Wallet(Long walletId, User user) {
+        this.walletId = walletId;
+        this.user = user;
+    }
 }

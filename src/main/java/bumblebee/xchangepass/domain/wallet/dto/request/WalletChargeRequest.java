@@ -11,4 +11,11 @@ public record WalletChargeRequest(
         Currency toCurrency,
         LocalDateTime chargeDatetime
 ) {
+    public WalletChargeRequest(Long userId, BigDecimal chargeAmount, Currency fromCurrency, Currency toCurrency, LocalDateTime chargeDatetime) {
+        this.userId = userId;
+        this.chargeAmount = chargeAmount;
+        this.fromCurrency = fromCurrency;
+        this.toCurrency = toCurrency;
+        this.chargeDatetime = chargeDatetime;
+    }
 }

@@ -8,7 +8,6 @@ import java.util.Currency;
 public record WalletTransferRequest(
         Long senderId,
         Long receiverId,
-        String accountNumber,
         BigDecimal transferAmount,
         Currency fromCurrency,
         Currency toCurrency,

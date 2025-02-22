@@ -18,7 +18,7 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Table(name = "balance")
 @Getter
-@NoArgsConstructor(access = PROTECTED)
+@NoArgsConstructor()
 @EntityListeners(AuditingEntityListener.class)
 public class WalletBalance {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,6 +40,12 @@ public class WalletBalance {
 
     @LastModifiedDate
     public LocalDateTime currencyModifiedAt;
+
+    public WalletBalance(Long balanceId, Wallet wallet, Currency currency) {
+        this.balanceId = balanceId;
+        this.wallet = wallet;
+        this.currency = currency;
+    }
 
     public void addBalance(BigDecimal balance) {
         this.balance = this.balance.add(balance);

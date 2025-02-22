@@ -12,12 +12,14 @@ import bumblebee.xchangepass.domain.walletBalance.repository.WalletBalanceReposi
 import bumblebee.xchangepass.global.error.ErrorCode;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WalletService {
@@ -42,17 +44,28 @@ public class WalletService {
 
         Wallet wallet = walletRepository.findByUserId(request.userId());
 
-        List<WalletBalance> balanceList = balanceRepository.findByWalletId(wallet.walletId);
-        for (WalletBalance balance : balanceList) {
-            if (balance.currency.equals(request.toCurrency())) {
-                WalletBalance findBalance = balanceRepository.findById(balance.getBalanceId())
-                        .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
+        WalletBalance balance = balanceRepository.findByWalletIdAndCurrency(wallet.walletId, request.toCurrency());
 
-                findBalance.addBalance(request.chargeAmount());
-                balanceRepository.save(findBalance);
-                break;
-            }
+        balance.addBalance(request.chargeAmount());
+        balanceRepository.save(balance);
+    }
+
+    @Transactional
+    public BigDecimal withdrawal(WalletChargeRequest request) {
+        if (!request.toCurrency().equals(request.fromCurrency())) {
+            //환전
+
         }
+
+        Wallet wallet = walletRepository.findByUserId(request.userId());
+
+        WalletBalance balance = balanceRepository.findByWalletIdAndCurrency(wallet.walletId, request.toCurrency());
+
+        balance.subtractBalance(request.chargeAmount());
+        balanceRepository.save(balance);
+
+        WalletBalance savedBalance = balanceRepository.findByWalletIdAndCurrency(wallet.walletId, request.toCurrency());
+        return savedBalance.getBalance();
     }
 
     @Transactional
@@ -65,32 +78,22 @@ public class WalletService {
 
         BigDecimal transferAmount = request.transferAmount();
 
-        if ((transferAmount.compareTo(fromBalance.getBalance())) > 0) {
+        if ((transferAmount.compareTo(fromBalance.getBalance())) < 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
 
         fromBalance.subtractBalance(transferAmount);
-        balanceRepository.save(fromBalance);
 
         if (!request.fromCurrency().equals(request.toCurrency())) {
             //환전
 
         }
 
-
         toBalance.addBalance(transferAmount);
+        balanceRepository.save(fromBalance);
         balanceRepository.save(toBalance);
-
     }
 
-    private void withdraw(WalletBalance balance, BigDecimal transferAmount) {
-
-    }
-
-
-    private void userTransfer(Long receiverId, BigDecimal transferAmount, Currency currency) {
-
-    }
 
     @Transactional
     public List<WalletBalanceResponse> balance(WalletGetRequest request) {

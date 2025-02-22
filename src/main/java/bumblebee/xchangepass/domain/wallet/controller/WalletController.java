@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Controller
@@ -30,6 +31,12 @@ public class WalletController {
     @ResponseStatus(HttpStatus.CREATED)
     public void charge(@RequestBody WalletChargeRequest request) {
         walletService.charge(request);
+    }
+
+    @PutMapping("/withdraw")
+    @ResponseStatus(HttpStatus.CREATED)
+    public BigDecimal withdrawal(@RequestBody WalletChargeRequest request) {
+        return walletService.withdrawal(request);
     }
 
     @PutMapping("/transfer")
