@@ -22,19 +22,19 @@ public class RedisConfig {
         return template;
     }
 
+
     // Key는 문자열, Value는 JSON 직렬화
     @Bean
     public RedisTemplate<String, Object> jsonRedisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Key는 StringRedisSerializer
         template.setKeySerializer(new StringRedisSerializer());
 
         // Value는 JSON 직렬화 (GenericJackson2JsonRedisSerializer 사용)
         ObjectMapper redisObjectMapper = new ObjectMapper();
-        redisObjectMapper.findAndRegisterModules(); // JavaTimeModule 자동 등록
-        redisObjectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // ISO-8601 문자열로 설정
+        redisObjectMapper.findAndRegisterModules();
+        redisObjectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         template.setValueSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper));
         return template;
