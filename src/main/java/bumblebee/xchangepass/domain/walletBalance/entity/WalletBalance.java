@@ -41,8 +41,7 @@ public class WalletBalance {
     @LastModifiedDate
     public LocalDateTime currencyModifiedAt;
 
-    public WalletBalance(Long balanceId, Wallet wallet, Currency currency) {
-        this.balanceId = balanceId;
+    public WalletBalance(Wallet wallet, Currency currency) {
         this.wallet = wallet;
         this.currency = currency;
     }
