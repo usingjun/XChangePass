@@ -41,6 +41,7 @@ dependencies {
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-test'   // Spring Boot의 테스트 도구 모음 (JUnit, Mockito 포함)
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'             // JUnit 플랫폼 런처 (테스트 실행 환경 제공)
+    testImplementation 'it.ozimov:embedded-redis:0.7.3'                      // 테스트 환경에서 Embedded Redis 실행 (실제 Redis 서버 없이 인메모리에서 동작)
 
     // 데이터베이스
     runtimeOnly 'com.h2database:h2'                                          // 인메모리 데이터베이스 H2 (테스트 및 개발 환경용)
