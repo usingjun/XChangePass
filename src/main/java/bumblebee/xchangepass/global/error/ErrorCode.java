@@ -16,6 +16,8 @@ public enum ErrorCode {
     USER_DUPLICATE_NICK_NAME(HttpStatus.BAD_REQUEST, "U006", "중복된 닉네임 입니다."),
     USER_DUPLICATE_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "U007", "중복된 전화번호 입니다."),
 
+    WALLET_NOT_FOUND(HttpStatus.BAD_REQUEST, "U007", "지갑을 찾을 수 없습니다."),
+
     //Balance
     BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "M005-1", "충전 금액이 부족합니다."),
     BALANCE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "M005-2", "충전 금액이 부족합니다."),

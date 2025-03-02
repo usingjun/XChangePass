@@ -71,8 +71,8 @@ class WalletIntegrationServiceTest {
         userRepository.deleteAll(); // 기존 데이터 삭제
 
         // 유저 생성
-        sender = createUser("sender@example.com", "passwordA123!", "sen", "S" + generateRandomId(), "010-1111-2222", 30, Sex.MALE);
-        receiver = createUser("receiver@example.com", "passwordA123!", "rec", "R" + generateRandomId(), "010-3333-4444", 25, Sex.FEMALE);
+        sender = createUser("sender@example.com", "passwordA123!", "sen", "S" + generateRandomId(), "010-1111-2222",  Sex.MALE);
+        receiver = createUser("receiver@example.com", "passwordA123!", "rec", "R" + generateRandomId(), "010-3333-4444",  Sex.FEMALE);
 
         // 🔥 저장된 유저가 실제 존재하는지 확인
         userRepository.findByUserEmail(sender.getUserEmail().getValue())
@@ -86,8 +86,8 @@ class WalletIntegrationServiceTest {
     }
 
     // 중복되지 않는 유저 생성
-    private User createUser(String email, String password, String username, String id, String phone, int age, Sex sex) {
-        User user = new User(email, password, username, id, phone, age, sex, new BCryptPasswordEncoder());
+    private User createUser(String email, String password, String username, String nickname, String phone, Sex sex) {
+        User user = new User(email, password, username, nickname, phone, sex, new BCryptPasswordEncoder());
         return userRepository.save(user); // 즉시 반영
     }
 
