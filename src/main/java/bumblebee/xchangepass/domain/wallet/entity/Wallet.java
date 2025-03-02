@@ -22,7 +22,7 @@ public class Wallet {
     @Column(name = "wallet_id", nullable = false)
     public Long walletId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     public User user;
 
@@ -32,8 +32,7 @@ public class Wallet {
     @LastModifiedDate
     public LocalDateTime walletModifiedAt;
 
-    public Wallet(Long walletId, User user) {
-        this.walletId = walletId;
+    public Wallet(User user) {
         this.user = user;
     }
 }

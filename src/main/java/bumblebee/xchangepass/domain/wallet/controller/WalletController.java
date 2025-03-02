@@ -16,10 +16,16 @@ import java.util.List;
 
 @Controller
 @RequiredArgsConstructor
-@RequestMapping("/api/v1")
+@RequestMapping("/api/v1/wallet")
 public class WalletController {
 
     private final WalletService walletService;
+
+    @PostMapping("/create")
+    @ResponseStatus(HttpStatus.CREATED)
+    public void create(@RequestParam Long userId){
+        walletService.createWallet(userId);
+    }
 
     @GetMapping("/transaction")
     @ResponseStatus(HttpStatus.OK)
