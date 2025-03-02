@@ -58,7 +58,7 @@ public class User {
     @Enumerated(value = EnumType.STRING)
     private Role userType;
 
-    @Column(columnDefinition = "tinyint(1)")
+    @Column(name = "is_deleted")
     private Boolean isDeleted;
 
     @CreatedDate
@@ -74,7 +74,7 @@ public class User {
                 String userName,
                 String userNickname,
                 String userPhoneNumber,
-                Sex userSex,
+                String userSex,
                 PasswordEncoder passwordEncoder) {
         this.userEmail = new UserEmail(userEmail);
         this.userPwd = new UserPassword(userPwd, passwordEncoder);
@@ -82,7 +82,7 @@ public class User {
         this.userNickname = new UserNickname(userNickname);
         this.userPhoneNumber = new UserPhoneNumber(userPhoneNumber);
         this.userAge = 0;
-        this.userSex = userSex;
+        this.userSex = Sex.fromString(userSex);
         this.userType = Role.ROLE_USER;
         this.isDeleted = false;
     }

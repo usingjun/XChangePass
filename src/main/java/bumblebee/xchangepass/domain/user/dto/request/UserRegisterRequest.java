@@ -1,6 +1,5 @@
 package bumblebee.xchangepass.domain.user.dto.request;
 
-import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.entity.value.UserEmail;
 import bumblebee.xchangepass.domain.user.entity.value.UserName;
@@ -33,21 +32,20 @@ public record UserRegisterRequest(
         @Schema(description = "사용자 전화번호", example = "010-0000-000")
         @Pattern(regexp = UserPhoneNumber.REGEX, message = UserPhoneNumber.ERR_MSG)
         @NotNull(message = "사용자 전화번호는 필수 입력 값입니다.")
-        String phoneNumber,
+        String userPhoneNumber,
 
         @Schema(description = "사용자의 성별", example = "MALE")
         @NotNull(message = "성별 입력해주세요")
-        Sex userSex
+        String userSex
 ) {
 
-    public User toEntity(final PasswordEncoder passwordEncoder){
+    public User toEntity(final PasswordEncoder passwordEncoder, String uniqueNickname) {
         return   User.builder()
                      .userEmail(userEmail)
                      .userPwd(userPwd)
                      .userName(userName)
-                     // Swagger UI 작업 종료 후 비동기 처리 및 분산 처리 고민
-                     .userNickname("user")
-                     .userPhoneNumber(phoneNumber)
+                     .userNickname(uniqueNickname)
+                     .userPhoneNumber(userPhoneNumber)
                      .userSex(userSex)
                      .passwordEncoder(passwordEncoder)
                      .build();

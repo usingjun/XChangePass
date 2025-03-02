@@ -15,6 +15,8 @@ public enum ErrorCode {
     USER_DUPLICATE_EMAIL(HttpStatus.BAD_REQUEST, "U005", "중복된 이메일 입니다."),
     USER_DUPLICATE_NICK_NAME(HttpStatus.BAD_REQUEST, "U006", "중복된 닉네임 입니다."),
     USER_DUPLICATE_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "U007", "중복된 전화번호 입니다."),
+    INVALID_GENDER(HttpStatus.BAD_REQUEST, "U008", "잘못된 성별 값입니다."),
+    NICKNAME_GENERATION_FAILED(HttpStatus.BAD_REQUEST, "U009", "닉네임 생성 실패: 중복된 닉네임이 너무 많습니다."),
 
     //Balance
     BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "M005-1", "존재하지 않는 지갑입니다."),
