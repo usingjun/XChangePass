@@ -29,6 +29,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation' // 데이터 검증을 위한 라이브러리 (Bean Validation)
     implementation 'org.springframework.boot:spring-boot-starter-web'        // 웹 애플리케이션 개발을 위한 라이브러리 (Spring MVC 포함)
     implementation 'org.springframework.boot:spring-boot-starter-websocket'  // WebSocket 기능을 제공하는 라이브러리
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'    // WebFlux 라이브러리
+    implementation 'org.springframework.boot:spring-boot-starter-batch'      // Spring Batch 의존성
 
     // Spring Security (인증 및 인가 관련 보안 기능)
     implementation 'org.springframework.boot:spring-boot-starter-security'   // Spring Security 기본 설정 및 기능 제공
@@ -54,6 +56,8 @@ dependencies {
     compileOnly 'org.projectlombok:lombok'                                   // Lombok (Getter, Setter, Constructor 자동 생성)
     annotationProcessor 'org.projectlombok:lombok'                           // Lombok 사용을 위한 어노테이션 프로세서
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4' // Swagger Ui
+    implementation 'io.projectreactor.netty:reactor-netty:1.1.22'            // Reactor Netty 의존성
+    implementation 'com.fasterxml.jackson.core:jackson-databind'             // JSON 파싱을 위한 의존성
 }
 
 tasks.named('test') {

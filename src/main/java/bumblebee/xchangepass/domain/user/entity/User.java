@@ -15,7 +15,12 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Entity
 @Getter
-@Table(name = "users")
+@Table(name = "users",
+       uniqueConstraints = {
+                @UniqueConstraint(name = "unique_user_email", columnNames = "user_email"),
+                @UniqueConstraint(name = "unique_user_nickname", columnNames = "user_nickname"),
+                @UniqueConstraint(name = "unique_user_phonenumber", columnNames = "user_phonenumber")
+       })
 @NoArgsConstructor(access = PROTECTED)
 @EntityListeners(AuditingEntityListener.class)
 public class User {
@@ -64,7 +69,6 @@ public class User {
                 String userName,
                 String userNickname,
                 String userPhoneNumber,
-                Integer userAge,
                 Sex userSex,
                 PasswordEncoder passwordEncoder) {
         this.userEmail = new UserEmail(userEmail);
@@ -72,7 +76,7 @@ public class User {
         this.userName = new UserName(userName);
         this.userNickname = new UserNickname(userNickname);
         this.userPhoneNumber = new UserPhoneNumber(userPhoneNumber);
-        this.userAge = userAge;
+        this.userAge = 0;
         this.userSex = userSex;
         this.userType = Role.ROLE_USER;
     }

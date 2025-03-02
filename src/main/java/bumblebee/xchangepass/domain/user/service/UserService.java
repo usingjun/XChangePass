@@ -6,7 +6,10 @@ import bumblebee.xchangepass.domain.user.dto.response.UserResponse;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
+import bumblebee.xchangepass.global.exception.CommonException;
+import bumblebee.xchangepass.global.util.DuplicateKeyExceptionHandler;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -19,42 +22,62 @@ public class UserService {
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder bCryptPasswordEncoder;
 
+    /*
+    사용자 등록
+    실명의 경우 전화번호, 이메일 인증 시 받아오는 방식으로 구상 생각
+     */
     public void signupUser(UserRegisterRequest request) {
-        Optional<User> byUserEmail =
-                userRepository.findByUserEmail(request.email());
-        boolean present = byUserEmail.isPresent();
-
-        if (present) {
-            throw ErrorCode.USER_DUPLICATE_EMAIL.commonException();
+        try{
+            userRepository.save(request.toEntity(bCryptPasswordEncoder));
+        }catch (DataIntegrityViolationException e) {
+            DuplicateKeyExceptionHandler.handle(e);
+        } catch (Exception e) {
+            throw ErrorCode.USER_NOT_REGISTER.commonException();
         }
-
-        userRepository.save(request.toEntity(bCryptPasswordEncoder));
     }
 
-    public UserResponse read(Long userId) {
+    /*
+    사용자 조회
+     */
+    public UserResponse readUser(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
         return new UserResponse(user);
     }
 
-    public UserResponse update(Long userId, UserUpdateRequest request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+    /*
+    사용자 정보 수정
+    전화번호 변경의 경우 휴대폰 인증 진행 후 따로 변경 예정
+     */
+    public void updateUser(Long userId, UserUpdateRequest request) {
+        //중복 검사
+        userRepository.checkForDuplicateNickname(request.userNickname(), userId);
 
         try {
-            user.updateUser(request);
-            userRepository.save(user);
+            userRepository.updateUser(request, userId);
+        } catch (DataIntegrityViolationException e) {
+            DuplicateKeyExceptionHandler.handle(e);
+        } catch (CommonException e) {
+            throw e;
         } catch (Exception e) {
-            throw ErrorCode.USER_UPDATE_EXCEPTION.commonException();
+            throw ErrorCode.USER_NOT_MODIFY.commonException();
         }
-        return new UserResponse(user);
     }
 
-    public void delete(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+    /*
+    사용자 삭제
+    추후 소프트 리셋으로 변경 예정
+     */
+    public void deleteUser(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw ErrorCode.USER_NOT_FOUND.commonException();
+        }
 
-        userRepository.delete(user);
+        try {
+            userRepository.deleteById(userId);
+        }catch (Exception e) {
+            throw ErrorCode.USER_NOT_DELETE.commonException();
+        }
     }
 }
