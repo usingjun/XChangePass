@@ -1,7 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.controller;
 
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletGetRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletTransactionResponse;
@@ -14,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.List;
 
-@Controller
+@RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/wallet")
 public class WalletController {
@@ -23,14 +22,14 @@ public class WalletController {
 
     @PostMapping("/create")
     @ResponseStatus(HttpStatus.CREATED)
-    public void create(@RequestParam Long userId){
-        walletService.createWallet(userId);
+    public void create(@RequestBody WalletCreateRequest request){
+        walletService.createWallet(request.userId());
     }
 
     @GetMapping("/transaction")
     @ResponseStatus(HttpStatus.OK)
-    public List<WalletTransactionResponse> transaction(@RequestBody WalletGetRequest request) {
-        return walletService.transaction(request);
+    public List<WalletTransactionResponse> transaction(@RequestParam Long userId) {
+        return walletService.transaction(userId);
     }
 
     @PostMapping("/charge")
@@ -40,7 +39,7 @@ public class WalletController {
     }
 
     @PutMapping("/withdraw")
-    @ResponseStatus(HttpStatus.CREATED)
+    @ResponseStatus(HttpStatus.OK)
     public BigDecimal withdrawal(@RequestBody WalletChargeRequest request) {
         return walletService.withdrawal(request);
     }
@@ -53,8 +52,8 @@ public class WalletController {
 
     @GetMapping("/balance")
     @ResponseStatus(HttpStatus.OK)
-    public List<WalletBalanceResponse> balance(@RequestBody WalletGetRequest request) {
-        return walletService.balance(request);
+    public List<WalletBalanceResponse> balance(@RequestParam Long userId) {
+        return walletService.balance(userId);
     }
 
 

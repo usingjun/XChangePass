@@ -3,7 +3,6 @@ package bumblebee.xchangepass.domain.wallet.service;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletGetRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletTransactionResponse;
@@ -50,7 +49,7 @@ public class WalletService {
 
 
     @Transactional
-    public List<WalletTransactionResponse> transaction(WalletGetRequest request) {
+    public List<WalletTransactionResponse> transaction(Long userId) {
 
 
         return null;
@@ -130,12 +129,15 @@ public class WalletService {
 
 
     @Transactional
-    public List<WalletBalanceResponse> balance(WalletGetRequest request) {
-        Wallet wallet = walletRepository.findByUserId(request.userId());
+    public List<WalletBalanceResponse> balance(Long userId) {
+        Wallet wallet = walletRepository.findByUserId(userId);
+        System.out.println("wallet.getWalletId() = " + wallet.getWalletId());
 
         List<WalletBalance> balanceList = balanceService.findBalances(wallet.getWalletId());
+        System.out.println("balanceList.get(0) = " + balanceList.get(0));
 
         return balanceList.stream()
+                .peek(balance -> System.out.println("Processing balance: " + balance.getBalanceId()))
                 .map(balance -> new WalletBalanceResponse(
                         balance.currency.getCurrencyCode(),
                         balance.getBalance()
