@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.user.dto.request;
 
+import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.entity.value.UserEmail;
 import bumblebee.xchangepass.domain.user.entity.value.UserName;
@@ -36,7 +37,7 @@ public record UserRegisterRequest(
 
         @Schema(description = "사용자의 성별", example = "MALE")
         @NotNull(message = "성별 입력해주세요")
-        String userSex
+        Sex userSex
 ) {
 
     public User toEntity(final PasswordEncoder passwordEncoder, String uniqueNickname) {
