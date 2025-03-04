@@ -45,7 +45,7 @@ public class UserServiceTest extends RedisTestBase {
                             .userPwd("Qwer1234!")
                             .userName("테스터" + i)
                             .userPhoneNumber("010-0000-000" + i)
-                            .userSex(i >= 4 ? "FEMALE" : "MALE")
+                            .userSex(i >= 4 ? Sex.FEMALE : Sex.MALE)
                             .build();
 
                     userService.signupUser(testUser);
@@ -78,8 +78,7 @@ public class UserServiceTest extends RedisTestBase {
                 .userSex(Sex.FEMALE)
                 .build();
 
-        CommonException exception = assertThrows(CommonException.class, () -> userService.updateUser(userId2, duplicateUpdate));
-        assertEquals(ErrorCode.USER_DUPLICATE_NICK_NAME, exception.getErrorCode(), "예외 코드가 잘못되었습니다.");
+        assertThrows(ErrorCode.USER_DUPLICATE_NICK_NAME.commonException().getClass(), () -> userService.updateUser(userId2, duplicateUpdate));
 
         // 'User_'로 시작하는 닉네임 변경 시 예외 발생
         UserUpdateRequest invalidPrefixUpdate = UserUpdateRequest.builder()
@@ -88,8 +87,7 @@ public class UserServiceTest extends RedisTestBase {
                 .userSex(Sex.FEMALE)
                 .build();
 
-        CommonException prefixException = assertThrows(CommonException.class, () -> userService.updateUser(userId2, invalidPrefixUpdate));
-        assertEquals(ErrorCode.INVALID_NICKNAME_PREFIX, prefixException.getErrorCode(), "예외 코드가 잘못되었습니다.");
+        assertThrows(ErrorCode.INVALID_NICKNAME_PREFIX.commonException().getClass(), () -> userService.updateUser(userId2, invalidPrefixUpdate));
     }
 
     @Test
