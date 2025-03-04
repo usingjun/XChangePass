@@ -22,4 +22,13 @@ public class NicknameGenerator {
             throw ErrorCode.REDIS_CONNECTION_ERROR.commonException();
         }
     }
+
+    /**
+     * 닉네임 생성 실패 시 Redis 값 롤백
+     */
+    public void rollbackNicknameId(String generateUniqueNickname) {
+        if (generateUniqueNickname != null) {
+            redisTemplate.opsForValue().decrement(Constants.NICKNAME_KEY);
+        }
+    }
 }
