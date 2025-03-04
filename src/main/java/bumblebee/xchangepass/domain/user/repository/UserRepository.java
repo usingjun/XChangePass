@@ -22,4 +22,10 @@ public interface UserRepository extends JpaRepository<User, Long>, UserRepositor
             """)
     void deleteOldUsers(@Param("thirtyDaysAgo") LocalDateTime thirtyDaysAgo);
 
+    @Query(value = """
+            SELECT u
+            FROM User u
+            WHERE u.userId = :userId
+            """)
+    Optional<User> findByUserId(Long userId);
 }
