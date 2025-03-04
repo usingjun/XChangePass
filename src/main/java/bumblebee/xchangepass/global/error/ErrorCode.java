@@ -16,14 +16,16 @@ public enum ErrorCode {
     USER_DUPLICATE_NICK_NAME(HttpStatus.BAD_REQUEST, "U006", "중복된 닉네임 입니다."),
     USER_DUPLICATE_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "U007", "중복된 전화번호 입니다."),
     INVALID_GENDER(HttpStatus.BAD_REQUEST, "U008", "잘못된 성별 값입니다."),
-    NICKNAME_GENERATION_FAILED(HttpStatus.BAD_REQUEST, "U009", "닉네임 생성 실패: 중복된 닉네임이 너무 많습니다."),
+    INVALID_NICKNAME_PREFIX(HttpStatus.BAD_REQUEST, "U010", "닉네임은 'User_'로 시작할 수 없습니다."),
 
     //Balance
     BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "M005-1", "존재하지 않는 지갑입니다."),
     BALANCE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "M005-2", "충전 금액이 부족합니다."),
 
     /*기타*/
-    ENTITY_FIELD_ACCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "G001", "엔티티 필드 접근 오류");
+    ENTITY_FIELD_ACCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "G001", "엔티티 필드 접근 오류"),
+    REDIS_CONNECTION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "R001", "Redis 연결 실패");
+
 
     @Schema(description = "에러 코드", example = "U003")
     private final String code;
