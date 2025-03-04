@@ -22,10 +22,10 @@ public class UserService {
     private final NicknameGenerator nicknameGenerator;
     private final BCryptPasswordEncoder bCryptPasswordEncoder;
 
-    /*
-    사용자 등록
-    닉네임 Redis INCR을 활요한 자동 생성
-    실명의 경우 추후 전화번호, 이메일에서 받아 오는 형식으로 변경 예정
+    /**
+     * ✅ 사용자 등록
+     * 닉네임 Redis INCR을 활요한 자동 생성
+     * 실명의 경우 추후 전화번호, 이메일에서 받아 오는 형식으로 변경 예정
      */
     public void signupUser(UserRegisterRequest request) {
         try{
@@ -40,8 +40,8 @@ public class UserService {
         }
     }
 
-    /*
-    사용자 조회
+    /**
+     * ✅ 사용자 조회
      */
     public UserResponse readUser(Long userId) {
         User user = userRepository.findById(userId)
@@ -50,8 +50,8 @@ public class UserService {
         return new UserResponse(user);
     }
 
-    /*
-    사용자 정보 수정
+    /**
+     * ✅ 사용자 정보 수정
      */
     public void updateUser(Long userId, UserUpdateRequest request) {
 
@@ -72,8 +72,8 @@ public class UserService {
         }
     }
 
-    /*
-    사용자 삭제 요청 (Soft Delete)
+    /**
+     * ✅ 사용자 삭제 요청 (Soft Delete)
      */
     @Transactional
     public void softDeleteUser(Long userId) {
