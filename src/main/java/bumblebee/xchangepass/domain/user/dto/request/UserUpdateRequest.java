@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.user.dto.request;
 
+import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.value.UserNickname;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -20,7 +21,7 @@ public record UserUpdateRequest(
 
         @Schema(description = "사용자의 성별", example = "MALE")
         @NotNull(message = "성별은 필수 입력 값입니다.")
-        String userSex
+        Sex userSex
 ) {
 
 }
