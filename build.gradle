@@ -41,12 +41,14 @@ dependencies {
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-test'   // Spring Boot의 테스트 도구 모음 (JUnit, Mockito 포함)
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'             // JUnit 플랫폼 런처 (테스트 실행 환경 제공)
-    testImplementation 'it.ozimov:embedded-redis:0.7.3'                      // 테스트 환경에서 Embedded Redis 실행 (실제 Redis 서버 없이 인메모리에서 동작)
+    testImplementation "org.testcontainers:testcontainers:1.19.2"            // Docker 기반 통합 테스트 지원 (Testcontainers 기본 라이브러리)
+    testImplementation "org.testcontainers:junit-jupiter:1.19.2"             // JUnit 5(Testcontainers 연동) 지원
+    testImplementation 'com.redis:testcontainers-redis:2.2.2'                // Redis용 Testcontainers (테스트 환경에서 Redis 컨테이너 실행)
 
     // 데이터베이스
-    runtimeOnly 'com.h2database:h2'                                          // 인메모리 데이터베이스 H2 (테스트 및 개발 환경용)
+    runtimeOnly 'com.h2database:h2'                                          // 인메모리 데이터베이스a H2 (테스트 및 개발 환경용)
     runtimeOnly 'org.postgresql:postgresql:42.5.2'                           // PostgreSQL 데이터베이스 드라이버 (운영 환경에서 사용)
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'        // Spring Data Redis 라이브러리
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis' // Spring Data Redis 라이브러리
 
     // 쿼리DSL
     implementation 'com.querydsl:querydsl-jpa:5.0.0:jakarta'                 // QueryDSL의 JPA 모듈
@@ -64,6 +66,12 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+configurations.all {
+    resolutionStrategy {
+        force 'io.lettuce:lettuce-core:6.2.6.RELEASE'                         // 호환 버전 강제 적용
+    }
 }
 
 
