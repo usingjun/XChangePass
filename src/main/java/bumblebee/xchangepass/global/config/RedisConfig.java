@@ -12,19 +12,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @Configuration
 public class RedisConfig {
 
-    // Key는 문자열, Value는 문자열 직렬화
-    @Bean
-    public RedisTemplate<String, String> stringRedisTemplate(RedisConnectionFactory connectionFactory) {
-        RedisTemplate<String, String> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new StringRedisSerializer());  // Value도 String으로 직렬화
-        return template;
-    }
-
-
     // Key는 문자열, Value는 JSON 직렬화
-    @Bean
+    @Bean(name = "jsonRedisTemplate")
     public RedisTemplate<String, Object> jsonRedisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
@@ -39,4 +28,5 @@ public class RedisConfig {
         template.setValueSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper));
         return template;
     }
+
 }
