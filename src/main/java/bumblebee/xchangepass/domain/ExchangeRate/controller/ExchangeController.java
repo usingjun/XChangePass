@@ -4,11 +4,9 @@ import bumblebee.xchangepass.domain.ExchangeRate.dto.response.ExchangeRateRespon
 import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@Slf4j
 @RequestMapping("/api/exchange-rate")
 @RequiredArgsConstructor
 public class ExchangeController {
