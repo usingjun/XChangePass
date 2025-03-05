@@ -3,6 +3,7 @@ package bumblebee.xchangepass.domain.ExchangeRate.service;
 import bumblebee.xchangepass.domain.ExchangeRate.dto.response.ExchangeRateResponse;
 import bumblebee.xchangepass.domain.ExchangeRate.entity.ExchangeRate;
 import bumblebee.xchangepass.domain.ExchangeRate.repository.ExchangeRepository;
+import bumblebee.xchangepass.domain.ExchangeRate.util.Country;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -44,7 +45,7 @@ public class ExchangeService {
     @Scheduled(cron = "0 0 0 * * ?")
     public void fetchAndSaveAllExchangeRates(){
         exchangeRepository.deleteAll();
-        List<String> list = create();
+        List<String> list = Country.create();
         for (String baseCurrency : list) {
             try {
                 ExchangeRateResponse response = fetchExchangeRates(baseCurrency);
@@ -58,8 +59,7 @@ public class ExchangeService {
      */
     @Transactional
     public ExchangeRateResponse getExchangeRateAll(String baseCurrency) {
-        // 1️⃣ 최신 데이터 조회 (30분 이내)
-        LocalDateTime cacheThreshold = LocalDateTime.now().minusMinutes(30);
+
         List<ExchangeRate> BaseCurrency = exchangeRepository.findByBaseCurrency(baseCurrency);
         if (!BaseCurrency.isEmpty()) {
             // 리스트의 첫 번째 ExchangeRate 객체에서 환율 데이터를 가져옴
@@ -107,27 +107,5 @@ public class ExchangeService {
                     .build();
         }
         throw ErrorCode.EXCHANGE_RATE_FOR_COUNTRY.commonException();
-    }
-    public static List<String>  create(){
-        List<String> currencyList = List.of(
-                "USD", "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG",
-                "AZN", "BAM", "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB",
-                "BRL", "BSD", "BTN", "BWP", "BYN", "BZD", "CAD", "CDF", "CHF", "CLP",
-                "CNY", "COP", "CRC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD",
-                "EGP", "ERN", "ETB", "EUR", "FJD", "FKP", "FOK", "GBP", "GEL", "GGP",
-                "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HKD", "HNL", "HRK", "HTG",
-                "HUF", "IDR", "ILS", "IMP", "INR", "IQD", "IRR", "ISK", "JEP", "JMD",
-                "JOD", "JPY", "KES", "KGS", "KHR", "KID", "KMF", "KRW", "KWD", "KYD",
-                "KZT", "LAK", "LBP", "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA",
-                "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MYR",
-                "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "NZD", "OMR", "PAB", "PEN",
-                "PGK", "PHP", "PKR", "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RWF",
-                "SAR", "SBD", "SCR", "SDG", "SEK", "SGD", "SHP", "SLE", "SLL", "SOS",
-                "SRD", "SSP", "STN", "SYP", "SZL", "THB", "TJS", "TMT", "TND", "TOP",
-                "TRY", "TTD", "TVD", "TWD", "TZS", "UAH", "UGX", "UYU", "UZS", "VES",
-                "VND", "VUV", "WST", "XAF", "XCD", "XDR", "XOF", "XPF", "YER", "ZAR",
-                "ZMW", "ZWL"
-        );
-        return currencyList;
     }
 }
