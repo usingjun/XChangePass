@@ -92,18 +92,18 @@ public class UserController {
     }
 
 
-    @Operation(summary = "내 정보 삭제", description = "현재 로그인한 사용자의 정보를 삭제합니다.")
+    @Operation(summary = "회원탈퇴 요청", description = "현재 로그인한 사용자의 회원탈퇴를 요청합니다.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "400", description = "회원가입 실패",
+            @ApiResponse(responseCode = "400", description = "회원탈퇴 요청 실패",
                     content = @Content(mediaType = "application/json",
                             schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(value = "{\n  \"code\": \"U004\"," +
-                                                               "\n  \"message\": \"회원 삭제 요청에 실패했습니다.\"}"))
+                            examples = @ExampleObject(value = "{\n  \"code\": \"U001\"," +
+                                                               "\n  \"message\": \"존재 하지 않는 회원입니다.\"}"))
             )
     })
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @DeleteMapping
-    public void delete(@AuthenticationPrincipal CustomUserDetails customUserDetails) {
-        userService.deleteUser(customUserDetails.getId());
+    public void softDeleteUser(@AuthenticationPrincipal CustomUserDetails customUserDetails) {
+        userService.softDeleteUser(customUserDetails.getId());
     }
 }
