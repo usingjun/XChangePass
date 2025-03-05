@@ -57,24 +57,15 @@ public class UserRepositoryImpl implements UserRepositoryCustom {
     @Transactional
     public void updateUser(UserUpdateRequest updateRequest, Long userId) {
 
-        User existingUser = Optional.ofNullable(queryFactory
-                        .selectFrom(USER)
-                        .where(USER.userId.eq(userId))
-                        .fetchOne())
-                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+        // 1. 기존 엔티티 조회
+        User user = queryFactory.selectFrom(USER)
+                .where(USER.userId.eq(userId))
+                .fetchOne();
 
-        JPAUpdateClause updateClause = queryFactory.update(USER);
+        // 2. 동적 업데이트 실행
+        JPAUpdateClause updateClause = queryFactory.update(USER)
+                .where(USER.userId.eq(userId));
 
-        EntityUpdateUtil.executeUpdateIfChanged(
-                existingUser,
-                updateRequest,
-                updateClause,
-                (isUpdated, clause) -> {
-                    if (isUpdated) {
-                        clause.where(USER.userId.eq(userId)).execute();
-                    }
-                },
-                USER
-        );
+        EntityUpdateUtil.executeUpdate(user, updateRequest, updateClause, USER);
     }
 }

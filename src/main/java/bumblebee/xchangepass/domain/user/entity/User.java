@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.SQLRestriction;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,7 +16,13 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Entity
 @Getter
-@Table(name = "users")
+@Table(name = "users",
+       uniqueConstraints = {
+                @UniqueConstraint(name = "unique_user_email", columnNames = "user_email"),
+                @UniqueConstraint(name = "unique_user_nickname", columnNames = "user_nickname"),
+                @UniqueConstraint(name = "unique_user_phonenumber", columnNames = "user_phonenumber")
+       })
+@SQLRestriction("is_deleted = false")
 @NoArgsConstructor(access = PROTECTED)
 @EntityListeners(AuditingEntityListener.class)
 public class User {
@@ -51,6 +58,9 @@ public class User {
     @Enumerated(value = EnumType.STRING)
     private Role userType;
 
+    @Column(name = "is_deleted")
+    private Boolean isDeleted;
+
     @CreatedDate
     @Column(name = "user_join_date")
     private LocalDateTime userJoinDate;
@@ -64,7 +74,6 @@ public class User {
                 String userName,
                 String userNickname,
                 String userPhoneNumber,
-                Integer userAge,
                 Sex userSex,
                 PasswordEncoder passwordEncoder) {
         this.userEmail = new UserEmail(userEmail);
@@ -72,8 +81,14 @@ public class User {
         this.userName = new UserName(userName);
         this.userNickname = new UserNickname(userNickname);
         this.userPhoneNumber = new UserPhoneNumber(userPhoneNumber);
-        this.userAge = userAge;
+        this.userAge = 0;
         this.userSex = userSex;
         this.userType = Role.ROLE_USER;
+        this.isDeleted = false;
+    }
+
+    public void softDelete() {
+        this.isDeleted = true;
+        userDeleteDate = LocalDateTime.now();
     }
 }
