@@ -32,6 +32,7 @@ public enum ErrorCode {
     TRANSACTION_AMOUNT_NOTFOUND(HttpStatus.BAD_REQUEST,"T003", "환전 금액은 필수 입니다."),
     TRANSACTION_HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "T002", "존재 하지 않는 환전 내역입니다."),
     TRANSACTION_USERID_NOT_FOUND(HttpStatus.NOT_FOUND, "T004", "회원 아이디 필수"),
+    
     /*기타*/
     ENTITY_FIELD_ACCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "G001", "엔티티 필드 접근 오류"),
     REDIS_CONNECTION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "R001", "Redis 연결 실패");
