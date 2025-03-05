@@ -31,10 +31,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-websocket'  // WebSocket 기능을 제공하는 라이브러리
     implementation 'org.springframework.boot:spring-boot-starter-webflux'    // WebFlux 라이브러리
     implementation 'org.springframework.boot:spring-boot-starter-batch'      // Spring Batch 의존성
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'   // Spring 모니터링
+    implementation 'org.springframework.boot:spring-boot-starter-aop'        // Spring AOP
 
-    // spring
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'org.springframework.boot:spring-boot-starter-aop'
+
 
     // Spring Security (인증 및 인가 관련 보안 기능)
     implementation 'org.springframework.boot:spring-boot-starter-security'   // Spring Security 기본 설정 및 기능 제공
