@@ -36,6 +36,10 @@ dependencies {
     implementation 'io.projectreactor.netty:reactor-netty:1.1.22'
 
 
+    // spring
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+
     // Spring Security (인증 및 인가 관련 보안 기능)
     implementation 'org.springframework.boot:spring-boot-starter-security'   // Spring Security 기본 설정 및 기능 제공
 
@@ -45,6 +49,7 @@ dependencies {
     // 테스트
     testImplementation 'org.springframework.boot:spring-boot-starter-test'   // Spring Boot의 테스트 도구 모음 (JUnit, Mockito 포함)
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'             // JUnit 플랫폼 런처 (테스트 실행 환경 제공)
+
 
     // 데이터베이스
     runtimeOnly 'com.h2database:h2'                                          // 인메모리 데이터베이스 H2 (테스트 및 개발 환경용)
