@@ -20,7 +20,7 @@ import java.util.Map;
 public class ExchangeTransactionService {
 
     private final ExchangeTransactionRepository repository;
-    private final ExchangeService exchangeRateService;  // 🚀 환율 조회 서비스 추가
+    private final ExchangeService exchangeRateService;
 
     public ExchangeTransactionService(ExchangeTransactionRepository repository, ExchangeService exchangeRateService) {
         this.repository = repository;
@@ -40,11 +40,11 @@ public class ExchangeTransactionService {
 //        if (existingTransaction != null) {
 //            return ExchangeResponseDTO.toEntity(existingTransaction);
 //        }
-        // 1 Exchangerate-api에서 환율 정보 가져오기
+
         Map<String, Double> conversionRatess = exchangeRateService.getExchangeRateAll(request.fromCurrency())
                 .conversionRates();
 
-        // 2 요청한 toCurrency에 대한 환율 찾기
+
         Double exchangeRate = conversionRatess.get(request.toCurrency());
 
         if (exchangeRate == null) {
@@ -55,25 +55,25 @@ public class ExchangeTransactionService {
             throw ErrorCode.TRANSACTION_AMOUNT_NOTFOUND.commonException();
         }
 
-        // 3 환전 금액 계산
+
         BigDecimal amount = request.amount();
         BigDecimal receivedAmount = amount.multiply(BigDecimal.valueOf(exchangeRate))
                 .setScale(2, RoundingMode.HALF_UP);
 
-        // 4 트랜잭션 객체 생성 및 저장
+
         ExchangeTransaction transaction = ExchangeTransaction.builder()
                 .userId(request.userId())
                 .fromCurrency(request.fromCurrency())
                 .toCurrency(request.toCurrency())
-                .exchangeRate(BigDecimal.valueOf(exchangeRate))  // 🚀 환율 저장
-                .amount(amount)  // 환전할 금액
-                .receivedAmount(receivedAmount)  // 환전 후 받을 금액
+                .exchangeRate(BigDecimal.valueOf(exchangeRate))
+                .amount(amount)
+                .receivedAmount(receivedAmount)
                 .status(TransactionStatus.PENDING)
                 .build();
 
         ExchangeTransaction savedTransaction = repository.save(transaction);
 
-        // 5 DTO 변환 후 반환
+
         return ExchangeResponseDTO.toEntity(savedTransaction);
     }
 

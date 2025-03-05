@@ -1,11 +1,9 @@
 package bumblebee.xchangepass.domain.ExchangeTransaction.controller;
 
-import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.ExchangeTransaction.dto.request.ExchangeRequestDTO;
 import bumblebee.xchangepass.domain.ExchangeTransaction.dto.response.ExchangeResponseDTO;
 import bumblebee.xchangepass.domain.ExchangeTransaction.service.ExchangeTransactionService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 @RequestMapping("/api/exchange")

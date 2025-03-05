@@ -20,27 +20,27 @@ public class ExchangeTransaction {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long exchangeTransactionId;  // 거래 ID
+    private Long exchangeTransactionId;
 
     @Column(nullable = false)
-    private Long userId;  // 사용자 ID
+    private Long userId;
 
     @Column(nullable = false, length = 10)
-    private String fromCurrency;  // 환전 전 통화
+    private String fromCurrency;
 
     @Column(nullable = false, length = 10)
-    private String toCurrency;  // 환전 후 통화
+    private String toCurrency;
 
     @Column(nullable = false, precision = 10, scale = 4)
-    private BigDecimal exchangeRate;  // 환율
+    private BigDecimal exchangeRate;
 
     @Column(nullable = false, precision = 18, scale = 4)
-    private BigDecimal amount;  // 환전할 금액
+    private BigDecimal amount;
 
     @Column(nullable = false, precision = 18, scale = 4)
-    private BigDecimal receivedAmount;  // 환전 후 받는 금액
+    private BigDecimal receivedAmount;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private TransactionStatus status;  // 거래 상태
+    private TransactionStatus status;
 }

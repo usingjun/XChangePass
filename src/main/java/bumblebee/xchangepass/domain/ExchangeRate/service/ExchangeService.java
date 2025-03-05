@@ -83,7 +83,7 @@ public class ExchangeService {
 
             ExchangeRate exchangeRate = ExchangeRate.builder()
                     .baseCurrency(baseCurrency)
-                    .rate(rates)  // 🔥 Map 형태로 저장
+                    .rate(rates)
                     .build();
 
             exchangeRepository.save(exchangeRate);

@@ -22,19 +22,18 @@ import static lombok.AccessLevel.PROTECTED;
 public class ExchangeRate {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;  // 기본 키
-
+    private Long id;
     @Column(nullable = false)
     private String baseCurrency; // 기준 통화 (예: USD, EUR)
 
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")// Ensure that PostgreSQL uses the jsonb type
+    @Column(columnDefinition = "jsonb")
     private Map<String, Double> exchangeRates;
 
     @Setter
     @Column(nullable = false)
-    private LocalDateTime updatedAt; // 갱신 시간
+    private LocalDateTime updatedAt;
 
     @Builder
     public ExchangeRate(String baseCurrency, Map<String, Double> rate) {
