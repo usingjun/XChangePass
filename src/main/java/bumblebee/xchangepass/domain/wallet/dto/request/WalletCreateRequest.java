@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.controller;
+package bumblebee.xchangepass.domain.wallet.dto.request;
 
 public record WalletCreateRequest(
         Long userId

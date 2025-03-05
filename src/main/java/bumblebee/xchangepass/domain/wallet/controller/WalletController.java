@@ -1,13 +1,14 @@
 package bumblebee.xchangepass.domain.wallet.controller;
 
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
+import bumblebee.xchangepass.domain.wallet.dto.request.WalletCreateRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletTransactionResponse;
+import bumblebee.xchangepass.domain.wallet.service.NamedLockWalletFacade;
 import bumblebee.xchangepass.domain.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -19,6 +20,7 @@ import java.util.List;
 public class WalletController {
 
     private final WalletService walletService;
+    private final NamedLockWalletFacade namedLockService;
 
     @PostMapping("/create")
     @ResponseStatus(HttpStatus.CREATED)
@@ -35,19 +37,19 @@ public class WalletController {
     @PostMapping("/charge")
     @ResponseStatus(HttpStatus.CREATED)
     public void charge(@RequestBody WalletChargeRequest request) {
-        walletService.charge(request);
+        namedLockService.charge(request);
     }
 
     @PutMapping("/withdraw")
     @ResponseStatus(HttpStatus.OK)
     public BigDecimal withdrawal(@RequestBody WalletChargeRequest request) {
-        return walletService.withdrawal(request);
+        return namedLockService.withdrawal(request);
     }
 
     @PutMapping("/transfer")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void transfer(@RequestBody WalletTransferRequest request) {
-        walletService.transfer(request);
+        namedLockService.transfer(request);
     }
 
     @GetMapping("/balance")
