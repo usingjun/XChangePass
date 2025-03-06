@@ -16,11 +16,12 @@ public enum ErrorCode {
     USER_DUPLICATE_NICK_NAME(HttpStatus.BAD_REQUEST, "U006", "중복된 닉네임 입니다."),
     USER_DUPLICATE_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "U007", "중복된 전화번호 입니다."),
 
-    WALLET_NOT_FOUND(HttpStatus.BAD_REQUEST, "U007", "지갑을 찾을 수 없습니다."),
+    WALLET_NOT_FOUND(HttpStatus.BAD_REQUEST, "W001", "지갑을 찾을 수 없습니다."),
+    WALLET_ALREADY_EXIST(HttpStatus.BAD_REQUEST,"W002","이미 지갑이 존재합니다."),
 
     //Balance
-    BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "M005-1", "충전 금액이 부족합니다."),
-    BALANCE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "M005-2", "충전 금액이 부족합니다."),
+    BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "B001", "해당 화폐 잔액이 존재하지 않습니다."),
+    BALANCE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "B002", "충전 금액이 부족합니다."),
 
     /*기타*/
     ENTITY_FIELD_ACCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "G001", "엔티티 필드 접근 오류");

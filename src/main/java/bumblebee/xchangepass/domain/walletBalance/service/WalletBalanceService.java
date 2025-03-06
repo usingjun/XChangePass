@@ -4,6 +4,7 @@ import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.walletBalance.repository.WalletBalanceRepository;
+import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -27,12 +28,14 @@ public class WalletBalanceService {
 
     @Transactional
     public WalletBalance findBalance(Long walletId, Currency currency) {
-        return balanceRepository.findByWalletIdAndCurrencyWithPessimisticLock(walletId, currency);
+        return balanceRepository.findByWalletIdAndCurrencyWithPessimisticLock(walletId, currency)
+                .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
     }
 
     @Transactional
     public List<WalletBalance> findBalances(Long walletId) {
-        return balanceRepository.findByWalletIdWithPessimisticLock(walletId);
+        return balanceRepository.findByWalletIdWithPessimisticLock(walletId)
+                .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
     }
 
     @Transactional
@@ -58,16 +61,6 @@ public class WalletBalanceService {
         toBalance.addBalance(amount);
         balanceRepository.save(fromBalance);
         balanceRepository.save(toBalance);
-    }
-
-    @Transactional
-    public void withdrawBalanceWithCondition(Long fromWalletId, Long toWalletId, Currency currency, BigDecimal amount) {
-        int updatedRows = balanceRepository.withdrawWithCondition(fromWalletId, currency, amount);
-        if (updatedRows == 0) {
-            throw new IllegalStateException("BALANCE_NOT_AVAILABLE");
-        }
-
-        balanceRepository.deposit(toWalletId, currency, amount);
     }
 
 }

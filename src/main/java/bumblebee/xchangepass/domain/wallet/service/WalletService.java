@@ -11,6 +11,7 @@ import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.walletBalance.service.WalletBalanceService;
 import bumblebee.xchangepass.global.error.ErrorCode;
+import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -34,7 +35,7 @@ public class WalletService {
     @Transactional
     public void createWallet(Long userId) {
         if (walletRepository.existsByUserId(userId)) {
-            return;//오류발생시키기
+            throw new CommonException(ErrorCode.WALLET_ALREADY_EXIST);
         }
 
         User user = userRepository.findById(userId)
@@ -77,7 +78,6 @@ public class WalletService {
     }
 
     @Transactional
-
     public BigDecimal withdrawal(WalletChargeRequest request) {
         if (!request.toCurrency().equals(request.fromCurrency())) {
             //환전
@@ -99,20 +99,19 @@ public class WalletService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
 //    @Transactional
     public void transfer(WalletTransferRequest request) {
-
-        Wallet senderWallet = walletRepository.findById(request.senderWalletId())
-                .orElseThrow(() -> new IllegalStateException("보내는 지갑이 존재하지 않습니다: " + request.senderWalletId()));
-
-        Wallet receiverWallet = walletRepository.findById(request.receiverWalletId())
-                .orElseThrow(() -> new IllegalStateException("받는 지갑이 존재하지 않습니다: " + request.receiverWalletId()));
-
-
         WalletBalance fromBalance = balanceService.findBalance(request.senderWalletId(), request.fromCurrency());
+
+        if (!balanceService.checkBalance(request.receiverWalletId(), request.toCurrency())) {
+            Wallet wallet = walletRepository.findById(request.receiverWalletId())
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+
+            balanceService.createBalance(wallet, request.toCurrency());
+        }
+
         WalletBalance toBalance = balanceService.findBalance(request.receiverWalletId(), request.toCurrency());
 
-        System.out.println("request.toString( = " + request.toString());
         System.out.println("fromBalance = " + fromBalance.getBalanceId());
-        System.out.println("fromBalance = " + fromBalance.getBalance());
+        System.out.println("toBalance = " + toBalance.getBalance());
         BigDecimal transferAmount = request.transferAmount();
 
         if (transferAmount.compareTo(fromBalance.getBalance()) > 0) {
@@ -144,21 +143,4 @@ public class WalletService {
                 ))
                 .toList();
     }
-
-//    @Transactional
-//    public void transfer(WalletTransferRequest request) {
-//        Wallet fromWallet = walletRepository.findByUserId(request.senderId());
-//        Wallet toWallet = walletRepository.findByUserId(request.receiverId());
-//
-//        BigDecimal transferAmount = request.transferAmount();
-//
-//        // 보낸 사람 잔액 차감 (조건부 업데이트)
-//        balanceService.withdrawBalanceWithCondition(
-//                fromWallet.getWalletId(),
-//                toWallet.getWalletId(),
-//                request.fromCurrency(),
-//                transferAmount
-//        );
-//
-//    }
 }

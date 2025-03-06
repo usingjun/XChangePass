@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface WalletBalanceRepository extends JpaRepository<WalletBalance, Long> {
@@ -36,28 +37,12 @@ public interface WalletBalanceRepository extends JpaRepository<WalletBalance, Lo
                 from WalletBalance wb
                 where wb.wallet.walletId=:walletId
             """)
-    List<WalletBalance> findByWalletIdWithPessimisticLock(final Long walletId);
+    Optional<List<WalletBalance>> findByWalletIdWithPessimisticLock(final Long walletId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE) // 🔥 비관적 락 적용
     @Query("SELECT wb FROM WalletBalance wb WHERE wb.wallet.walletId = :walletId AND wb.currency = :currency")
-    WalletBalance findByWalletIdAndCurrencyWithPessimisticLock(@Param("walletId") Long walletId, @Param("currency") Currency currency);
+    Optional<WalletBalance> findByWalletIdAndCurrencyWithPessimisticLock(@Param("walletId") Long walletId, @Param("currency") Currency currency);
 
     @Query("SELECT COUNT(wb) > 0 FROM WalletBalance wb WHERE wb.wallet.walletId = :walletId and wb.currency=:currency")
     boolean existsByCurrency(Long walletId, Currency currency);
-
-    @Modifying
-    @Query("""
-    UPDATE WalletBalance wb
-    SET wb.balance = wb.balance - :amount
-    WHERE wb.wallet.walletId = :walletId AND wb.currency = :currency AND wb.balance >= :amount
-""")
-    int withdrawWithCondition(@Param("walletId") Long walletId, @Param("currency") Currency currency, @Param("amount") BigDecimal amount);
-
-    @Modifying
-    @Query("""
-    UPDATE WalletBalance wb
-    SET wb.balance = wb.balance + :amount
-    WHERE wb.wallet.walletId = :walletId AND wb.currency = :currency
-""")
-    int deposit(@Param("walletId") Long walletId, @Param("currency") Currency currency, @Param("amount") BigDecimal amount);
 }
