@@ -39,6 +39,8 @@ public class UserServiceTest extends RedisTestBase {
 
     @BeforeEach
     void setUp() {
+        userRepository.deleteAll();
+
         IntStream.rangeClosed(1, 5).forEach(i -> {
                     UserRegisterRequest testUser = UserRegisterRequest.builder()
                             .userEmail("Test" + i + "@gmail.com")
@@ -97,7 +99,7 @@ public class UserServiceTest extends RedisTestBase {
 
         userCleanupScheduler.setClock(mockClock);
 
-        Long userId = 1L;
+        Long userId = 6L;
 
         User user = userRepository.findById(userId).orElseThrow();
         user.softDelete();
