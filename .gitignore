@@ -329,3 +329,5 @@ src/test/resources/application-test.properties
 
 
 src/main/resources/data.sql
+init.sql
+k6-scripts/
