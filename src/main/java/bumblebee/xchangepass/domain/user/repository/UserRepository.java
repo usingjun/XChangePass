@@ -2,13 +2,30 @@ package bumblebee.xchangepass.domain.user.repository;
 
 import bumblebee.xchangepass.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
-public interface UserRepository extends JpaRepository<User, Long> , UserRepositoryCustom {
+public interface UserRepository extends JpaRepository<User, Long>, UserRepositoryCustom {
 
     @Query(value = "SELECT m FROM User m WHERE m.userEmail.value=:email")
     Optional<User> findByUserEmail(String email);
 
+    @Modifying
+    @Query(value = """
+            DELETE FROM User u
+            WHERE u.isDeleted = true
+                AND u.userDeleteDate < :thirtyDaysAgo
+            """)
+    void deleteOldUsers(@Param("thirtyDaysAgo") LocalDateTime thirtyDaysAgo);
+
+    @Query(value = """
+            SELECT u
+            FROM User u
+            WHERE u.userId = :userId
+            """)
+    Optional<User> findByUserId(Long userId);
 }

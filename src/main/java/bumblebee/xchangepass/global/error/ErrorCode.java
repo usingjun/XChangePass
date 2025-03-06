@@ -11,10 +11,12 @@ public enum ErrorCode {
     USER_NOT_FOUND(HttpStatus.BAD_REQUEST, "U001", "존재 하지 않는 회원입니다."),
     USER_NOT_MODIFY(HttpStatus.BAD_REQUEST, "U002", "회원 수정에 실패했습니다."),
     USER_NOT_REGISTER(HttpStatus.BAD_REQUEST, "U003", "회원가입에 실패했습니다."),
-    USER_NOT_DELETE(HttpStatus.BAD_REQUEST, "U004", "회원 삭제 요청에 실패했습니다."),
+    USER_NOT_DELETE(HttpStatus.BAD_REQUEST, "U004", "회원 삭제에 실패했습니다."),
     USER_DUPLICATE_EMAIL(HttpStatus.BAD_REQUEST, "U005", "중복된 이메일 입니다."),
     USER_DUPLICATE_NICK_NAME(HttpStatus.BAD_REQUEST, "U006", "중복된 닉네임 입니다."),
     USER_DUPLICATE_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "U007", "중복된 전화번호 입니다."),
+    INVALID_GENDER(HttpStatus.BAD_REQUEST, "U008", "잘못된 성별 값입니다."),
+    INVALID_NICKNAME_PREFIX(HttpStatus.BAD_REQUEST, "U010", "닉네임은 'User_'로 시작할 수 없습니다."),
 
     WALLET_NOT_FOUND(HttpStatus.BAD_REQUEST, "W001", "지갑을 찾을 수 없습니다."),
     WALLET_ALREADY_EXIST(HttpStatus.BAD_REQUEST,"W002","이미 지갑이 존재합니다."),
@@ -24,7 +26,9 @@ public enum ErrorCode {
     BALANCE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "B002", "충전 금액이 부족합니다."),
 
     /*기타*/
-    ENTITY_FIELD_ACCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "G001", "엔티티 필드 접근 오류");
+    ENTITY_FIELD_ACCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "G001", "엔티티 필드 접근 오류"),
+    REDIS_CONNECTION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "R001", "Redis 연결 실패");
+
 
     @Schema(description = "에러 코드", example = "U003")
     private final String code;
