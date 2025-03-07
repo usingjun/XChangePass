@@ -9,11 +9,11 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 @Repository
-@Transactional(readOnly = true)
+//@Transactional(readOnly = true)
 public interface WalletRepository extends JpaRepository<Wallet, Long> {
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Transactional(readOnly = false)
+//    @Lock(LockModeType.PESSIMISTIC_WRITE)
+//    @Transactional(readOnly = false)
     @Query("SELECT w FROM Wallet w WHERE w.user.userId = :userId")
     Wallet findByUserId(Long userId);
 
