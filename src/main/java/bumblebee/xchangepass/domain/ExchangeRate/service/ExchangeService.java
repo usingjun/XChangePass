@@ -1,41 +1,111 @@
 package bumblebee.xchangepass.domain.ExchangeRate.service;
 
-import bumblebee.xchangepass.domain.ExchangeRate.dto.response.ExchangeDto;
-import bumblebee.xchangepass.domain.ExchangeRate.entity.Exchange;
+import bumblebee.xchangepass.domain.ExchangeRate.dto.response.ExchangeRateResponse;
+import bumblebee.xchangepass.domain.ExchangeRate.entity.ExchangeRate;
 import bumblebee.xchangepass.domain.ExchangeRate.repository.ExchangeRepository;
-import bumblebee.xchangepass.global.util.ExchangeUtils;
+import bumblebee.xchangepass.domain.ExchangeRate.util.Country;
+import bumblebee.xchangepass.global.error.ErrorCode;
+import bumblebee.xchangepass.global.exception.CommonException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@EnableAsync
 public class ExchangeService {
+    @Value("${api.key}")
+    private String authkey;
 
-    private final ExchangeUtils exchangeUtils;
     private final ExchangeRepository exchangeRepository;
 
-    public List<ExchangeDto> getExchangeRates() {
-        List<ExchangeDto> exchangeDataAsDtoList = exchangeUtils.getExchangeDataAsDtoList();
+    private final RestTemplate restTemplate = new RestTemplate();
 
-        for (ExchangeDto x : exchangeDataAsDtoList) {
-            Exchange entity = ExchangeDto.toEntity(x);
-
-            exchangeRepository.findByCurrency(entity.getCurrency())
-                    .ifPresentOrElse(
-                            existing -> {
-                                // rate 값이 변경되었을 때만 업데이트 실행
-                                if (!existing.getRate().equals(entity.getRate())) {
-                                    existing.setRate(entity.getRate());
-                                    existing.setUpdatedAt(entity.getUpdatedAt());
-                                    exchangeRepository.save(existing); // 변경된 경우만 업데이트
-                                }
-                            },
-                            () -> exchangeRepository.save(entity) // 없으면 새로 삽입
-                    );
+    public ExchangeRateResponse fetchExchangeRates(String baseCurrency) {
+        String API_URL = "https://v6.exchangerate-api.com/v6/" + authkey + "/latest/" + baseCurrency;
+        try {
+            return restTemplate.getForObject(API_URL, ExchangeRateResponse.class);
+        } catch (HttpClientErrorException e) {
+            throw ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException();
         }
+    }
+    @Scheduled(cron = "0 0 0 * * ?")
+    public void fetchAndSaveAllExchangeRates(){
+        exchangeRepository.deleteAll();
+        List<String> list = Country.create();
+        for (String baseCurrency : list) {
+            try {
+                ExchangeRateResponse response = fetchExchangeRates(baseCurrency);
+                saveRatesToDB(baseCurrency, response);
+            } catch (Exception e) {
+            }
+        }
+    }
+    /**
+     * ✅ 환율 데이터 조회 및 필요시 API 호출
+     */
+    @Transactional
+    public ExchangeRateResponse getExchangeRateAll(String baseCurrency) {
 
-        return exchangeDataAsDtoList;
+        List<ExchangeRate> BaseCurrency = exchangeRepository.findByBaseCurrency(baseCurrency);
+        if (!BaseCurrency.isEmpty()) {
+            // 리스트의 첫 번째 ExchangeRate 객체에서 환율 데이터를 가져옴
+            Map<String, Double> conversionRates = BaseCurrency.get(0).getExchangeRates();
+
+            return ExchangeRateResponse.builder()
+                    .baseCurrency(baseCurrency)
+                    .conversionRates(conversionRates)
+                    .build();
+        }else{
+            fetchAndSaveAllExchangeRates();
+        }
+        ExchangeRateResponse response = fetchExchangeRates(baseCurrency);
+        return response;
+    }
+
+    public void saveRatesToDB(String baseCurrency, ExchangeRateResponse response) {
+        try {
+            // JSON 문자열이 아니라 Map 형태로 저장
+            Map<String, Double> rates = response.conversionRates();
+
+            ExchangeRate exchangeRate = ExchangeRate.builder()
+                    .baseCurrency(baseCurrency)
+                    .rate(rates)
+                    .build();
+
+            exchangeRepository.save(exchangeRate);
+        } catch (CommonException e) {
+            throw ErrorCode.EXCHANGE_SAVE_FAIL.commonException();
+        }
+    }
+
+    @Transactional
+    public ExchangeRateResponse getExchangeRateForCountry(String baseCurrency, String targetCurrency) {
+        ExchangeRateResponse response = getExchangeRateAll(baseCurrency);
+
+        if (response != null && response.conversionRates().containsKey(targetCurrency)) {
+            Double rate = response.conversionRates().get(targetCurrency);
+            Map<String, Double> filteredRates = new HashMap<>();
+            filteredRates.put(targetCurrency, rate);
+
+            return ExchangeRateResponse.builder()
+                    .baseCurrency(baseCurrency)
+                    .conversionRates(filteredRates)
+                    .build();
+        }
+        throw ErrorCode.EXCHANGE_RATE_FOR_COUNTRY.commonException();
     }
 }
