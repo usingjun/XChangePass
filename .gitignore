@@ -329,5 +329,6 @@ src/test/resources/application-test.yml
 
 
 src/main/resources/data.sql
+/scripts/
 init.sql
 k6-scripts/
