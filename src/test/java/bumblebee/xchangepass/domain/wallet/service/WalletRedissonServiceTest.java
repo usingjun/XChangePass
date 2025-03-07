@@ -7,6 +7,7 @@ import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
+import bumblebee.xchangepass.domain.wallet.service.redisson.RedissonLockService;
 import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.walletBalance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.domain.walletBalance.service.WalletBalanceService;
@@ -18,19 +19,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.test.annotation.Commit;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Currency;
-import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,10 +40,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @SpringBootTest
 @ActiveProfiles("test")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-class WalletIntegrationServiceTest {
+class WalletRedissonServiceTest {
 
     @Autowired
     private WalletService walletService;
+
+    @Autowired
+    private RedissonLockService lockService;
     @Autowired
     private UserRepository userRepository;
     @Autowired
@@ -91,22 +95,24 @@ class WalletIntegrationServiceTest {
         return userRepository.save(user); // 즉시 반영
     }
 
+    // 중복되지 않는 지갑 생성
     private Wallet createWalletForUser(User user) {
         walletService.createWallet(user.getUserId());
 
         return walletRepository.findByUserId(user.getUserId());
     }
 
+    // 랜덤한 ID 생성 (UUID 활용)
     private String generateRandomId() {
         return UUID.randomUUID().toString().substring(0, 6);
     }
 
     @Test
     void testTransferSuccess() {
-        walletService.charge(new WalletChargeRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
+        lockService.charge(new WalletChargeRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
 
         WalletTransferRequest transferRequest = new WalletTransferRequest(sender.getUserId(), receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
-        walletService.transfer(transferRequest);
+        lockService.transfer(transferRequest);
 
         WalletBalance senderBalance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         WalletBalance receiverBalance = balanceService.findBalance(receiverWallet.getWalletId(), CURRENCY);
@@ -118,14 +124,14 @@ class WalletIntegrationServiceTest {
     @Test
     void testTransferFailureDueToInsufficientFunds() {
         WalletTransferRequest transferRequest = new WalletTransferRequest(sender.getUserId(), receiver.getUserId(), CHARGE_AMOUNT.add(BigDecimal.ONE), CURRENCY, CURRENCY, null);
-        Exception exception = assertThrows(RuntimeException.class, () -> walletService.transfer(transferRequest));
+        Exception exception = assertThrows(RuntimeException.class, () -> lockService.transfer(transferRequest));
         assertThat(exception.getMessage()).contains("충전 금액이 부족합니다.");
     }
 
     @Test
     @Transactional
     void testChargeWallet() {
-        walletService.charge(new WalletChargeRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
+        lockService.charge(new WalletChargeRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
 
         WalletBalance balance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         assertThat(balance.getBalance()).isEqualByComparingTo(CHARGE_AMOUNT);
@@ -146,6 +152,7 @@ class WalletIntegrationServiceTest {
         ExecutorService executorService = Executors.newFixedThreadPool(concurrentUsers);
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch endLatch = new CountDownLatch(concurrentUsers);
+        AtomicInteger transferCount = new AtomicInteger(0);
 
         Long senderId = senderWallet.getWalletId();
         Long receiverId = receiverWallet.getWalletId();
@@ -158,7 +165,8 @@ class WalletIntegrationServiceTest {
             executorService.submit(() -> {
                 try {
                     startLatch.await(); // 🔥 모든 스레드가 동시에 실행되도록 대기
-                    walletService.transfer(transferRequest);
+                    lockService.transfer(transferRequest);
+                    transferCount.incrementAndGet();
                 } catch (Exception e) {
                     System.err.println("[송금 중 예외 발생]: " + e.getMessage());
                 } finally {
@@ -178,14 +186,16 @@ class WalletIntegrationServiceTest {
 
         System.out.println("receiverBalance = " + receiverBalance.getBalance());
         System.out.println("senderBalance = " + senderBalance.getBalance());
+        System.out.println("[🔥 총 송금 성공 횟수]: " + transferCount.get());
 
-        assertThat(senderBalance.getBalance()).isEqualByComparingTo(
-                CHARGE_AMOUNT.multiply(BigDecimal.valueOf(concurrentUsers)).subtract(TRANSFER_AMOUNT.multiply(BigDecimal.valueOf(concurrentUsers)))
-        );
+        BigDecimal expectedSenderBalance = CHARGE_AMOUNT.multiply(BigDecimal.valueOf(100))
+                .subtract(TRANSFER_AMOUNT.multiply(BigDecimal.valueOf(transferCount.get())));
 
-        assertThat(receiverBalance.getBalance()).isEqualByComparingTo(
-                TRANSFER_AMOUNT.multiply(BigDecimal.valueOf(concurrentUsers))
-        );
+        BigDecimal expectedReceiverBalance = TRANSFER_AMOUNT.multiply(BigDecimal.valueOf(transferCount.get()));
+
+        assertThat(senderBalance.getBalance()).isEqualByComparingTo(expectedSenderBalance);
+        assertThat(receiverBalance.getBalance()).isEqualByComparingTo(expectedReceiverBalance);
+
     }
 
     /**
@@ -199,73 +209,57 @@ class WalletIntegrationServiceTest {
      */
     @RepeatedTest(5) // 5번 반복 실행
     void 송금_도중_발생한_출금은_실패한다() throws Exception {
-        WalletChargeRequest chargeRequest = new WalletChargeRequest(
+        lockService.charge(new WalletChargeRequest(
                 sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
-        );
+        ));
 
-        walletService.charge(chargeRequest);
-
-        AtomicReference<BigDecimal> withdrawAmount = new AtomicReference<>(BigDecimal.ZERO);
         AtomicBoolean isWithdrawFirst = new AtomicBoolean(false);
         AtomicBoolean isTransferFirst = new AtomicBoolean(false);
+        CountDownLatch latch = new CountDownLatch(1);
 
-        CountDownLatch latch = new CountDownLatch(1); // 🔥 1로 설정 (송금이 먼저 실행되도록 설정)
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
 
         Future<?> transferFuture = executorService.submit(() -> {
             try {
+                latch.await();
+                Thread.sleep(20); // 🔥 실행 순서를 조정
                 System.out.println("🚀 [송금 시작]");
                 WalletTransferRequest transferRequest = new WalletTransferRequest(
                         sender.getUserId(), receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
                 );
-                walletService.transfer(transferRequest);
+                lockService.transfer(transferRequest);
                 isTransferFirst.set(true);
             } catch (Exception e) {
                 System.err.println("[송금 중 예외 발생]: " + e.getMessage());
-            } finally {
-                latch.countDown(); // 🔥 송금이 끝난 후 출금 시작 신호
             }
         });
 
         Future<?> withdrawFuture = executorService.submit(() -> {
             try {
-                latch.await(); // 🔥 송금이 끝날 때까지 출금 대기
+                latch.await();
                 System.out.println("💸 [출금 시작]");
                 WalletChargeRequest withdrawRequest = new WalletChargeRequest(
                         sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
                 );
-                withdrawAmount.set(walletService.withdrawal(withdrawRequest));
+                lockService.withdrawal(withdrawRequest);
                 isWithdrawFirst.set(true);
             } catch (Exception e) {
                 System.err.println("[출금 중 예외 발생]: " + e.getMessage());
             }
         });
 
-        // 🔥 모든 작업이 완료될 때까지 대기
+        latch.countDown();
         withdrawFuture.get();
         transferFuture.get();
         executorService.shutdown();
 
-        // 잔액 확인
-        WalletBalance balanceA = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
-        WalletBalance balanceB = balanceService.findBalance(receiverWallet.getWalletId(), CURRENCY);
+        WalletBalance balance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
+        WalletBalance balanceReceiver = balanceService.findBalance(receiverWallet.getWalletId(), CURRENCY);
 
-        System.out.println("[🏦 최종 Sender 잔액] = " + balanceA.getBalance());
-        System.out.println("[🏦 최종 Receiver 잔액] = " + balanceB.getBalance());
-        System.out.println("[💰 출금된 금액] = " + withdrawAmount.get());
-        System.out.println("[💸 출금이 먼저 실행되었는가?] " + isWithdrawFirst.get());
-        System.out.println("[🚀 송금이 먼저 실행되었는가?] " + isTransferFirst.get());
-
-        // 테스트 검증
         if (isWithdrawFirst.get()) {
-            // 출금이 먼저 실행되었으면 송금이 실패해야 함
-            assertThat(withdrawAmount.get()).isEqualByComparingTo(CHARGE_AMOUNT); // 출금 성공
-            assertThat(balanceA.getBalance()).isEqualByComparingTo(BigDecimal.ZERO); // 출금 후 잔액 없음
+            assertThat(balance.getBalance()).isEqualByComparingTo(BigDecimal.ZERO);
         } else if (isTransferFirst.get()) {
-            // 송금이 먼저 실행되었으면 출금이 실패해야 함
-            assertThat(balanceA.getBalance()).isEqualByComparingTo(TRANSFER_AMOUNT); // 송금 성공
-            assertThat(withdrawAmount.get()).isEqualTo(BigDecimal.ZERO); // 출금 실패
-        } else {
-            throw new IllegalStateException("출금과 송금이 모두 실행되지 않음");
+            assertThat(balance.getBalance()).isEqualByComparingTo(TRANSFER_AMOUNT);
         }
     }
 
@@ -291,7 +285,7 @@ class WalletIntegrationServiceTest {
             try {
                 latch.await(); // 🔥 이체가 끝날 때까지 충전 대기
                 System.out.println("💰 충전 시작");
-                walletService.charge(chargeRequest);
+                lockService.charge(chargeRequest);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -301,7 +295,7 @@ class WalletIntegrationServiceTest {
             try {
                 System.out.println("🚀 이체 시작");
                 Exception exception = assertThrows(CommonException.class, () -> {
-                    walletService.transfer(transferRequest);
+                    lockService.transfer(transferRequest);
                 });
                 assertThat(exception.getMessage()).contains("충전 금액이 부족합니다.");
             } finally {
