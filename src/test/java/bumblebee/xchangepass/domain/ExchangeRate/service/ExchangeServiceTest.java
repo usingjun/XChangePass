@@ -1,0 +1,97 @@
+package bumblebee.xchangepass.domain.ExchangeRate.service;
+
+import bumblebee.xchangepass.domain.ExchangeRate.dto.response.ExchangeRateResponse;
+import bumblebee.xchangepass.domain.ExchangeRate.entity.ExchangeRate;
+import bumblebee.xchangepass.domain.ExchangeRate.repository.ExchangeRepository;
+import bumblebee.xchangepass.global.error.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@SpringBootTest
+class ExchangeServiceTest {
+
+    @Autowired
+    private ExchangeService service;
+
+    @Autowired
+    private ExchangeRepository exchangeRepository;
+
+    @Test
+    @DisplayName("데이터 베이스 저장 확인")
+    public void Test1() {
+        Map<String, Double> map = new HashMap<>();
+        String baseCurrency = "USD";
+
+        map.put("AED", 1.0);
+        map.put("EUR", 2.0);
+
+        ExchangeRateResponse exchangeRateResponse = new ExchangeRateResponse(baseCurrency, map);
+        service.saveRatesToDB(baseCurrency, exchangeRateResponse);
+
+        List<ExchangeRate> all = exchangeRepository.findAll();
+
+        Map<String, Double> exchangeRates = all.get(0).getExchangeRates();
+
+        assertTrue(exchangeRates.containsKey("AED"));
+        assertTrue(exchangeRates.containsKey("EUR"));
+    }
+
+
+    @Test
+    @DisplayName("환율 조회하기")
+    public void Test3(){
+        String baseCurrency = "USD";
+
+        ExchangeRateResponse exchangeRateResponse = service.fetchExchangeRates(baseCurrency);
+
+        assertEquals("USD",exchangeRateResponse.baseCurrency());
+        assertEquals(162,exchangeRateResponse.conversionRates().size());
+    }
+
+    @Test
+    @DisplayName("존재 하지 않는 환율 조회하기")
+    public void Test4(){
+        String baseCurrency = "QASD";
+
+                assertThrows(ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException().getClass(),
+                        () -> service.fetchExchangeRates(baseCurrency));
+    }
+
+    @Test
+    @DisplayName("환전 하고 싶은 나라 환율 찾기")
+    public void Test5(){
+        String baseCurrency = "USD";
+        String tageCurrency = "KRW";
+
+        ExchangeRateResponse exchangeRateForCountry = service.getExchangeRateForCountry(baseCurrency, tageCurrency);
+
+        assertTrue(exchangeRateForCountry.conversionRates().containsKey("KRW"));
+    }
+
+    @Test
+    @DisplayName("없는 나라 환율 찾기")
+    public void Test6(){
+        String baseCurrency = "USD";
+        String tageCurrency = "KRWW";
+
+        assertThrows(ErrorCode.EXCHANGE_RATE_FOR_COUNTRY.commonException().getClass(),
+                () -> service.getExchangeRateForCountry(baseCurrency, tageCurrency));
+    }
+    @Test
+    @DisplayName("나라 개수 확인")
+    public void Test7(){
+
+    service.fetchAndSaveAllExchangeRates();
+        List<ExchangeRate> all = exchangeRepository.findAll();
+        assertEquals(162, all.get(0).getExchangeRates().size());
+    }
+
+}
