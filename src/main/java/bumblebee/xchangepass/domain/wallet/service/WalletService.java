@@ -1,8 +1,9 @@
 package bumblebee.xchangepass.domain.wallet.service;
 
+import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
+import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletTransactionResponse;
@@ -14,7 +15,6 @@ import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +31,7 @@ public class WalletService {
     private final WalletRepository walletRepository;
     private final UserRepository userRepository;
     private final WalletBalanceService balanceService;
+    private final ExchangeService exchangeService;
 
     @Transactional
     public void createWallet(Long userId) {
@@ -58,10 +59,10 @@ public class WalletService {
 
 
     @Transactional
-    public void charge(WalletChargeRequest request) {
+    public void charge(WalletInOutRequest request) {
+        BigDecimal chargeAmount = request.amount();
         if (!request.toCurrency().equals(request.fromCurrency())) {
-            //환전
-
+            chargeAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.amount());
         }
 
         System.out.println("충전시작");
@@ -74,25 +75,25 @@ public class WalletService {
         }
 
         WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
-        balanceService.chargeBalance(balance, request.chargeAmount());
+        balanceService.chargeBalance(balance, chargeAmount);
     }
 
     @Transactional
-    public BigDecimal withdrawal(WalletChargeRequest request) {
+    public BigDecimal withdrawal(WalletInOutRequest request) {
+        BigDecimal amount = request.amount();
         if (!request.toCurrency().equals(request.fromCurrency())) {
-            //환전
-
+            amount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), amount);
         }
 
         Wallet wallet = walletRepository.findByUserId(request.userId());
         WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
 
-        if (request.chargeAmount().compareTo(balance.getBalance()) > 0) {
+        if (amount.compareTo(balance.getBalance()) > 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
 
 
-        balanceService.withdrawBalance(balance, request.chargeAmount());
+        balanceService.withdrawBalance(balance, amount);
         return balance.getBalance();
     }
 
@@ -110,17 +111,13 @@ public class WalletService {
 
         WalletBalance toBalance = balanceService.findBalance(request.receiverWalletId(), request.toCurrency());
 
-        System.out.println("fromBalance = " + fromBalance.getBalanceId());
-        System.out.println("toBalance = " + toBalance.getBalance());
         BigDecimal transferAmount = request.transferAmount();
-
         if (transferAmount.compareTo(fromBalance.getBalance()) > 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
 
-        if (!request.fromCurrency().equals(request.toCurrency())) {
-            //환전
-
+        if (!request.toCurrency().equals(request.fromCurrency())) {
+            transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
         }
 
         balanceService.transferBalance(fromBalance, toBalance, transferAmount);
