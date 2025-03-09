@@ -7,6 +7,7 @@ import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletTransactionResponse;
 import bumblebee.xchangepass.domain.wallet.service.NamedLockWalletFacade;
 import bumblebee.xchangepass.domain.wallet.service.WalletService;
+import bumblebee.xchangepass.domain.wallet.service.redisson.RedissonLockService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -30,6 +31,7 @@ public class WalletController {
 
     private final WalletService walletService;
     private final NamedLockWalletFacade namedLockService;
+    private final RedissonLockService redissonLockService;
 
     @Operation(summary = "지갑 생성", description = "새로운 지갑을 생성합니다.")
     @ApiResponses(value = {
@@ -83,7 +85,7 @@ public class WalletController {
     @PostMapping("/charge")
     @ResponseStatus(HttpStatus.CREATED)
     public void charge(@RequestBody WalletChargeRequest request) {
-        namedLockService.charge(request);
+        redissonLockService.charge(request);
     }
 
     @Operation(summary = "출금", description = "돈을 출금합니다.")
@@ -99,7 +101,7 @@ public class WalletController {
     @PutMapping("/withdraw")
     @ResponseStatus(HttpStatus.OK)
     public BigDecimal withdrawal(@RequestBody WalletChargeRequest request) {
-        return namedLockService.withdrawal(request);
+        return redissonLockService.withdrawal(request);
     }
 
     @Operation(summary = "송금", description = "돈을 송금합니다.")
@@ -121,7 +123,7 @@ public class WalletController {
     @PutMapping("/transfer")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void transfer(@RequestBody WalletTransferRequest request) {
-        namedLockService.transfer(request);
+        redissonLockService.transfer(request);
     }
 
     @Operation(summary = "잔액 조회", description = "잔액을 조회합니다.")

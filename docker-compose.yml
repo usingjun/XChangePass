@@ -5,6 +5,8 @@ networks:
 services:
   redis:
     image: redis:latest
+    networks:
+      - monitoring
     container_name: redis-container
     ports:
       - "6379:6379"
@@ -26,8 +28,13 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: xchangepass
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # 초기 SQL 추가
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data  # DB 데이터 유지
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 5s
+      retries: 5
+      start_period: 10s
 
   # 🔹 InfluxDB (K6 성능 테스트 데이터 저장)
   influxdb:
@@ -67,6 +74,7 @@ services:
       - monitoring
     depends_on:
       - influxdb
+      - app
     volumes:
       - ./k6-scripts:/k6-scripts    # K6 스크립트가 있는 디렉토리
     environment:
@@ -75,18 +83,20 @@ services:
 
   # 🔹 Spring Boot 애플리케이션
   app:
+    build: .
     image: xchangepass-app # 🔥 Spring Boot Docker 이미지명 (직접 빌드해야 함)
     container_name: spring-app
     restart: always
     depends_on:
       - postgres  # DB가 먼저 실행되도록 설정
+      - redis
     networks:
       - monitoring
     ports:
       - "9090:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/xchangepass
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/xchangepass
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
       - DB_HOST=influxdb
