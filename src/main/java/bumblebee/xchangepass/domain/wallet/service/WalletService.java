@@ -66,7 +66,7 @@ public class WalletService {
         }
 
         System.out.println("충전시작");
-        Wallet wallet = walletRepository.findByUserId(request.userId());
+        Wallet wallet = walletRepository.findByUserIdWithLock(request.userId());
 
         if (!balanceService.checkBalance(wallet.getWalletId(), request.toCurrency())) {
             Wallet findWallet = walletRepository.findById(wallet.getWalletId())
@@ -74,7 +74,7 @@ public class WalletService {
             balanceService.createBalance(findWallet, request.toCurrency());
         }
 
-        WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
+        WalletBalance balance = balanceService.findBalanceWithLock(wallet.getWalletId(), request.toCurrency());
         balanceService.chargeBalance(balance, chargeAmount);
     }
 
@@ -85,8 +85,8 @@ public class WalletService {
             amount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), amount);
         }
 
-        Wallet wallet = walletRepository.findByUserId(request.userId());
-        WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
+        Wallet wallet = walletRepository.findByUserIdWithLock(request.userId());
+        WalletBalance balance = balanceService.findBalanceWithLock(wallet.getWalletId(), request.toCurrency());
 
         if (amount.compareTo(balance.getBalance()) > 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
@@ -100,7 +100,7 @@ public class WalletService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
 //    @Transactional
     public void transfer(WalletTransferRequest request) {
-        WalletBalance fromBalance = balanceService.findBalance(request.senderWalletId(), request.fromCurrency());
+        WalletBalance fromBalance = balanceService.findBalanceWithLock(request.senderWalletId(), request.fromCurrency());
 
         if (!balanceService.checkBalance(request.receiverWalletId(), request.toCurrency())) {
             Wallet wallet = walletRepository.findById(request.receiverWalletId())
@@ -109,7 +109,7 @@ public class WalletService {
             balanceService.createBalance(wallet, request.toCurrency());
         }
 
-        WalletBalance toBalance = balanceService.findBalance(request.receiverWalletId(), request.toCurrency());
+        WalletBalance toBalance = balanceService.findBalanceWithLock(request.receiverWalletId(), request.toCurrency());
 
         BigDecimal transferAmount = request.transferAmount();
         if (transferAmount.compareTo(fromBalance.getBalance()) > 0) {
@@ -126,10 +126,10 @@ public class WalletService {
 
     @Transactional
     public List<WalletBalanceResponse> balance(Long userId) {
-        Wallet wallet = walletRepository.findByUserId(userId);
+        Wallet wallet = walletRepository.findByUserIdWithLock(userId);
         System.out.println("wallet.getWalletId() = " + wallet.getWalletId());
 
-        List<WalletBalance> balanceList = balanceService.findBalances(wallet.getWalletId());
+        List<WalletBalance> balanceList = balanceService.findBalancesWithLock(wallet.getWalletId());
         System.out.println("balanceList.get(0) = " + balanceList.get(0));
 
         return balanceList.stream()

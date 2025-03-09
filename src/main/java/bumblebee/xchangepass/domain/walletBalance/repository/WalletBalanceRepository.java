@@ -29,17 +29,17 @@ public interface WalletBalanceRepository extends JpaRepository<WalletBalance, Lo
             from WalletBalance wb
             where wb.wallet.walletId=:walletId and wb.currency=:currency
             """)
-    WalletBalance findByWalletIdAndCurrency(Long walletId, Currency currency);
+    Optional<WalletBalance> findByWalletIdAndCurrency(Long walletId, Currency currency);
 
-//    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
                 select wb
                 from WalletBalance wb
                 where wb.wallet.walletId=:walletId
             """)
-    Optional<List<WalletBalance>> findByWalletIdWithPessimisticLock(final Long walletId);
+    List<WalletBalance> findByWalletIdWithPessimisticLock(final Long walletId);
 
-//    @Lock(LockModeType.PESSIMISTIC_WRITE) // 🔥 비관적 락 적용
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT wb FROM WalletBalance wb WHERE wb.wallet.walletId = :walletId AND wb.currency = :currency")
     Optional<WalletBalance> findByWalletIdAndCurrencyWithPessimisticLock(@Param("walletId") Long walletId, @Param("currency") Currency currency);
 
