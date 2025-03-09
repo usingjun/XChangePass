@@ -1,6 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.service;
 
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
+import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.repository.LockRepository;
@@ -26,7 +26,7 @@ public class NamedLockWalletFacade {
     }
 
     @Transactional
-    public void charge(WalletChargeRequest request) {
+    public void charge(WalletInOutRequest request) {
         Wallet wallet = walletRepository.findByUserId(request.userId());
 
         if (wallet == null) {
@@ -44,7 +44,7 @@ public class NamedLockWalletFacade {
             }
 
             WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
-            balanceService.chargeBalance(balance, request.chargeAmount());
+            balanceService.chargeBalance(balance, request.amount());
 
         } finally {
             // 트랜잭션 종료 시점에서 락을 해제하도록 변경
@@ -53,7 +53,7 @@ public class NamedLockWalletFacade {
     }
 
     @Transactional
-    public BigDecimal withdrawal(WalletChargeRequest request) {
+    public BigDecimal withdrawal(WalletInOutRequest request) {
         Wallet wallet = null;
         WalletBalance balance = null;
         try {
@@ -63,7 +63,7 @@ public class NamedLockWalletFacade {
             lockRepository.getLock(wallet.getWalletId());
 
             balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
-            balanceService.withdrawBalance(balance, request.chargeAmount());
+            balanceService.withdrawBalance(balance, request.amount());
 
         } finally {
             if (wallet != null) {

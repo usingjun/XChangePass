@@ -1,6 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.controller;
 
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
+import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletCreateRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
@@ -84,7 +84,7 @@ public class WalletController {
     })
     @PostMapping("/charge")
     @ResponseStatus(HttpStatus.CREATED)
-    public void charge(@RequestBody WalletChargeRequest request) {
+    public void charge(@RequestBody WalletInOutRequest request) {
         redissonLockService.charge(request);
     }
 
@@ -100,7 +100,7 @@ public class WalletController {
     })
     @PutMapping("/withdraw")
     @ResponseStatus(HttpStatus.OK)
-    public BigDecimal withdrawal(@RequestBody WalletChargeRequest request) {
+    public BigDecimal withdrawal(@RequestBody WalletInOutRequest request) {
         return redissonLockService.withdrawal(request);
     }
 

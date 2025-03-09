@@ -4,16 +4,16 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
 
-public record WalletChargeRequest(
+public record WalletInOutRequest(
         Long userId,
-        BigDecimal chargeAmount,
+        BigDecimal amount,
         Currency fromCurrency,
         Currency toCurrency,
         LocalDateTime chargeDatetime
 ) {
-    public WalletChargeRequest(Long userId, BigDecimal chargeAmount, Currency fromCurrency, Currency toCurrency, LocalDateTime chargeDatetime) {
+    public WalletInOutRequest(Long userId, BigDecimal amount, Currency fromCurrency, Currency toCurrency, LocalDateTime chargeDatetime) {
         this.userId = userId;
-        this.chargeAmount = chargeAmount;
+        this.amount = amount;
         this.fromCurrency = fromCurrency;
         this.toCurrency = toCurrency;
         this.chargeDatetime = chargeDatetime;

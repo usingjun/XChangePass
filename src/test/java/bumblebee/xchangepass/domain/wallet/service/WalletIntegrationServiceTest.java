@@ -3,7 +3,7 @@ package bumblebee.xchangepass.domain.wallet.service;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
+import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
@@ -18,16 +18,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.test.annotation.Commit;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Currency;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -103,7 +99,7 @@ class WalletIntegrationServiceTest {
 
     @Test
     void testTransferSuccess() {
-        walletService.charge(new WalletChargeRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
+        walletService.charge(new WalletInOutRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
 
         WalletTransferRequest transferRequest = new WalletTransferRequest(sender.getUserId(), receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
         walletService.transfer(transferRequest);
@@ -125,7 +121,7 @@ class WalletIntegrationServiceTest {
     @Test
     @Transactional
     void testChargeWallet() {
-        walletService.charge(new WalletChargeRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
+        walletService.charge(new WalletInOutRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
 
         WalletBalance balance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         assertThat(balance.getBalance()).isEqualByComparingTo(CHARGE_AMOUNT);
@@ -199,7 +195,7 @@ class WalletIntegrationServiceTest {
      */
     @RepeatedTest(5) // 5번 반복 실행
     void 송금_도중_발생한_출금은_실패한다() throws Exception {
-        WalletChargeRequest chargeRequest = new WalletChargeRequest(
+        WalletInOutRequest chargeRequest = new WalletInOutRequest(
                 sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 
@@ -230,7 +226,7 @@ class WalletIntegrationServiceTest {
             try {
                 latch.await(); // 🔥 송금이 끝날 때까지 출금 대기
                 System.out.println("💸 [출금 시작]");
-                WalletChargeRequest withdrawRequest = new WalletChargeRequest(
+                WalletInOutRequest withdrawRequest = new WalletInOutRequest(
                         sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
                 );
                 withdrawAmount.set(walletService.withdrawal(withdrawRequest));
@@ -277,7 +273,7 @@ class WalletIntegrationServiceTest {
         // Given: 초기 잔액 설정
         System.out.println("초기 Sender 잔액 = " + balanceService.findBalance(senderWallet.getWalletId(), CURRENCY).getBalance());
 
-        WalletChargeRequest chargeRequest = new WalletChargeRequest(
+        WalletInOutRequest chargeRequest = new WalletInOutRequest(
                 sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 

@@ -3,7 +3,7 @@ package bumblebee.xchangepass.domain.wallet.service;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
+import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
@@ -32,7 +32,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -109,7 +108,7 @@ class WalletRedissonServiceTest {
 
     @Test
     void testTransferSuccess() {
-        lockService.charge(new WalletChargeRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
+        lockService.charge(new WalletInOutRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
 
         WalletTransferRequest transferRequest = new WalletTransferRequest(sender.getUserId(), receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
         lockService.transfer(transferRequest);
@@ -131,7 +130,7 @@ class WalletRedissonServiceTest {
     @Test
     @Transactional
     void testChargeWallet() {
-        lockService.charge(new WalletChargeRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
+        lockService.charge(new WalletInOutRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
 
         WalletBalance balance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         assertThat(balance.getBalance()).isEqualByComparingTo(CHARGE_AMOUNT);
@@ -209,7 +208,7 @@ class WalletRedissonServiceTest {
      */
     @RepeatedTest(5) // 5번 반복 실행
     void 송금_도중_발생한_출금은_실패한다() throws Exception {
-        lockService.charge(new WalletChargeRequest(
+        lockService.charge(new WalletInOutRequest(
                 sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         ));
 
@@ -238,7 +237,7 @@ class WalletRedissonServiceTest {
             try {
                 latch.await();
                 System.out.println("💸 [출금 시작]");
-                WalletChargeRequest withdrawRequest = new WalletChargeRequest(
+                WalletInOutRequest withdrawRequest = new WalletInOutRequest(
                         sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
                 );
                 lockService.withdrawal(withdrawRequest);
@@ -271,7 +270,7 @@ class WalletRedissonServiceTest {
         // Given: 초기 잔액 설정
         System.out.println("초기 Sender 잔액 = " + balanceService.findBalance(senderWallet.getWalletId(), CURRENCY).getBalance());
 
-        WalletChargeRequest chargeRequest = new WalletChargeRequest(
+        WalletInOutRequest chargeRequest = new WalletInOutRequest(
                 sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 

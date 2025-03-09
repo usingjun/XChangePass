@@ -2,7 +2,7 @@ package bumblebee.xchangepass.domain.wallet.service.redisson;
 
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
+import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.entity.Wallet;
@@ -52,7 +52,7 @@ public class RedissonLockService {
      * 🔒 지갑 충전 (RedissonLock 적용)
      */
     @Transactional
-    public void charge(WalletChargeRequest request) {
+    public void charge(WalletInOutRequest request) {
         String lockKey = "wallet:" + request.userId();
         redissonLock.tryLockVoid(lockKey, 10, 10, () -> {
             System.out.println("🔒 충전 시작");
@@ -65,7 +65,7 @@ public class RedissonLockService {
             }
 
             WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
-            balanceService.chargeBalance(balance, request.chargeAmount());
+            balanceService.chargeBalance(balance, request.amount());
             System.out.println("🔓 충전 완료");
         });
     }
@@ -74,17 +74,17 @@ public class RedissonLockService {
      * 🔒 지갑 출금 (RedissonLock 적용)
      */
     @Transactional
-    public BigDecimal withdrawal(WalletChargeRequest request) {
+    public BigDecimal withdrawal(WalletInOutRequest request) {
         String lockKey = "wallet:" + request.userId();
         return redissonLock.tryLock(lockKey, 10, 10, () -> {
             Wallet wallet = walletRepository.findByUserId(request.userId());
             WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
 
-            if (request.chargeAmount().compareTo(balance.getBalance()) > 0) {
+            if (request.amount().compareTo(balance.getBalance()) > 0) {
                 throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
             }
 
-            balanceService.withdrawBalance(balance, request.chargeAmount());
+            balanceService.withdrawBalance(balance, request.amount());
             return balance.getBalance();
         });
     }
