@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.card.entity;
 
+import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import bumblebee.xchangepass.global.common.EncryptionData;
 import jakarta.persistence.*;
 import lombok.Builder;
@@ -30,12 +31,6 @@ public class Card {
     @Column(name = "cvc", nullable = false)
     private String cvc;
 
-    @Column(name = "card_password", nullable = false)
-    private String cardPassword;
-
-    @Column(name = "owner_name", nullable = false)
-    private String ownerName;
-
     @Column(name = "card_type", nullable = false)
     @Enumerated(value = EnumType.STRING)
     private CardType cardType;
@@ -54,22 +49,24 @@ public class Card {
     @Embedded
     private EncryptionData encryptionData;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "wallet_id")
+    private Wallet wallet;
+
     @Builder
     public Card(String cardNumber,
                 String cvc,
-                String cardPassword,
-                String ownerName,
                 CardType cardType,
                 String encryptedAesKey,
-                byte[] iv){
+                byte[] iv,
+                Wallet wallet) {
         this.cardNumber = cardNumber;
         this.cvc = cvc;
-        this.cardPassword = cardPassword;
-        this.ownerName = ownerName;
         this.cardType = cardType;
         this.cardStatus = CardStatus.ACTIVE;
         this.expirationDate = LocalDateTime.now().plusYears(5);
         this.encryptionData = new EncryptionData(encryptedAesKey, iv);
+        this.wallet = wallet;
     }
 
 }
