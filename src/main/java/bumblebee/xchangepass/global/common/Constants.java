@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global;
+package bumblebee.xchangepass.global.common;
 
 public class Constants {
     //Redis 닉네임 INCR 키

@@ -34,8 +34,6 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'   // Spring 모니터링
     implementation 'org.springframework.boot:spring-boot-starter-aop'        // Spring AOP
 
-
-
     // Spring Security (인증 및 인가 관련 보안 기능)
     implementation 'org.springframework.boot:spring-boot-starter-security'   // Spring Security 기본 설정 및 기능 제공
 
