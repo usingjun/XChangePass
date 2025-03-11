@@ -37,7 +37,12 @@ public record UserRegisterRequest(
 
         @Schema(description = "사용자의 성별", example = "MALE")
         @NotNull(message = "성별 입력해주세요")
-        Sex userSex
+        Sex userSex,
+
+        @Schema(description = "지갑 비밀번호 (4자리 숫자)", example = "1234")
+        @NotNull(message = "지갑 비밀번호는 필수 입력 값입니다.")
+        @Pattern(regexp = "^\\d{4}$", message = "walletPassword는 4자리 숫자만 입력 가능합니다.")
+        String walletPassword
 ) {
 
     public User toEntity(final PasswordEncoder passwordEncoder, String uniqueNickname) {
