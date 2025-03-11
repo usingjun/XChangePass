@@ -48,6 +48,7 @@ public class UserServiceTest extends RedisTestBase {
                             .userName("테스터" + i)
                             .userPhoneNumber("010-0000-000" + i)
                             .userSex(i >= 4 ? Sex.FEMALE : Sex.MALE)
+                            .walletPassword("1234")
                             .build();
 
                     userService.signupUser(testUser);
