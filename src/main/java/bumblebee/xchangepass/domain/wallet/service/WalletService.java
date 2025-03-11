@@ -1,32 +1,57 @@
 package bumblebee.xchangepass.domain.wallet.service;
 
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletChargeRequest;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletGetRequest;
+import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
+import bumblebee.xchangepass.domain.user.entity.User;
+import bumblebee.xchangepass.domain.user.repository.UserRepository;
+import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.dto.response.WalletTransactionResponse;
 import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.walletBalance.repository.WalletBalanceRepository;
+import bumblebee.xchangepass.domain.walletBalance.service.WalletBalanceService;
 import bumblebee.xchangepass.global.error.ErrorCode;
-import jakarta.transaction.Transactional;
+import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WalletService {
 
-    public final WalletRepository walletRepository;
-    public final WalletBalanceRepository balanceRepository;
+    private final WalletRepository walletRepository;
+    private final UserRepository userRepository;
+    private final WalletBalanceService balanceService;
+    private final ExchangeService exchangeService;
 
     @Transactional
-    public List<WalletTransactionResponse> transaction(WalletGetRequest request) {
+    public void createWallet(Long userId) {
+        if (walletRepository.existsByUserId(userId)) {
+            throw new CommonException(ErrorCode.WALLET_ALREADY_EXIST);
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+        Wallet wallet = new Wallet(user);
+
+
+        walletRepository.save(wallet);
+        walletRepository.flush();
+        balanceService.createBalance(wallet, Currency.getInstance("KRW"));
+    }
+
+
+    @Transactional
+    public List<WalletTransactionResponse> transaction(Long userId) {
 
 
         return null;
@@ -34,78 +59,85 @@ public class WalletService {
 
 
     @Transactional
-    public void charge(WalletChargeRequest request) {
+    public void charge(WalletInOutRequest request) {
+        BigDecimal chargeAmount = request.amount();
         if (!request.toCurrency().equals(request.fromCurrency())) {
-            //환전
-
+            chargeAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.amount());
         }
 
-        Wallet wallet = walletRepository.findByUserId(request.userId());
+        System.out.println("충전시작");
+        Wallet wallet = walletRepository.findByUserIdWithLock(request.userId());
 
-        List<WalletBalance> balanceList = balanceRepository.findByWalletId(wallet.walletId);
-        for (WalletBalance balance : balanceList) {
-            if (balance.currency.equals(request.toCurrency())) {
-                WalletBalance findBalance = balanceRepository.findById(balance.getBalanceId())
-                        .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
-
-                findBalance.addBalance(request.chargeAmount());
-                balanceRepository.save(findBalance);
-                break;
-            }
+        if (!balanceService.checkBalance(wallet.getWalletId(), request.toCurrency())) {
+            Wallet findWallet = walletRepository.findById(wallet.getWalletId())
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+            balanceService.createBalance(findWallet, request.toCurrency());
         }
+
+        WalletBalance balance = balanceService.findBalanceWithLock(wallet.getWalletId(), request.toCurrency());
+        balanceService.chargeBalance(balance, chargeAmount);
     }
 
     @Transactional
-    public void transfer(WalletTransferRequest request) {
-        Wallet fromWallet = walletRepository.findByUserId(request.senderId());
-        Wallet toWallet = walletRepository.findByUserId(request.receiverId());
+    public BigDecimal withdrawal(WalletInOutRequest request) {
+        BigDecimal amount = request.amount();
+        if (!request.toCurrency().equals(request.fromCurrency())) {
+            amount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), amount);
+        }
 
-        WalletBalance fromBalance = balanceRepository.findByWalletIdAndCurrency(fromWallet.walletId, request.fromCurrency());
-        WalletBalance toBalance = balanceRepository.findByWalletIdAndCurrency(toWallet.walletId, request.toCurrency());
+        Wallet wallet = walletRepository.findByUserIdWithLock(request.userId());
+        WalletBalance balance = balanceService.findBalanceWithLock(wallet.getWalletId(), request.toCurrency());
 
-        BigDecimal transferAmount = request.transferAmount();
-
-        if ((transferAmount.compareTo(fromBalance.getBalance())) > 0) {
+        if (amount.compareTo(balance.getBalance()) > 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
 
-        fromBalance.subtractBalance(transferAmount);
-        balanceRepository.save(fromBalance);
 
-        if (!request.fromCurrency().equals(request.toCurrency())) {
-            //환전
+        balanceService.withdrawBalance(balance, amount);
+        return balance.getBalance();
+    }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+//    @Transactional
+    public void transfer(WalletTransferRequest request) {
+        WalletBalance fromBalance = balanceService.findBalanceWithLock(request.senderWalletId(), request.fromCurrency());
+
+        if (!balanceService.checkBalance(request.receiverWalletId(), request.toCurrency())) {
+            Wallet wallet = walletRepository.findById(request.receiverWalletId())
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+
+            balanceService.createBalance(wallet, request.toCurrency());
         }
 
+        WalletBalance toBalance = balanceService.findBalanceWithLock(request.receiverWalletId(), request.toCurrency());
 
-        toBalance.addBalance(transferAmount);
-        balanceRepository.save(toBalance);
+        BigDecimal transferAmount = request.transferAmount();
+        if (transferAmount.compareTo(fromBalance.getBalance()) > 0) {
+            throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
+        }
 
+        if (!request.toCurrency().equals(request.fromCurrency())) {
+            transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
+        }
+
+        balanceService.transferBalance(fromBalance, toBalance, transferAmount);
     }
 
-    private void withdraw(WalletBalance balance, BigDecimal transferAmount) {
-
-    }
-
-
-    private void userTransfer(Long receiverId, BigDecimal transferAmount, Currency currency) {
-
-    }
 
     @Transactional
-    public List<WalletBalanceResponse> balance(WalletGetRequest request) {
-        Wallet wallet = walletRepository.findByUserId(request.userId());
+    public List<WalletBalanceResponse> balance(Long userId) {
+        Wallet wallet = walletRepository.findByUserIdWithLock(userId);
+        System.out.println("wallet.getWalletId() = " + wallet.getWalletId());
 
-        List<WalletBalance> balanceList = balanceRepository.findByWalletId(wallet.walletId);
+        List<WalletBalance> balanceList = balanceService.findBalancesWithLock(wallet.getWalletId());
+        System.out.println("balanceList.get(0) = " + balanceList.get(0));
 
-        return balanceList
-                .stream()
+        return balanceList.stream()
+                .peek(balance -> System.out.println("Processing balance: " + balance.getBalanceId()))
                 .map(balance -> new WalletBalanceResponse(
                         balance.currency.getCurrencyCode(),
                         balance.getBalance()
                 ))
                 .toList();
     }
-
-
 }
