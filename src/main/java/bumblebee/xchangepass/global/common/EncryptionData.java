@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class EncryptionData {
 
-    @Column(name = "encrypted_aes_key", nullable = false)
+    @Column(name = "encrypted_aes_key", nullable = false, length = 512)
     private String encryptedAesKey;
 
     @Column(name = "iv", nullable = false)
