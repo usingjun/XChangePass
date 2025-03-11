@@ -5,33 +5,46 @@ import bumblebee.xchangepass.domain.user.dto.request.UserUpdateRequest;
 import bumblebee.xchangepass.domain.user.dto.response.UserResponse;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
+import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
+import bumblebee.xchangepass.domain.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.util.DuplicateKeyExceptionHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class UserService {
 
     private final UserRepository userRepository;
+    private final WalletService walletService;
     private final NicknameGenerator nicknameGenerator;
     private final BCryptPasswordEncoder bCryptPasswordEncoder;
+    private final PasswordEncoder passwordEncoder;
 
     /**
      * ✅ 사용자 등록
      * 닉네임 Redis INCR을 활요한 자동 생성
      * 실명의 경우 추후 전화번호, 이메일에서 받아 오는 형식으로 변경 예정
      */
-    public void signupUser(UserRegisterRequest request) {
+    @Transactional
+    public void signupUser(UserRegisterRequest request, String walletPassword) {
         String uniqueNickname = null;
         try{
             uniqueNickname = nicknameGenerator.generateUniqueNickname();
-            userRepository.save(request.toEntity(bCryptPasswordEncoder, uniqueNickname));
+            User createUser = userRepository.save(request.toEntity(bCryptPasswordEncoder, uniqueNickname));
+            userRepository.flush();
+
+            // ✅ 지갑 생성 (동기 처리)
+            walletService.createWallet(createUser, passwordEncoder.encode(walletPassword));
         } catch (DataIntegrityViolationException e) {
             nicknameGenerator.rollbackNicknameId(uniqueNickname);
             DuplicateKeyExceptionHandler.handle(e);
@@ -85,5 +98,14 @@ public class UserService {
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
         existUser.softDelete();
+    }
+
+    /**
+     * ✅ 사용자 삭제 (Hard Delete)
+     * 트랜잭션 관리를 위해 비동기 처리와 따로 분리
+     */
+    @Transactional
+    public void deleteUserBatch(LocalDateTime thirtyDaysAgo) {
+        userRepository.deleteOldUsers(thirtyDaysAgo);
     }
 }
