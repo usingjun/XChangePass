@@ -77,8 +77,8 @@ class WalletIntegrationServiceTest {
                 .orElseThrow(() -> new IllegalStateException("Receiver가 DB에 존재하지 않습니다."));
 
         // 지갑 생성 및 검증
-        senderWallet = createWalletForUser(sender);
-        receiverWallet = createWalletForUser(receiver);
+        senderWallet = createWalletForUser(sender, "1234");
+        receiverWallet = createWalletForUser(receiver, "1234");
     }
 
     // 중복되지 않는 유저 생성
@@ -87,8 +87,8 @@ class WalletIntegrationServiceTest {
         return userRepository.save(user); // 즉시 반영
     }
 
-    private Wallet createWalletForUser(User user) {
-        walletService.createWallet(user.getUserId());
+    private Wallet createWalletForUser(User user, String walletPassword) {
+        walletService.createWallet(user, walletPassword);
 
         return walletRepository.findByUserId(user.getUserId());
     }
