@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.domain.user.entity;
 
 import bumblebee.xchangepass.domain.user.entity.value.*;
+import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import jakarta.persistence.*;
 import lombok.Builder;
 import lombok.Getter;
@@ -61,6 +62,9 @@ public class User {
     @Column(name = "is_deleted")
     private Boolean isDeleted;
 
+    @OneToOne(mappedBy ="user", orphanRemoval = true, cascade = CascadeType.ALL)
+    private Wallet wallet;
+
     @CreatedDate
     @Column(name = "user_join_date")
     private LocalDateTime userJoinDate;
@@ -90,5 +94,9 @@ public class User {
     public void softDelete() {
         this.isDeleted = true;
         userDeleteDate = LocalDateTime.now();
+    }
+
+    public void setWallet(Wallet wallet) {
+        this.wallet = wallet;
     }
 }
