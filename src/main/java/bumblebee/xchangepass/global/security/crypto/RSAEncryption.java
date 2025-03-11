@@ -16,7 +16,10 @@ public class RSAEncryption {
 
     static {
         try {
-            byte[] decodedKey = Base64.getDecoder().decode(Constants.RSA_PUBLIC_KEY_BASE64);
+            String cleanBase64Key = Constants.RSA_PUBLIC_KEY_BASE64
+                    .replaceAll("\\s+", "");  // 모든 공백 및 개행 문자 제거
+
+            byte[] decodedKey = Base64.getDecoder().decode(cleanBase64Key);
             X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decodedKey);
             KeyFactory keyFactory = KeyFactory.getInstance("RSA");
             PUBLIC_KEY = keyFactory.generatePublic(keySpec);
