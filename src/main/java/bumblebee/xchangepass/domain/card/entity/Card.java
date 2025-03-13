@@ -69,4 +69,8 @@ public class Card {
         this.wallet = wallet;
     }
 
+    public void changeStatus(CardStatus newStatus) {
+        this.cardStatus = newStatus;
+    }
+
 }
