@@ -2,17 +2,31 @@ package bumblebee.xchangepass.global.security.crypto;
 
 import bumblebee.xchangepass.global.common.Constants;
 import bumblebee.xchangepass.global.error.ErrorCode;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.services.kms.KmsClient;
+import software.amazon.awssdk.services.kms.model.DecryptRequest;
+import software.amazon.awssdk.services.kms.model.DecryptResponse;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
+@Component
 public class RSAEncryption {
 
+    private final KmsClient kmsClient;
     private static final PublicKey PUBLIC_KEY;
+
+    @Autowired
+    public RSAEncryption(KmsClient kmsClient) {
+        this.kmsClient = kmsClient;
+    }
 
     static {
         try {
@@ -39,6 +53,27 @@ public class RSAEncryption {
             return Base64.getEncoder().encodeToString(encryptedKey);
         }catch (Exception e) {
             throw ErrorCode.AES_ENCRYPTION_FAILED.commonException();
+        }
+    }
+
+
+    // AWS KMS를 이용한 AES 키 복호화
+    public  SecretKey decryptAESKeyWithKMS(String encryptedAESKeyBase64) {
+        try {
+            byte[] encryptedKeyBytes = Base64.getDecoder().decode(encryptedAESKeyBase64);
+            SdkBytes encryptedKey = SdkBytes.fromByteArray(encryptedKeyBytes);
+
+            DecryptRequest decryptRequest = DecryptRequest.builder()
+                    .ciphertextBlob(encryptedKey)
+                    .build();
+
+            DecryptResponse decryptResponse = kmsClient.decrypt(decryptRequest);
+            byte[] decryptedKeyBytes = decryptResponse.plaintext().asByteArray();
+
+            return new SecretKeySpec(decryptedKeyBytes, "AES");
+
+        } catch (Exception e) {
+            throw ErrorCode.AES_DECRYPTION_FAILED.commonException();
         }
     }
 }
