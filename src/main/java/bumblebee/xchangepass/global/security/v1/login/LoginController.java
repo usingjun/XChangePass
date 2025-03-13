@@ -1,9 +1,7 @@
-package bumblebee.xchangepass.global.security;
+package bumblebee.xchangepass.global.security.v1.login;
 
-import bumblebee.xchangepass.global.security.v1.LoginService;
 import bumblebee.xchangepass.global.security.v1.login.dto.LoginRequest;
 import bumblebee.xchangepass.global.security.v1.login.dto.LoginResponse;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

@@ -1,9 +1,10 @@
-package bumblebee.xchangepass.global.security.v1;
+package bumblebee.xchangepass.global.security.v1.login;
 
 import bumblebee.xchangepass.domain.user.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.global.error.ErrorCode;
-import bumblebee.xchangepass.global.security.JwtProvider;
+import bumblebee.xchangepass.global.security.jwt.JwtProvider;
+import bumblebee.xchangepass.global.security.v1.refresh.RefreshToken;
 import bumblebee.xchangepass.global.security.v1.login.dto.LoginRequest;
 import bumblebee.xchangepass.global.security.v1.login.dto.LoginResponse;
 import lombok.RequiredArgsConstructor;

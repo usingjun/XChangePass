@@ -1,6 +1,8 @@
 package bumblebee.xchangepass.global.security;
 
-import bumblebee.xchangepass.domain.user.entity.Role;
+import bumblebee.xchangepass.global.security.handler.CustomAccessDeniedHandler;
+import bumblebee.xchangepass.global.security.handler.CustomAuthenticationEntryPointHandler;
+import bumblebee.xchangepass.global.security.jwt.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -62,6 +64,8 @@ public class SecurityConfig {
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
+        System.out.println("security start");
         http
                 .csrf(AbstractHttpConfigurer::disable) // ✅ 기존 `SpringSecurityConfig` & `SecurityConfig`에서 유지 (CSRF 비활성화)
                 .cors(corsCustomizer -> corsCustomizer.configurationSource(corsConfigurationSource())) // ✅ 기존 `SpringSecurityConfig`에서 유지 (CORS 설정)
@@ -76,6 +80,7 @@ public class SecurityConfig {
                         // 정적 리소스 및 공통 경로 허용
                         .requestMatchers("/css/**", "/js/**", "/images/**", "/static/**", "/index.html").permitAll()
                         .requestMatchers("/login", "/api/v1/user/signup", "/token-refresh", "/favicon.ico", "/error").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui", "/v3/api-docs/**", "/v3/api-docs").permitAll() //swagger-ui
 
                         // 관리자만 사용자 삭제 가능
                         .requestMatchers("/user").hasRole("ADMIN")

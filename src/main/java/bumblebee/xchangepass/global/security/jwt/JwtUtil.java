@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.user.controller;
+package bumblebee.xchangepass.global.security.jwt;
 
 import lombok.experimental.UtilityClass;
 import org.springframework.security.access.AccessDeniedException;

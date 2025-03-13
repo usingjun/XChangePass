@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global.security;
+package bumblebee.xchangepass.global.security.jwt;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;

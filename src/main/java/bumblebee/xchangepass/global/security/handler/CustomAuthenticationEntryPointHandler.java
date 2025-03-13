@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global.security;
+package bumblebee.xchangepass.global.security.handler;
 
 import bumblebee.xchangepass.global.error.ErrorCode;
 import com.google.gson.JsonObject;

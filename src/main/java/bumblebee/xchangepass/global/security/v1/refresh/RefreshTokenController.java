@@ -1,6 +1,5 @@
 package bumblebee.xchangepass.global.security.v1.refresh;
 
-import bumblebee.xchangepass.global.security.v1.RefreshTokenService;
 import bumblebee.xchangepass.global.security.v1.refresh.dto.RefreshTokenRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
