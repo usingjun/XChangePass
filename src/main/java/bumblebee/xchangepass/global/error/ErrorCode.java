@@ -39,6 +39,10 @@ public enum ErrorCode {
 
     /*Card*/
     MOBILE_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C001","모바일 카드 발급에 실패했습니다."),
+    PHYSICAL_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C002","실물 카드 발급에 실패했습니다."),
+    CARD_NOT_FOUND(HttpStatus.BAD_REQUEST,"C003","찾는 카드가 존재하지 않습니다."),
+    INVALID_CARD_NUMBER(HttpStatus.BAD_REQUEST, "C004", "잘못된 카드 번호입니다."),
+
 
     /*Encryption*/
     AES_KEY_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC001", "AES 키 생성에 실패했습니다."),
