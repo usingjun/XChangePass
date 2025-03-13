@@ -36,7 +36,7 @@ public class UserService {
      * 실명의 경우 추후 전화번호, 이메일에서 받아 오는 형식으로 변경 예정
      */
     @Transactional
-    public void signupUser(UserRegisterRequest request, String walletPassword) {
+    public void signupUser(UserRegisterRequest request) {
         String uniqueNickname = null;
         try{
             uniqueNickname = nicknameGenerator.generateUniqueNickname();
@@ -44,7 +44,7 @@ public class UserService {
             userRepository.flush();
 
             // ✅ 지갑 생성 (동기 처리)
-            walletService.createWallet(createUser, passwordEncoder.encode(walletPassword));
+            walletService.createWallet(createUser, passwordEncoder.encode(request.walletPassword()));
         } catch (DataIntegrityViolationException e) {
             nicknameGenerator.rollbackNicknameId(uniqueNickname);
             DuplicateKeyExceptionHandler.handle(e);
