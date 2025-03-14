@@ -4,7 +4,6 @@ import bumblebee.xchangepass.domain.card.dto.request.ChangeCardStatusRequest;
 import bumblebee.xchangepass.domain.card.dto.response.BasicCardInfoResponse;
 import bumblebee.xchangepass.domain.card.dto.response.DetailedCardInfoResponse;
 import bumblebee.xchangepass.domain.card.entity.Card;
-import bumblebee.xchangepass.domain.card.entity.CardStatus;
 import bumblebee.xchangepass.domain.card.entity.CardType;
 import bumblebee.xchangepass.domain.card.repository.CardRepository;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -49,7 +48,7 @@ public class CardService {
             String encryptionCvc = AESEncryption.encryptData(cvc, aesKey, iv);
 
             //AES 키 RSA 암호화
-            String encryptionAesKey = RSAEncryption.encryptAESKeyWithRSA(aesKey);
+            String encryptionAesKey = rsaEncryption.encryptAESKeyWithKMS(aesKey);
 
             Card mobileCard = Card.builder()
                     .cardNumber(encryptionCardNumber)
@@ -88,7 +87,7 @@ public class CardService {
             String encryptionCvc = AESEncryption.encryptData(cvc, aesKey, iv);
 
             //AES 키 RSA 암호화
-            String encryptionAesKey = RSAEncryption.encryptAESKeyWithRSA(aesKey);
+            String encryptionAesKey = rsaEncryption.encryptAESKeyWithKMS(aesKey);
 
             Card mobileCard = Card.builder()
                     .cardNumber(encryptionCardNumber)
@@ -201,5 +200,4 @@ public class CardService {
 
         return cardInfoDTO;
     }
-
 }
