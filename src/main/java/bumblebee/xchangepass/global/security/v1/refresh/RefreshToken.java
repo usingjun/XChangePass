@@ -44,12 +44,8 @@ public class RefreshToken {
     }
 
     // user refresh token remove
-    public static void removeUserRefreshToken(final long refreshToken) {
-        for(Map.Entry<String, Long> entry : refreshTokens.entrySet()) {
-            if(entry.getValue() == refreshToken) {
-                removeRefreshToken(entry.getKey());
-            }
-        }
+    public static void removeUserRefreshToken(final Long refreshToken) {
+        refreshTokens.entrySet().removeIf(entry -> entry.getValue().equals(refreshToken));
     }
 
 }
