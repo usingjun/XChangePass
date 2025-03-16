@@ -51,4 +51,12 @@ public class LoginService{
                 .build();
     }
 
+    public void logout(String refreshToken) {
+        // "Bearer " 접두사 제거
+        if (refreshToken.startsWith("Bearer ")) {
+            refreshToken = refreshToken.substring(7);
+        }
+
+        refreshTokenRepository.deleteRefreshToken(refreshToken);
+    }
 }

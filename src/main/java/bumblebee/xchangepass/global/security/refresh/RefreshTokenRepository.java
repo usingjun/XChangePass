@@ -43,11 +43,15 @@ public class RefreshTokenRepository {
      * Refresh Token 삭제
      */
     public void deleteRefreshToken(String refreshToken) {
+        // Refresh Token을 보유한 사용자 ID 찾기
         String userId = findUserIdByRefreshToken(refreshToken);
-        if (userId != null) {
-            String key = "refresh_tokens:" + userId;
-            jsonRedisTemplate.opsForHash().delete(key, refreshToken);
+
+        if (userId == null) {
+            throw ErrorCode.REFRESH_TOKEN_NOT_EXIST.commonException();
         }
+
+        String key = "refresh_tokens:" + userId;
+        jsonRedisTemplate.opsForHash().delete(key, refreshToken);
     }
 
     /**
