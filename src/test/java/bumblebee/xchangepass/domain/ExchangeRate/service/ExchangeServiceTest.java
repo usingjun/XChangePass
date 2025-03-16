@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -112,6 +113,7 @@ class ExchangeServiceTest {
 
 
     @Test
+    @DirtiesContext
     @DisplayName("비동기 업데이트시 기존 데이터를 가져오므로 사용자 블로킹 발생 안함")
     void testFetchExchangeRatesWhileUpdating() throws ExecutionException, InterruptedException {
 
@@ -145,9 +147,10 @@ class ExchangeServiceTest {
         ExchangeRateResponse updatedResponse = service.getExchangeRateAll("USD");
         assertThat(updatedResponse).isNotNull();
         assertThat(updatedResponse.conversionRates().get("KRW")).isEqualTo(1452.8549);
-        service.fetchAndSaveAllExchangeRates().get();
+
     }
     @Test
+    @DirtiesContext
     @DisplayName("동기식 업데이트 할시 기존 데이터 못가져오는 경우")
     void testFetchExchangeRatesWhileUpdating2() {
 
