@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global.security.v1.login.dto;
+package bumblebee.xchangepass.global.security.login.dto;
 
 import lombok.Builder;
 

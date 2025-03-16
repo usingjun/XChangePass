@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global.security.v1.refresh.dto;
+package bumblebee.xchangepass.global.security.refresh.dto;
 
 import lombok.Builder;
 
