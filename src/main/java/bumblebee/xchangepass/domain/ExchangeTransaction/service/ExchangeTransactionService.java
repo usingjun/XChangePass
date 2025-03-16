@@ -29,18 +29,6 @@ public class ExchangeTransactionService {
 
     public ExchangeResponseDTO createTransaction(ExchangeRequestDTO request) {
 
-        // 🔥 같은 사용자의 PENDING 상태 거래가 있는지 확인
-//        ExchangeTransaction existingTransaction = repository
-//                .findByUserIdAndFromCurrencyAndToCurrencyAndStatus(
-//                        request.userId(),
-//                        request.fromCurrency(),
-//                        request.toCurrency(),
-//                        TransactionStatus.PENDING
-//                );
-//        if (existingTransaction != null) {
-//            return ExchangeResponseDTO.toEntity(existingTransaction);
-//        }
-
         Map<String, Double> conversionRatess = exchangeRateService.getExchangeRateAll(request.fromCurrency())
                 .conversionRates();
 
@@ -62,7 +50,7 @@ public class ExchangeTransactionService {
 
 
         ExchangeTransaction transaction = ExchangeTransaction.builder()
-                .userId(request.userId())
+                .user(request.userId())
                 .fromCurrency(request.fromCurrency())
                 .toCurrency(request.toCurrency())
                 .exchangeRate(BigDecimal.valueOf(exchangeRate))
