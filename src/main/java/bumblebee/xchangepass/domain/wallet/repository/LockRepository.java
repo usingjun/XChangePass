@@ -1,0 +1,17 @@
+package bumblebee.xchangepass.domain.wallet.repository;
+
+import bumblebee.xchangepass.domain.wallet.entity.Wallet;
+import org.hibernate.cache.spi.support.AbstractReadWriteAccess;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface LockRepository extends JpaRepository<Wallet, Long> {
+
+    @Query(value = "SELECT pg_advisory_lock(:key)", nativeQuery = true)
+    void getLock(Long key);
+
+    @Query(value = "SELECT pg_advisory_unlock(:key)", nativeQuery = true)
+    void releaseLock(Long key);
+}

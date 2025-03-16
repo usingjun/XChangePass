@@ -6,9 +6,8 @@ import java.time.LocalDateTime;
 import java.util.Currency;
 
 public record WalletTransferRequest(
-        Long senderId,
-        Long receiverId,
-        String accountNumber,
+        Long senderWalletId,
+        Long receiverWalletId,
         BigDecimal transferAmount,
         Currency fromCurrency,
         Currency toCurrency,

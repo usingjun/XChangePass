@@ -5,6 +5,8 @@ import bumblebee.xchangepass.domain.ExchangeRate.entity.ExchangeRate;
 import bumblebee.xchangepass.domain.ExchangeRate.entity.ExchangeRateTemp;
 import bumblebee.xchangepass.domain.ExchangeRate.repository.ExchangeRateTempRepository;
 import bumblebee.xchangepass.domain.ExchangeRate.repository.ExchangeRepository;
+import bumblebee.xchangepass.domain.ExchangeRate.util.Country;
+import bumblebee.xchangepass.global.converter.CurrencyConverter;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import jakarta.persistence.EntityManager;
@@ -23,6 +25,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -91,6 +96,7 @@ public class ExchangeService {
     @Transactional
     public void saveRatesToTempDB(String baseCurrency, ExchangeRateResponse response) {
         try {
+            // JSON 문자열이 아니라 Map 형태로 저장
             Map<String, Double> rates = response.conversionRates();
             ExchangeRateTemp exchangeRateTemp = ExchangeRateTemp.builder()
                     .baseCurrency(baseCurrency)
@@ -119,5 +125,11 @@ public class ExchangeService {
                     .build();
         }
         throw ErrorCode.EXCHANGE_RATE_FOR_COUNTRY.commonException();
+    }
+
+    @Transactional
+    public BigDecimal getExchangeMoney(Currency baseCurrency, Currency targetCurrency, BigDecimal amount) {
+        BigDecimal rate = BigDecimal.valueOf(getExchangeRateForCountry(baseCurrency.toString(), targetCurrency.toString()).conversionRates().get(baseCurrency));
+        return rate.multiply(amount);
     }
 }

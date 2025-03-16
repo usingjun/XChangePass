@@ -15,14 +15,14 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Table(name = "wallet")
 @Getter
-@NoArgsConstructor(access = PROTECTED)
+@NoArgsConstructor()
 @EntityListeners(AuditingEntityListener.class)
 public class Wallet {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "wallet_id", nullable = false)
     public Long walletId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     public User user;
 
@@ -31,4 +31,8 @@ public class Wallet {
 
     @LastModifiedDate
     public LocalDateTime walletModifiedAt;
+
+    public Wallet(User user) {
+        this.user = user;
+    }
 }
