@@ -6,6 +6,7 @@ import bumblebee.xchangepass.domain.ExchangeTransaction.dto.response.ExchangeRes
 import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.ExchangeTransaction;
 import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.TransactionStatus;
 import bumblebee.xchangepass.domain.ExchangeTransaction.repository.ExchangeTransactionRepository;
+import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import jakarta.persistence.EntityManager;
@@ -47,8 +48,9 @@ class ExchangeTransactionServiceTest {
     @DisplayName("환전하기")
     public void Test1(){
 
+        User user = User.builder().build();
         ExchangeRequestDTO requestDTO = ExchangeRequestDTO.builder()
-                .userId(1L)
+                .userId(user)
                 .fromCurrency("USD")
                 .toCurrency("KRW")
                 .amount(BigDecimal.valueOf(100))
@@ -68,7 +70,7 @@ class ExchangeTransactionServiceTest {
     @DisplayName("🚨 환전 금액이 없을 경우 예외 발생 테스트")
     public void Test2(){
         ExchangeRequestDTO requestDTO = ExchangeRequestDTO.builder()
-                .userId(1L)
+                .userId(User.builder().build())
                 .fromCurrency("USD")
                 .toCurrency("KRW")
                 .amount(null)
@@ -84,7 +86,7 @@ class ExchangeTransactionServiceTest {
     void Test3() {
         // 1️⃣ PENDING 상태의 거래 저장
         ExchangeTransaction transaction = ExchangeTransaction.builder()
-                .userId(1L)
+                .user(User.builder().build())
                 .fromCurrency("USD")
                 .toCurrency("KRW")
                 .exchangeRate(BigDecimal.valueOf(1300))
@@ -124,7 +126,7 @@ class ExchangeTransactionServiceTest {
     void Test5() {
         // 1️⃣ COMPLETED 상태의 거래 저장
         ExchangeTransaction transaction = ExchangeTransaction.builder()
-                .userId(1L)
+                .user(User.builder().build())
                 .fromCurrency("USD")
                 .toCurrency("KRW")
                 .exchangeRate(BigDecimal.valueOf(1300))
