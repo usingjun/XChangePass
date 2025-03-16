@@ -26,6 +26,7 @@ public enum ErrorCode {
     EXCHANGE_RATE_NOT_FOUND(HttpStatus.NOT_FOUND, "E001", "존재 하지 않는 환율입니다."),
     EXCHANGE_RATE_FOR_COUNTRY(HttpStatus.BAD_REQUEST, "E003", "이 나라에 대한 환율 정보가 없습니다."),
     EXCHANGE_SAVE_FAIL(HttpStatus.BAD_REQUEST, "E002", "환율 정보 저장 실패"),
+   EXCHANGE_RATE_EXCEED(HttpStatus.TOO_MANY_REQUESTS, "E004", "환율 요청 초과"),
 
     //TRANSACTION
     TRANSACTION_ALREADY_COMPLETED(HttpStatus.BAD_REQUEST, "T001", "이미 완료된 거래입니다."),
