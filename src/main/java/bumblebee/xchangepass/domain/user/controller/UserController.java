@@ -1,12 +1,12 @@
 package bumblebee.xchangepass.domain.user.controller;
 
-import bumblebee.xchangepass.domain.user.dto.CustomUserDetails;
 import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
 import bumblebee.xchangepass.domain.user.dto.request.UserUpdateRequest;
 import bumblebee.xchangepass.domain.user.dto.response.UserResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
+import bumblebee.xchangepass.global.security.jwt.JwtUtil;
+import bumblebee.xchangepass.global.security.v1.login.UserRegisterService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -16,7 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+    private final UserRegisterService registerService;
 
     @Operation(summary = "회원 등록", description = "새로운 사용자를 등록합니다.")
     @ApiResponses(value = {
@@ -48,7 +49,7 @@ public class UserController {
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/signup")
     public void signup(@RequestBody @Valid UserRegisterRequest request) {
-        userService.signupUser(request);
+        registerService.signupUser(request);
     }
 
 
@@ -63,8 +64,8 @@ public class UserController {
     })
     @ResponseStatus(HttpStatus.OK)
     @GetMapping
-    public UserResponse read(@AuthenticationPrincipal CustomUserDetails customUserDetails){
-        return userService.readUser(customUserDetails.getId());
+    public UserResponse read(Authentication authentication){
+        return userService.readUser(JwtUtil.getLoginId(authentication));
     }
 
 
@@ -86,9 +87,9 @@ public class UserController {
     })
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PutMapping
-    public void update(@AuthenticationPrincipal CustomUserDetails customUserDetails,
+    public void update(Authentication authentication,
                        @RequestBody @Valid UserUpdateRequest request) {
-        userService.updateUser(customUserDetails.getId(), request);
+        userService.updateUser(JwtUtil.getLoginId(authentication), request);
     }
 
 
@@ -103,7 +104,7 @@ public class UserController {
     })
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @DeleteMapping
-    public void softDeleteUser(@AuthenticationPrincipal CustomUserDetails customUserDetails) {
-        userService.softDeleteUser(customUserDetails.getId());
+    public void softDeleteUser(Authentication authentication) {
+        userService.softDeleteUser(JwtUtil.getLoginId(authentication));
     }
 }

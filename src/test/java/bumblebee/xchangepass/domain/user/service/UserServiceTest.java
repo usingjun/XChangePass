@@ -9,6 +9,7 @@ import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.scheduler.UserCleanupScheduler;
+import bumblebee.xchangepass.global.security.v1.login.UserRegisterService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,9 @@ public class UserServiceTest extends RedisTestBase {
     private UserService userService;
 
     @Autowired
+    private UserRegisterService registerService;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -39,6 +43,7 @@ public class UserServiceTest extends RedisTestBase {
 
     @BeforeEach
     void setUp() {
+        userRepository.deleteAll();
         IntStream.rangeClosed(1, 5).forEach(i -> {
                     UserRegisterRequest testUser = UserRegisterRequest.builder()
                             .userEmail("Test" + i + "@gmail.com")
@@ -48,7 +53,7 @@ public class UserServiceTest extends RedisTestBase {
                             .userSex(i >= 4 ? Sex.FEMALE : Sex.MALE)
                             .build();
 
-                    userService.signupUser(testUser);
+                    registerService.signupUser(testUser);
                 });
     }
 
@@ -99,7 +104,7 @@ public class UserServiceTest extends RedisTestBase {
 
         Long userId = 1L;
 
-        User user = userRepository.findById(userId).orElseThrow();
+        User user = userRepository.findByUserEmail("Test1@gmail.com").orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
         user.softDelete();
         userRepository.saveAndFlush(user);
 
