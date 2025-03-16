@@ -57,14 +57,13 @@ public class ExchangeService {
     }
 
     @Async("asyncExecutor")
-    @Transactional
     public CompletableFuture<Void> fetchAndSaveAllExchangeRates() {
 
         List<String> currencies = List.of("USD", "KRW");
         for (String baseCurrency : currencies) {
             try {
-                ExchangeRateResponse response = fetchExchangeRates(baseCurrency);
-                saveRatesToTempDB(baseCurrency, response);
+                ExchangeService self = applicationContext.getBean(ExchangeService.class);
+                self.fetchAndSaveExchangeRate(baseCurrency);
             } catch (CommonException e) {
                 throw ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException();
             }
@@ -74,6 +73,11 @@ public class ExchangeService {
         return CompletableFuture.completedFuture(null);
     }
 
+    @Transactional
+    public void fetchAndSaveExchangeRate(String baseCurrency) {
+        ExchangeRateResponse response = fetchExchangeRates(baseCurrency);
+        saveRatesToTempDB(baseCurrency, response);
+    }
     @Transactional
     public ExchangeRateResponse getExchangeRateAll(String baseCurrency) {
         List<ExchangeRate> exchangeRates = exchangeRepository.findByBaseCurrency(baseCurrency);
