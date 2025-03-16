@@ -60,6 +60,7 @@ public class ExchangeRateTransactionService {
     }
 
 
+
     public void addIndexToExchangeRateTable() {
         String checkIndexSql = "SELECT 1 FROM pg_indexes WHERE tablename = 'exchange_rate' AND indexname = 'exchange_rate_jsonb_idx';";
         Query checkIndexQuery = entityManager.createNativeQuery(checkIndexSql);
