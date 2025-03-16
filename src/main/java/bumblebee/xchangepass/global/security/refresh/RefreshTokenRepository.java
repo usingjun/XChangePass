@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global.security.v2;
+package bumblebee.xchangepass.global.security.refresh;
 
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;

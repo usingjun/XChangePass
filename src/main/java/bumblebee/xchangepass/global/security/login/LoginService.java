@@ -1,12 +1,13 @@
-package bumblebee.xchangepass.global.security.v1.login;
+package bumblebee.xchangepass.global.security.login;
 
 import bumblebee.xchangepass.domain.user.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
-import bumblebee.xchangepass.global.security.v1.refresh.RefreshToken;
-import bumblebee.xchangepass.global.security.v1.login.dto.LoginRequest;
-import bumblebee.xchangepass.global.security.v1.login.dto.LoginResponse;
+import bumblebee.xchangepass.global.security.refresh.RefreshToken;
+import bumblebee.xchangepass.global.security.login.dto.LoginRequest;
+import bumblebee.xchangepass.global.security.login.dto.LoginResponse;
+import bumblebee.xchangepass.global.security.refresh.RefreshTokenRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,8 @@ public class LoginService{
 
     private final JwtProvider jwtProvider;
 
+    private final RefreshTokenRepository refreshTokenRepository;
+
     @Transactional
     public LoginResponse login(final LoginRequest request) {
         System.out.println("loginRequestDTO = " + request);
@@ -36,11 +39,11 @@ public class LoginService{
         String accessToken = jwtProvider.generateAccessToken(userInfo.userId());
 
         // 기존에 가지고 있는 사용자의 refresh token 제거
-        RefreshToken.removeUserRefreshToken(userInfo.userId());
+        refreshTokenRepository.deleteUserRefreshTokens(userInfo.userId());
 
         // refresh token 생성 후 저장
         String refreshToken = jwtProvider.generateRefreshToken(userInfo.userId());
-        RefreshToken.putRefreshToken(refreshToken, userInfo.userId());
+        refreshTokenRepository.saveRefreshToken(refreshToken, userInfo.userId());
 
         return LoginResponse.builder()
                 .accessToken(accessToken)
