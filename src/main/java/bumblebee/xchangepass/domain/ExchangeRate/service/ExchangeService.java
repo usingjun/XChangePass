@@ -52,7 +52,7 @@ public class ExchangeService {
     }
 
     @Async("asyncExecutor")
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public CompletableFuture<Void> fetchAndSaveAllExchangeRates() {
 
         List<String> currencies = List.of("USD", "KRW");

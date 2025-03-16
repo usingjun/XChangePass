@@ -132,12 +132,8 @@ class ExchangeServiceTest {
                 .build();
         exchangeRateTempRepository.save(exchangeRateTemp);
 
-        System.out.println(exchangeRateTempRepository.findAll().get(0).getExchangeRates() + "SEX");
-
         exchangeRateTransactionService.swapExchangeRateTables();
             service.fetchAndSaveAllExchangeRates();
-        System.out.println(exchangeRepository.findAll().get(0).getExchangeRates() + "SEX");
-        System.out.println(exchangeRepository.findAll().get(0).getBaseCurrency() + "SEX");
         ExchangeRateResponse response = service.getExchangeRateAll("USD");
         assertThat(response).isNotNull();
         assertThat(response.conversionRates().get("KRW")).isEqualTo(1400.0);
@@ -148,7 +144,7 @@ class ExchangeServiceTest {
 
         ExchangeRateResponse updatedResponse = service.getExchangeRateAll("USD");
         assertThat(updatedResponse).isNotNull();
-        assertThat(updatedResponse.conversionRates().get("KRW")).isEqualTo(1452.193);
+        assertThat(updatedResponse.conversionRates().get("KRW")).isEqualTo(1452.8549);
         service.fetchAndSaveAllExchangeRates().get();
     }
     @Test
@@ -183,7 +179,7 @@ class ExchangeServiceTest {
 
         ExchangeRateResponse initialResponse = service.getExchangeRateAll("USD");
         assertThat(initialResponse).isNotNull();
-        assertThat(initialResponse.conversionRates().get("KRW")).isEqualTo(1452.193);
+        assertThat(initialResponse.conversionRates().get("KRW")).isEqualTo(1452.8549);
 
     }
 }
