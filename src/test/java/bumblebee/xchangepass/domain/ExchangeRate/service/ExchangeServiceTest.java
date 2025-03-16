@@ -113,7 +113,6 @@ class ExchangeServiceTest {
 
 
     @Test
-    @DirtiesContext
     @DisplayName("비동기 업데이트시 기존 데이터를 가져오므로 사용자 블로킹 발생 안함")
     void testFetchExchangeRatesWhileUpdating() throws ExecutionException, InterruptedException {
 
@@ -150,9 +149,8 @@ class ExchangeServiceTest {
 
     }
     @Test
-    @DirtiesContext
     @DisplayName("동기식 업데이트 할시 기존 데이터 못가져오는 경우")
-    void testFetchExchangeRatesWhileUpdating2() {
+    void testFetchExchangeRatesWhileUpdating2() throws ExecutionException, InterruptedException {
 
 
         ExchangeRate initialExchangeRate = ExchangeRate.builder()
@@ -176,8 +174,7 @@ class ExchangeServiceTest {
 
         exchangeRateTransactionService.swapExchangeRateTables();
 
-        CompletableFuture<Void> future = service.fetchAndSaveAllExchangeRates();
-        await().atMost(5, TimeUnit.SECONDS).until(future::isDone);
+        service.fetchAndSaveAllExchangeRates().get();
 
 
         ExchangeRateResponse initialResponse = service.getExchangeRateAll("USD");

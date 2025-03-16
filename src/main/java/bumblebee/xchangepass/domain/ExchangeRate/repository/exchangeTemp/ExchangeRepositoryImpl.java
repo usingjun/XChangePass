@@ -1,20 +1,10 @@
 package bumblebee.xchangepass.domain.ExchangeRate.repository.exchangeTemp;
 
-import bumblebee.xchangepass.domain.ExchangeRate.entity.ExchangeRate;
-import bumblebee.xchangepass.domain.ExchangeRate.entity.ExchangeRateTemp;
-import bumblebee.xchangepass.domain.ExchangeRate.repository.ExchangeRateTempRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Repository
 public class ExchangeRepositoryImpl implements ExchangeRepositoryCustom {

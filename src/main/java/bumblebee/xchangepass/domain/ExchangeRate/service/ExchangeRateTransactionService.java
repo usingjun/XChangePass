@@ -6,15 +6,11 @@ import bumblebee.xchangepass.global.exception.CommonException;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
-import lombok.Synchronized;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
-import java.sql.SQLException;
 import java.util.List;
 
 @Service
@@ -25,11 +21,8 @@ public class ExchangeRateTransactionService {
 
     public final EntityManager entityManager;
 
-    private final TransactionTemplate transactionTemplate;
 
-
-
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void swapExchangeRateTables() {
         try {
             boolean isMainTableExist = exchangeRepository.isTableExist("exchange_rate");
