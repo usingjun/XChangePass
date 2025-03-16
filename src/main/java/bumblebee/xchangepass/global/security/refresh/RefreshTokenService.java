@@ -29,10 +29,7 @@ public class RefreshTokenService {
         // 새로운 Access Token 생성
         String newAccessToken = jwtProvider.generateAccessToken(userId);
 
-        // 기존 Refresh Token 삭제
-        refreshTokenRepository.deleteUserRefreshTokens(userId);
-
-        // 새로운 Refresh Token 생성 후 Redis에 저장
+        // 새로운 Refresh Token 생성 후 Redis에 저장 (기존 것은 자동 삭제됨)
         String newRefreshToken = jwtProvider.generateRefreshToken(userId);
         refreshTokenRepository.saveRefreshToken(newRefreshToken, userId);
 

@@ -38,9 +38,6 @@ public class LoginService{
         // jwt 토큰 생성
         String accessToken = jwtProvider.generateAccessToken(userInfo.userId());
 
-        // 기존에 가지고 있는 사용자의 refresh token 제거
-        refreshTokenRepository.deleteUserRefreshTokens(userInfo.userId());
-
         // refresh token 생성 후 저장
         String refreshToken = jwtProvider.generateRefreshToken(userInfo.userId());
         refreshTokenRepository.saveRefreshToken(refreshToken, userInfo.userId());
@@ -57,6 +54,7 @@ public class LoginService{
             refreshToken = refreshToken.substring(7);
         }
 
-        refreshTokenRepository.deleteRefreshToken(refreshToken);
+        Long userId = refreshTokenRepository.getUserIdFromRefreshToken(refreshToken);
+        refreshTokenRepository.deleteRefreshToken(userId);
     }
 }
