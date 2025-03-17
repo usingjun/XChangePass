@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.user.service;
 
-import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
 import bumblebee.xchangepass.domain.user.dto.request.UserUpdateRequest;
+import bumblebee.xchangepass.domain.user.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.dto.response.UserResponse;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
@@ -25,37 +25,6 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
-    private final WalletService walletService;
-    private final NicknameGenerator nicknameGenerator;
-    private final BCryptPasswordEncoder bCryptPasswordEncoder;
-    private final PasswordEncoder passwordEncoder;
-
-    /**
-     * ✅ 사용자 등록
-     * 닉네임 Redis INCR을 활요한 자동 생성
-     * 실명의 경우 추후 전화번호, 이메일에서 받아 오는 형식으로 변경 예정
-     */
-    @Transactional
-    public void signupUser(UserRegisterRequest request) {
-        String uniqueNickname = null;
-        try{
-            uniqueNickname = nicknameGenerator.generateUniqueNickname();
-            User createUser = userRepository.save(request.toEntity(bCryptPasswordEncoder, uniqueNickname));
-            userRepository.flush();
-
-            // ✅ 지갑 생성 (동기 처리)
-            walletService.createWallet(createUser, passwordEncoder.encode(request.walletPassword()));
-        } catch (DataIntegrityViolationException e) {
-            nicknameGenerator.rollbackNicknameId(uniqueNickname);
-            DuplicateKeyExceptionHandler.handle(e);
-        } catch (IllegalArgumentException | CommonException e) {
-            nicknameGenerator.rollbackNicknameId(uniqueNickname);
-            throw e;
-        } catch (Exception e) {
-            nicknameGenerator.rollbackNicknameId(uniqueNickname);
-            throw ErrorCode.USER_NOT_REGISTER.commonException();
-        }
-    }
 
     /**
      * ✅ 사용자 조회
@@ -108,4 +77,18 @@ public class UserService {
     public void deleteUserBatch(LocalDateTime thirtyDaysAgo) {
         userRepository.deleteOldUsers(thirtyDaysAgo);
     }
+
+    public UserLoginResponse readUserByUserId(String userId) {
+        System.out.println("userId = " + userId);
+        User user = userRepository.findByUserId(Long.parseLong(userId))
+                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+        System.out.println("user = " + user.toString());
+        return UserLoginResponse.fromEntity(user);
+    }
+
+    public UserLoginResponse readUserByUserEmail(String userEmail) {
+        return UserLoginResponse.fromEntity(userRepository.findByUserEmail(userEmail)
+                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException));
+    }
+
 }

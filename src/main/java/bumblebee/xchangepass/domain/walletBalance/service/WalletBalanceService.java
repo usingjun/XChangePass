@@ -1,13 +1,11 @@
 package bumblebee.xchangepass.domain.walletBalance.service;
 
 import bumblebee.xchangepass.domain.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.walletBalance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;

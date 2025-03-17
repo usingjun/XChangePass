@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.user.service;
 
 import bumblebee.xchangepass.config.RedisTestBase;
-import bumblebee.xchangepass.config.TestUserInitializer;
+import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
 import bumblebee.xchangepass.domain.user.dto.request.UserUpdateRequest;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -9,6 +9,8 @@ import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.scheduler.UserCleanupScheduler;
+import bumblebee.xchangepass.global.security.v1.login.UserRegisterService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +21,7 @@ import org.springframework.test.context.ActiveProfiles;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -29,6 +32,9 @@ public class UserServiceTest extends RedisTestBase {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private UserRegisterService registerService;
 
     @Autowired
     private UserRepository userRepository;
@@ -83,7 +89,7 @@ public class UserServiceTest extends RedisTestBase {
 
         Long userId = 1L;
 
-        User user = userRepository.findById(userId).orElseThrow();
+        User user = userRepository.findByUserEmail("Test1@gmail.com").orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
         user.softDelete();
         userRepository.saveAndFlush(user);
 

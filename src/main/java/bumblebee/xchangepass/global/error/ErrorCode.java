@@ -56,6 +56,15 @@ public enum ErrorCode {
     INVALID_IV(HttpStatus.BAD_REQUEST, "ENC009", "잘못된 IV 값입니다."),
 
 
+
+    //Security
+    USER_FORBIDDEN(HttpStatus.FORBIDDEN, "S0001", "권한이 없습니다."),
+    LOGIN_NOT_CORRECT(HttpStatus.UNAUTHORIZED, "S002", "아이디 혹은 비밀번호가 일치하지 않습니다."),
+    LOGIN_INVALID_INPUT(HttpStatus.BAD_REQUEST, "S003", "아이디 혹은 비밀번호를 입력하세요."),
+    REFRESH_TOKEN_NOT_EXIST(HttpStatus.UNAUTHORIZED, "S004", "Refresh Token이 존재하지 않습니다."),
+    REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "S005", "Refresh Token이 만료되었거나 정상적인 Token이 아닙니다."),
+    ACCESS_DENIED(HttpStatus.UNAUTHORIZED, "E0002", "인증되지 않은 사용자입니다."),
+
     /*기타*/
     ENTITY_FIELD_ACCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "G001", "엔티티 필드 접근 오류"),
     REDIS_CONNECTION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "R001", "Redis 연결 실패");
