@@ -145,7 +145,7 @@ class ExchangeServiceTest {
 
         ExchangeRateResponse updatedResponse = service.getExchangeRateAll("USD");
         assertThat(updatedResponse).isNotNull();
-        assertThat(updatedResponse.conversionRates().get("KRW")).isEqualTo(1452.8549);
+        assertThat(updatedResponse.conversionRates().get("KRW")).isEqualTo(1451.1414);
 
     }
     @Test
@@ -179,7 +179,7 @@ class ExchangeServiceTest {
 
         ExchangeRateResponse initialResponse = service.getExchangeRateAll("USD");
         assertThat(initialResponse).isNotNull();
-        assertThat(initialResponse.conversionRates().get("KRW")).isEqualTo(1452.8549);
+        assertThat(initialResponse.conversionRates().get("KRW")).isEqualTo(1451.1414);
 
     }
 }

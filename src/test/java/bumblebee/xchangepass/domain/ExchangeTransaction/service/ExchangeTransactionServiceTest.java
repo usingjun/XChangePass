@@ -6,9 +6,14 @@ import bumblebee.xchangepass.domain.ExchangeTransaction.dto.response.ExchangeRes
 import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.ExchangeTransaction;
 import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.TransactionStatus;
 import bumblebee.xchangepass.domain.ExchangeTransaction.repository.ExchangeTransactionRepository;
+import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
+import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
+import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
+import bumblebee.xchangepass.global.security.jwt.JwtUtil;
+import bumblebee.xchangepass.global.security.v1.login.UserRegisterService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,31 +38,51 @@ class ExchangeTransactionServiceTest {
     private ExchangeService exchangeService;
 
     @Autowired
+    private UserRegisterService registerService;
+
+    @Autowired
     private ExchangeTransactionRepository exchangeTransactionRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
 
     @Autowired
     EntityManager entityManager;
+
+    private User user;
     @BeforeEach
     void resetAutoIncrement() {
         exchangeTransactionRepository.deleteAll();
         entityManager.createNativeQuery("ALTER TABLE exchange_transaction ALTER COLUMN exchange_transaction_id RESTART WITH 1").executeUpdate();
+
+        UserRegisterRequest testUser = UserRegisterRequest.builder()
+                .userEmail("Test@gmail.com")
+                .userPwd("Qwer1234!")
+                .userName("테스터")
+                .userPhoneNumber("010-0000-0002")
+                .userSex(Sex.MALE)
+                .build();
+
+        registerService.signupUser(testUser);
+
+        user = userRepository.findByUserEmail(testUser.userEmail())
+                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+
     }
 
     @Test
     @DisplayName("환전하기")
     public void Test1(){
 
-        User user = User.builder().build();
         ExchangeRequestDTO requestDTO = ExchangeRequestDTO.builder()
-                .userId(user)
                 .fromCurrency("USD")
                 .toCurrency("KRW")
                 .amount(BigDecimal.valueOf(100))
                 .build();
 
 
-        ExchangeResponseDTO transaction = exchangeTransactionService.createTransaction(requestDTO);
+        ExchangeResponseDTO transaction = exchangeTransactionService.createTransaction(requestDTO,user.getUserId());
 
         assertEquals(1L, transaction.transactionId());
         assertNotNull(transaction.transactionId(), "거래 ID가 생성되어야 함");
@@ -69,15 +94,15 @@ class ExchangeTransactionServiceTest {
     @Test
     @DisplayName("🚨 환전 금액이 없을 경우 예외 발생 테스트")
     public void Test2(){
+        Long userId = 1L;
         ExchangeRequestDTO requestDTO = ExchangeRequestDTO.builder()
-                .userId(User.builder().build())
                 .fromCurrency("USD")
                 .toCurrency("KRW")
                 .amount(null)
                 .build();
 
         assertThrows(ErrorCode.TRANSACTION_AMOUNT_NOTFOUND.commonException().getClass(),
-                () -> exchangeTransactionService.createTransaction(requestDTO));
+                () -> exchangeTransactionService.createTransaction(requestDTO,userId));
 
     }
 
@@ -86,7 +111,7 @@ class ExchangeTransactionServiceTest {
     void Test3() {
         // 1️⃣ PENDING 상태의 거래 저장
         ExchangeTransaction transaction = ExchangeTransaction.builder()
-                .user(User.builder().build())
+                .user(user)
                 .fromCurrency("USD")
                 .toCurrency("KRW")
                 .exchangeRate(BigDecimal.valueOf(1300))
@@ -105,6 +130,7 @@ class ExchangeTransactionServiceTest {
         ExchangeTransaction exchangeTransaction = exchangeTransactionRepository
                 .findById(savedTransaction.getExchangeTransactionId())
                 .orElseThrow(NoSuchElementException::new);
+
 
         assertNotNull(response.transactionId());
         assertEquals(TransactionStatus.COMPLETED, exchangeTransaction.getStatus());
@@ -126,7 +152,7 @@ class ExchangeTransactionServiceTest {
     void Test5() {
         // 1️⃣ COMPLETED 상태의 거래 저장
         ExchangeTransaction transaction = ExchangeTransaction.builder()
-                .user(User.builder().build())
+                .user(user)
                 .fromCurrency("USD")
                 .toCurrency("KRW")
                 .exchangeRate(BigDecimal.valueOf(1300))
