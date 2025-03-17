@@ -7,10 +7,4 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ExchangeTransactionRepository extends JpaRepository<ExchangeTransaction, Long> {
 
-    ExchangeTransaction findByUserIdAndFromCurrencyAndToCurrencyAndStatus(
-            User userId,
-            String fromCurrency,
-            String toCurrency,
-            TransactionStatus status
-    );
 }
