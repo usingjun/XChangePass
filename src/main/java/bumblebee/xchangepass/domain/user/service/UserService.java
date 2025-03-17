@@ -5,20 +5,15 @@ import bumblebee.xchangepass.domain.user.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.dto.response.UserResponse;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.util.DuplicateKeyExceptionHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
