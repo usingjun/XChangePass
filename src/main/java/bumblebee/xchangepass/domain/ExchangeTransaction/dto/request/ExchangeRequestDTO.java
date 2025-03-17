@@ -14,7 +14,6 @@ import java.math.BigDecimal;
 @Schema(description = "환전 실행하기 위한 요청 객체")
 @Builder
 public record ExchangeRequestDTO(
-        User userId,
 
         @Schema(description = "환전할 통화", example = "USD")
         @NotNull(message = "환전할 통화는 필수 입력 값입니다.")

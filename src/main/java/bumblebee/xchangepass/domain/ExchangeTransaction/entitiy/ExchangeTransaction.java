@@ -24,7 +24,7 @@ public class ExchangeTransaction {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
-    private User userId;
+    private User user;
 
     @Column(nullable = false, length = 10)
     private String fromCurrency;
@@ -48,7 +48,7 @@ public class ExchangeTransaction {
     @Builder
     public ExchangeTransaction(User user, String fromCurrency, String toCurrency,
                                BigDecimal exchangeRate, BigDecimal amount, BigDecimal receivedAmount, TransactionStatus status) {
-        this.userId = user;
+        this.user = user;
         this.fromCurrency = fromCurrency;
         this.toCurrency = toCurrency;
         this.exchangeRate = exchangeRate;

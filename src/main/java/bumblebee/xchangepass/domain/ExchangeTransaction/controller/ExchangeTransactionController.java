@@ -3,6 +3,7 @@ package bumblebee.xchangepass.domain.ExchangeTransaction.controller;
 import bumblebee.xchangepass.domain.ExchangeTransaction.dto.request.ExchangeRequestDTO;
 import bumblebee.xchangepass.domain.ExchangeTransaction.dto.response.ExchangeResponseDTO;
 import bumblebee.xchangepass.domain.ExchangeTransaction.service.ExchangeTransactionService;
+import bumblebee.xchangepass.global.security.jwt.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 
@@ -40,8 +42,8 @@ public class ExchangeTransactionController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/create")
-    public ExchangeResponseDTO createTransaction(@RequestBody ExchangeRequestDTO request) {
-        return exchangeService.createTransaction(request);
+    public ExchangeResponseDTO createTransaction(@RequestBody ExchangeRequestDTO request, Authentication authentication) {
+        return exchangeService.createTransaction(request, JwtUtil.getLoginId(authentication));
     }
 
 

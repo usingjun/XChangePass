@@ -14,9 +14,6 @@ public record ExchangeResponseDTO (
         @Schema(description = "거래 ID", example = "123456789")
         Long transactionId,
 
-        @Schema(description = "사용자 ID", example = "1001")
-        User userId,
-
         @Schema(description = "환전할 통화", example = "USD")
         String fromCurrency,
 
@@ -41,7 +38,6 @@ public record ExchangeResponseDTO (
     public static ExchangeResponseDTO toEntity(ExchangeTransaction exchangeTransaction){
         return ExchangeResponseDTO.builder()
                 .transactionId(exchangeTransaction.getExchangeTransactionId())
-                .userId(exchangeTransaction.getUserId())
                 .fromCurrency(exchangeTransaction.getFromCurrency())
                 .toCurrency(exchangeTransaction.getToCurrency())
                 .exchangeRate(exchangeTransaction.getExchangeRate())
