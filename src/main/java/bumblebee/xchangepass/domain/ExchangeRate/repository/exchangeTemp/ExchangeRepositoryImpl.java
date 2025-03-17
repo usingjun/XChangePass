@@ -4,7 +4,10 @@ import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.PersistenceException;
 import org.springframework.stereotype.Repository;
+
+import java.sql.SQLException;
 
 @Repository
 public class ExchangeRepositoryImpl implements ExchangeRepositoryCustom {
@@ -15,7 +18,7 @@ public class ExchangeRepositoryImpl implements ExchangeRepositoryCustom {
     public void renameTable(String oldTableName, String newTableName) {
         try {
             entityManager.createNativeQuery("ALTER TABLE " + oldTableName + " RENAME TO " + newTableName).executeUpdate();
-        }catch (CommonException e){
+        }catch (PersistenceException e) {
             throw ErrorCode.EXCHANGE_TABLE_RENAME_FAIL.commonException();
         }
     }
@@ -32,8 +35,8 @@ public class ExchangeRepositoryImpl implements ExchangeRepositoryCustom {
             String indexSql = "CREATE INDEX IF NOT EXISTS exchange_rate_temp_jsonb_idx " +
                     "ON exchange_rate_temp USING GIN (exchange_rates)";
             entityManager.createNativeQuery(indexSql).executeUpdate();
-        }catch (CommonException e){
-            throw ErrorCode.EXCHANGE_TABLE_CREATION_FAIL.commonException();
+        }catch (PersistenceException e) {
+            throw ErrorCode.EXCHANGE_TABLE_RENAME_FAIL.commonException();
         }
     }
 
@@ -47,8 +50,8 @@ public class ExchangeRepositoryImpl implements ExchangeRepositoryCustom {
     public void dropTableIfExists(String tableName) {
         try {
             entityManager.createNativeQuery("DROP TABLE IF EXISTS " + tableName).executeUpdate();
-        } catch (CommonException e) {
-            throw ErrorCode.EXCHANGE_TABLE_DROP_FAIL.commonException();
+        } catch (PersistenceException e) {
+            throw ErrorCode.EXCHANGE_TABLE_RENAME_FAIL.commonException();
         }
     }
 }
