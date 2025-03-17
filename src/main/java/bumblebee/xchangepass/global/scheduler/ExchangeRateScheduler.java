@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.ExchangeRate.scheduler;
+package bumblebee.xchangepass.global.scheduler;
 
 import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
 import lombok.RequiredArgsConstructor;
