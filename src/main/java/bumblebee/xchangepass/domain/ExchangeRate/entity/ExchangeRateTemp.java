@@ -32,7 +32,7 @@ public class ExchangeRateTemp {
     @Column(columnDefinition = "jsonb")
     private Map<String, Double> exchangeRates;
 
-    @Setter
+
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
