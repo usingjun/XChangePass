@@ -107,8 +107,6 @@ public class ExchangeService {
                     .rate(rates)
                     .build();
             exchangeRateTempRepository.save(exchangeRateTemp);
-            entityManager.flush();
-            entityManager.clear();
         } catch (CommonException e) {
             throw ErrorCode.EXCHANGE_SAVE_FAIL.commonException();
         }
