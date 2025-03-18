@@ -4,6 +4,7 @@ import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.user.service.UserService;
+import bumblebee.xchangepass.global.security.v1.login.UserRegisterService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -15,7 +16,7 @@ import java.util.stream.IntStream;
 public class TestUserInitializer {
 
     @Autowired
-    private UserService userService;
+    private UserRegisterService userService;
 
     @Autowired
     private UserRepository userRepository;
