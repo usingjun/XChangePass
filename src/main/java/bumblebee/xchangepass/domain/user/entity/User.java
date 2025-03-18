@@ -101,7 +101,7 @@ public class User {
         userDeleteDate = LocalDateTime.now();
     }
 
-    public void setWallet(Wallet wallet) {
+    public void changeWallet(Wallet wallet) {
         this.wallet = wallet;
     }
 }

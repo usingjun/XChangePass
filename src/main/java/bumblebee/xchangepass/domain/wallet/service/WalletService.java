@@ -39,7 +39,7 @@ public class WalletService {
     public void createWallet(User user, String walletPassword) {
         Wallet wallet = new Wallet(user, walletPassword);
 
-        user.setWallet(walletRepository.save(wallet));
+        user.changeWallet(walletRepository.save(wallet));
         walletRepository.flush();
         balanceService.createBalance(wallet, Currency.getInstance("KRW"));
 

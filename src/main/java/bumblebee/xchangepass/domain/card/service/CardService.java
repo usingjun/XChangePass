@@ -72,7 +72,8 @@ public class CardService {
      */
     public void generatePhysicalCard(Long userId) {
 
-        User existUser = userRepository.findByUserId(userId).orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+        User existUser = userRepository.findByUserId(userId)
+                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
         String cardNumber = cardFactory.generateCardNumber();
         String cvc = cardFactory.generateCvc();
