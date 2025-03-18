@@ -28,8 +28,14 @@ public enum ErrorCode {
 
     /*Exchange_rate*/
     EXCHANGE_RATE_NOT_FOUND(HttpStatus.NOT_FOUND, "E001", "존재 하지 않는 환율입니다."),
-    EXCHANGE_RATE_FOR_COUNTRY(HttpStatus.BAD_REQUEST, "E003", "이 나라에 대한 환율 정보가 없습니다."),
     EXCHANGE_SAVE_FAIL(HttpStatus.BAD_REQUEST, "E002", "환율 정보 저장 실패"),
+    EXCHANGE_RATE_FOR_COUNTRY(HttpStatus.BAD_REQUEST, "E003", "이 나라에 대한 환율 정보가 없습니다."),
+   EXCHANGE_RATE_EXCEED(HttpStatus.TOO_MANY_REQUESTS, "E004", "환율 요청 초과"),
+    EXCHANGE_DATA_ACCESS_EXCEPTION(HttpStatus.INTERNAL_SERVER_ERROR, "E005", "데이터베이스 접근 중 오류 발생"),
+    EXCHANGE_SQL_EXECUTION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "E006", "SQL 실행 중 오류 발생"),
+    EXCHANGE_TABLE_DROP_FAIL(HttpStatus.INTERNAL_SERVER_ERROR, "E007", "테이블 DML 중 오류 발생"),
+    EXCHANGE_TABLE_RENAME_FAIL(HttpStatus.INTERNAL_SERVER_ERROR, "E008", "테이블 이름 변경 실패"),
+    EXCHANGE_TABLE_CREATION_FAIL(HttpStatus.INTERNAL_SERVER_ERROR, "E009", "임시 테이블 생성 실패"),
 
     /*TRANSACTION*/
     TRANSACTION_ALREADY_COMPLETED(HttpStatus.BAD_REQUEST, "T001", "이미 완료된 거래입니다."),

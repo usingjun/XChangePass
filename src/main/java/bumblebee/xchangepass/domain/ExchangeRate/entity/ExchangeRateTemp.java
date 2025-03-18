@@ -16,29 +16,30 @@ import static lombok.AccessLevel.PROTECTED;
 
 @Entity
 @NoArgsConstructor(access = PROTECTED)
-@Table(name = "exchange_rate")
+@Table(name = "exchange_rate_temp")
 @Getter
 @EntityListeners(AuditingEntityListener.class)
-public class ExchangeRate {
+public class ExchangeRateTemp {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @Column(nullable = false)
-    private String baseCurrency; // 기준 통화 (예: USD, EUR)
 
+    @Column(nullable = false)
+    private String baseCurrency;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private Map<String, Double> exchangeRates;
 
+
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
     @Builder
-    public ExchangeRate(String baseCurrency, Map<String, Double> rate) {
+    public ExchangeRateTemp(String baseCurrency, Map<String, Double> rate) {
         this.baseCurrency = baseCurrency;
         this.exchangeRates = rate;
         this.updatedAt = LocalDateTime.now();
     }
-
 }
