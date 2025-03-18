@@ -1,12 +1,11 @@
 package bumblebee.xchangepass.global.security.login;
 
-import bumblebee.xchangepass.domain.user.dto.response.UserLoginResponse;
+import bumblebee.xchangepass.global.security.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
-import bumblebee.xchangepass.global.security.refresh.RefreshToken;
-import bumblebee.xchangepass.global.security.login.dto.LoginRequest;
-import bumblebee.xchangepass.global.security.login.dto.LoginResponse;
+import bumblebee.xchangepass.global.security.login.dto.request.LoginRequest;
+import bumblebee.xchangepass.global.security.login.dto.response.LoginResponse;
 import bumblebee.xchangepass.global.security.refresh.RefreshTokenRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
