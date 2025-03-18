@@ -30,14 +30,13 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'        // 웹 애플리케이션 개발을 위한 라이브러리 (Spring MVC 포함)
     implementation 'org.springframework.boot:spring-boot-starter-websocket'  // WebSocket 기능을 제공하는 라이브러리
     implementation 'org.springframework.boot:spring-boot-starter-webflux'    // WebFlux 라이브러리
-//    implementation 'org.springframework.boot:spring-boot-starter-batch'      // Spring Batch 의존성
+    implementation 'org.springframework.boot:spring-boot-starter-batch'      // Spring Batch 의존성
     implementation 'org.springframework.boot:spring-boot-starter-actuator'   // Spring 모니터링
     implementation 'org.springframework.boot:spring-boot-starter-aop'        // Spring AOP
 
     // Spring Security (인증 및 인가 관련 보안 기능)
     implementation 'org.springframework.boot:spring-boot-starter-security'   // Spring Security 기본 설정 및 기능 제공
     testImplementation 'org.springframework.security:spring-security-test'
-//    implementation group: 'javax.xml.bind', name: 'jaxb-api', version: '2.3.1'
 
     // JWT (JSON Web Token) 관련 라이브러리
     implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
