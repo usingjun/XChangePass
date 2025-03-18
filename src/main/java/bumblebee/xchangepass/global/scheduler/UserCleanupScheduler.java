@@ -1,10 +1,7 @@
 package bumblebee.xchangepass.global.scheduler;
 
-import bumblebee.xchangepass.domain.user.entity.User;
-import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.global.error.ErrorCode;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.springframework.scheduling.annotation.Async;
@@ -14,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Component
 @RequiredArgsConstructor
