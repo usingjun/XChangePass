@@ -51,7 +51,7 @@ public class ExchangeService {
             return restTemplate.getForObject(API_URL, ExchangeRateResponse.class);
         } catch (HttpClientErrorException e) {
             throw ErrorCode.EXCHANGE_RATE_EXCEED.commonException();
-        } catch (CommonException e) {
+        } catch (Exception e) {
             throw ErrorCode.EXCHANGE_RATE_FOR_COUNTRY.commonException();
         }
     }
@@ -64,7 +64,7 @@ public class ExchangeService {
             try {
                 ExchangeService self = applicationContext.getBean(ExchangeService.class);
                 self.fetchAndSaveExchangeRate(baseCurrency);
-            } catch (CommonException e) {
+            } catch (Exception e) {
                 throw ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException();
             }
         }
@@ -107,7 +107,7 @@ public class ExchangeService {
                     .rate(rates)
                     .build();
             exchangeRateTempRepository.save(exchangeRateTemp);
-        } catch (CommonException e) {
+        } catch (Exception e){
             throw ErrorCode.EXCHANGE_SAVE_FAIL.commonException();
         }
     }
