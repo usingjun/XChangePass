@@ -81,7 +81,7 @@ public class ExchangeTransactionService {
             throw ErrorCode.TRANSACTION_ALREADY_COMPLETED.commonException();
         }
 
-        transaction.setStatus(TransactionStatus.COMPLETED);
+        transaction.changeStatus(TransactionStatus.COMPLETED);
         repository.save(transaction);
 
         return ExchangeResponseDTO.toEntity(transaction);

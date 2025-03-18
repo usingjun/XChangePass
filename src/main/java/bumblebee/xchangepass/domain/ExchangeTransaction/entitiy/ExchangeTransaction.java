@@ -55,4 +55,8 @@ public class ExchangeTransaction {
         this.receivedAmount = receivedAmount;
         this.status = status;
     }
+
+    public void changeStatus(TransactionStatus status) {
+        this.status = status;
+    }
 }
