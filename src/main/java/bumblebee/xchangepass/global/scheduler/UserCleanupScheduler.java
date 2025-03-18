@@ -27,15 +27,14 @@ public class UserCleanupScheduler {
     private Clock clock = Clock.systemUTC(); // 기본 시스템 시간을 사용
 
 
-    /*
-    Hard Delete 스케쥴러
+    /**
+     * Hard Delete 스케쥴러
      */
     @Async
     @Scheduled(cron = "0 0 3 * * ?") // 매일 새벽 3시에 실행
     public void deleteUser() {
         try {
             LocalDateTime thirtyDaysAgo = LocalDateTime.now(clock).minusDays(30);
-            System.out.println("[DEBUG] deleteUser() 실행! 현재 스레드: " + Thread.currentThread().getName());
 
             userService.deleteUserBatch(thirtyDaysAgo);
         } catch (Exception e) {
