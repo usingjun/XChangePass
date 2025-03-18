@@ -1,15 +1,15 @@
 package bumblebee.xchangepass.domain.user.service;
 
 import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
-import bumblebee.xchangepass.domain.user.dto.response.UserLoginResponse;
+import bumblebee.xchangepass.global.security.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.entity.Role;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import bumblebee.xchangepass.global.security.login.LoginService;
 import bumblebee.xchangepass.global.security.login.UserRegisterService;
-import bumblebee.xchangepass.global.security.login.dto.LoginRequest;
-import bumblebee.xchangepass.global.security.login.dto.LoginResponse;
+import bumblebee.xchangepass.global.security.login.dto.request.LoginRequest;
+import bumblebee.xchangepass.global.security.login.dto.response.LoginResponse;
 import bumblebee.xchangepass.global.security.refresh.RefreshToken;
 import bumblebee.xchangepass.global.security.refresh.RefreshTokenService;
 import bumblebee.xchangepass.global.security.refresh.dto.RefreshTokenResponse;
