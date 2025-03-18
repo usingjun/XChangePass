@@ -3,33 +3,56 @@ package bumblebee.xchangepass.domain.ExchangeRate.controller;
 import bumblebee.xchangepass.domain.ExchangeRate.dto.response.ExchangeRateResponse;
 import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.global.error.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/exchange-rate")
 @RequiredArgsConstructor
+@Tag(name = "Exchange", description = "Exchange management API")
 public class ExchangeController {
 
     private final ExchangeService exchangeService;
 
-    // 특정 나라 -> 전체 나라들에 대한 환율
+    @Operation(summary = "환율 조회", description = "특정 나라에 대한 모든 나라의 환율들 조회")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "429", description = "환율 조회 초과",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\n  \"code\": \"E004\"," +
+                                    "\n  \"message\": \"환율 요청 초과\"\n}"))
+            )
+    })
+    @ResponseStatus(HttpStatus.OK)
     @GetMapping("/{baseCurrency}")
     public ExchangeRateResponse getExchangeRateAll(@PathVariable String baseCurrency) {
         return exchangeService.getExchangeRateAll(baseCurrency);
     }
 
-    // 위의 서비스에서 -> 원하는 나라 환율 조회
+    @Operation(summary = "환율 조회", description = "특정 나라와 특정 나라의 환율 조회")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "400", description = "특정 나라에 대한 환율 정보 없음",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\n  \"code\": \"E004\"," +
+                                    "\n  \"message\": \"특정 나라에 대한 환율 정보 없음\"\n}"))
+            )
+    })
+    @ResponseStatus(HttpStatus.OK)
     @GetMapping("/rate")
     public ExchangeRateResponse getExchangeRate(
             @RequestParam String baseCurrency,
             @RequestParam String targetCurrency
     ) {
-        ExchangeRateResponse response = exchangeService.getExchangeRateForCountry(baseCurrency, targetCurrency);
-
-        if (response == null) {
-           throw ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException();
-        }
-        return response;
+        return exchangeService.getExchangeRateForCountry(baseCurrency, targetCurrency);
     }
 }

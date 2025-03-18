@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.aspect;
+package bumblebee.xchangepass.global.aspect;
 
 import com.sun.management.OperatingSystemMXBean;
 import io.micrometer.core.instrument.MeterRegistry;

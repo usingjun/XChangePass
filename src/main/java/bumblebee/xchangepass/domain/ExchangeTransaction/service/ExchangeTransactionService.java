@@ -7,6 +7,8 @@ import bumblebee.xchangepass.domain.ExchangeTransaction.dto.response.ExchangeRes
 import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.ExchangeTransaction;
 import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.TransactionStatus;
 import bumblebee.xchangepass.domain.ExchangeTransaction.repository.ExchangeTransactionRepository;
+import bumblebee.xchangepass.domain.user.entity.User;
+import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,25 +23,15 @@ public class ExchangeTransactionService {
 
     private final ExchangeTransactionRepository repository;
     private final ExchangeService exchangeRateService;
+    private final UserRepository userRepository;
 
-    public ExchangeTransactionService(ExchangeTransactionRepository repository, ExchangeService exchangeRateService) {
+    public ExchangeTransactionService(ExchangeTransactionRepository repository, ExchangeService exchangeRateService, UserRepository userRepository) {
         this.repository = repository;
         this.exchangeRateService = exchangeRateService;
+        this.userRepository = userRepository;
     }
 
-    public ExchangeResponseDTO createTransaction(ExchangeRequestDTO request) {
-
-        // 🔥 같은 사용자의 PENDING 상태 거래가 있는지 확인
-//        ExchangeTransaction existingTransaction = repository
-//                .findByUserIdAndFromCurrencyAndToCurrencyAndStatus(
-//                        request.userId(),
-//                        request.fromCurrency(),
-//                        request.toCurrency(),
-//                        TransactionStatus.PENDING
-//                );
-//        if (existingTransaction != null) {
-//            return ExchangeResponseDTO.toEntity(existingTransaction);
-//        }
+    public ExchangeResponseDTO createTransaction(ExchangeRequestDTO request, Long userId) {
 
         Map<String, Double> conversionRatess = exchangeRateService.getExchangeRateAll(request.fromCurrency())
                 .conversionRates();
@@ -61,8 +53,11 @@ public class ExchangeTransactionService {
                 .setScale(2, RoundingMode.HALF_UP);
 
 
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+
         ExchangeTransaction transaction = ExchangeTransaction.builder()
-                .userId(request.userId())
+                .user(user)
                 .fromCurrency(request.fromCurrency())
                 .toCurrency(request.toCurrency())
                 .exchangeRate(BigDecimal.valueOf(exchangeRate))
@@ -86,7 +81,7 @@ public class ExchangeTransactionService {
             throw ErrorCode.TRANSACTION_ALREADY_COMPLETED.commonException();
         }
 
-        transaction.setStatus(TransactionStatus.COMPLETED);
+        transaction.changeStatus(TransactionStatus.COMPLETED);
         repository.save(transaction);
 
         return ExchangeResponseDTO.toEntity(transaction);
