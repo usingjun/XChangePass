@@ -1,8 +1,7 @@
-package bumblebee.xchangepass.global.security.login;
+package bumblebee.xchangepass.domain.user.service;
 
 import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.user.service.NicknameGenerator;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.util.DuplicateKeyExceptionHandler;

@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global.security.login.dto.response;
+package bumblebee.xchangepass.domain.user.login.dto.response;
 
 import bumblebee.xchangepass.domain.user.entity.Role;
 import bumblebee.xchangepass.domain.user.entity.User;

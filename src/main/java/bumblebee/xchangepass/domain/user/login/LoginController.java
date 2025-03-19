@@ -1,7 +1,7 @@
-package bumblebee.xchangepass.global.security.login;
+package bumblebee.xchangepass.domain.user.login;
 
-import bumblebee.xchangepass.global.security.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.global.security.login.dto.response.LoginResponse;
+import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
+import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;

@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global.security.login.dto.request;
+package bumblebee.xchangepass.domain.user.login.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;

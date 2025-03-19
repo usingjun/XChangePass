@@ -1,19 +1,18 @@
 package bumblebee.xchangepass.domain.user.service;
 
 import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
-import bumblebee.xchangepass.global.security.login.dto.response.UserLoginResponse;
+import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.entity.Role;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
-import bumblebee.xchangepass.global.security.login.LoginService;
-import bumblebee.xchangepass.global.security.login.UserRegisterService;
-import bumblebee.xchangepass.global.security.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.global.security.login.dto.response.LoginResponse;
-import bumblebee.xchangepass.global.security.refresh.RefreshToken;
-import bumblebee.xchangepass.global.security.refresh.RefreshTokenService;
-import bumblebee.xchangepass.global.security.refresh.dto.RefreshTokenResponse;
+import bumblebee.xchangepass.domain.user.login.LoginService;
+import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
+import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
+import bumblebee.xchangepass.domain.refresh.RefreshToken;
+import bumblebee.xchangepass.domain.refresh.RefreshTokenService;
+import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

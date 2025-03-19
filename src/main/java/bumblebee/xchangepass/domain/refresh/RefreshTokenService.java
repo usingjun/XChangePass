@@ -1,8 +1,8 @@
-package bumblebee.xchangepass.global.security.refresh;
+package bumblebee.xchangepass.domain.refresh;
 
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
-import bumblebee.xchangepass.global.security.refresh.dto.RefreshTokenResponse;
+import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

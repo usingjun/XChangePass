@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global.security.login.dto.response;
+package bumblebee.xchangepass.domain.user.login.dto.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;

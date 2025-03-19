@@ -1,6 +1,6 @@
-package bumblebee.xchangepass.global.security.refresh;
+package bumblebee.xchangepass.domain.refresh;
 
-import bumblebee.xchangepass.global.security.refresh.dto.RefreshTokenRequest;
+import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;

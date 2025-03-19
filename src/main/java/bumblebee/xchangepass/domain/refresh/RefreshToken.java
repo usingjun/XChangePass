@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.global.security.refresh;
+package bumblebee.xchangepass.domain.refresh;
 
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.AccessLevel;
