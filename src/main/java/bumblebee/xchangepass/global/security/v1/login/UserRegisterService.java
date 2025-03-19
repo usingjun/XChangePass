@@ -34,7 +34,6 @@ public class UserRegisterService {
         try{
             uniqueNickname = nicknameGenerator.generateUniqueNickname();
             User createUser = userRepository.save(request.toEntity(bCryptPasswordEncoder, uniqueNickname));
-            userRepository.flush();
 
             // ✅ 지갑 생성 (동기 처리)
             walletService.createWallet(createUser, bCryptPasswordEncoder.encode(request.walletPassword()));

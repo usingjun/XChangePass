@@ -40,7 +40,6 @@ public class WalletService {
         Wallet wallet = new Wallet(user, walletPassword);
 
         user.changeWallet(walletRepository.save(wallet));
-        walletRepository.flush();
         balanceService.createBalance(wallet, Currency.getInstance("KRW"));
 
         // ✅ 모바일 카드 발급 (동기 처리)
