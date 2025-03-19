@@ -15,6 +15,8 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
 
+import static bumblebee.xchangepass.global.common.Constants.RSAES_OAEP_SHA_256;
+
 @Component
 public class RSAEncryption {
 
@@ -35,7 +37,7 @@ public class RSAEncryption {
             EncryptRequest encryptRequest = EncryptRequest.builder()
                     .keyId(kmsKeyId)
                     .plaintext(SdkBytes.fromByteArray(aesKey.getEncoded()))
-                    .encryptionAlgorithm("RSAES_OAEP_SHA_256")
+                    .encryptionAlgorithm(RSAES_OAEP_SHA_256)
                     .build();
 
             EncryptResponse encryptResponse = kmsClient.encrypt(encryptRequest);
@@ -57,7 +59,7 @@ public class RSAEncryption {
             DecryptRequest decryptRequest = DecryptRequest.builder()
                     .keyId(kmsKeyId)
                     .ciphertextBlob(encryptedKey)
-                    .encryptionAlgorithm("RSAES_OAEP_SHA_256")
+                    .encryptionAlgorithm(RSAES_OAEP_SHA_256)
                     .build();
 
             DecryptResponse decryptResponse = kmsClient.decrypt(decryptRequest);

@@ -10,6 +10,8 @@ import javax.crypto.spec.SecretKeySpec;
 import java.security.SecureRandom;
 import java.util.Base64;
 
+import static bumblebee.xchangepass.global.common.Constants.AES_CBC_PADDING;
+
 public class AESEncryption {
 
     // AES-256 키 생성
@@ -37,7 +39,7 @@ public class AESEncryption {
     // AES CBC 모드를 사용한 데이터 암호화
     public static String encryptData(String data, SecretKey secretAESKey, byte[] iv) {
         try {
-            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            Cipher cipher = Cipher.getInstance(AES_CBC_PADDING);
             SecretKeySpec secretKeySpec = new SecretKeySpec(secretAESKey.getEncoded(), "AES");
             IvParameterSpec ivParameterSpec = new IvParameterSpec(iv);
             cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, ivParameterSpec);
@@ -52,7 +54,7 @@ public class AESEncryption {
     // AES CBC 모드를 사용한 데이터 복호화
     public static String decryptData(String encryptedData, SecretKey secretKey, byte[] iv) {
         try {
-            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            Cipher cipher = Cipher.getInstance(AES_CBC_PADDING);
             IvParameterSpec ivParameterSpec = new IvParameterSpec(iv);
             cipher.init(Cipher.DECRYPT_MODE, secretKey, ivParameterSpec);
 
