@@ -57,7 +57,7 @@ class UserLoginScenarioTest {
 
     @BeforeEach
     void setUp() {
-        registerRequest = new UserRegisterRequest("test@example.com", "Password123!", "test", "010-1234-5678", Sex.MALE);
+        registerRequest = new UserRegisterRequest("test@example.com", "Password123!", "test", "010-1234-5678", Sex.MALE, "1234");
         loginRequest = new LoginRequest("test@example.com", "Password123");
         refreshToken = "validRefreshToken";
 
