@@ -1,6 +1,6 @@
 package bumblebee.xchangepass.domain.user.service;
 
-import bumblebee.xchangepass.global.Constants;
+import bumblebee.xchangepass.global.common.Constants;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
