@@ -33,30 +33,6 @@ public class WalletController {
     private final NamedLockWalletFacade namedLockService;
     private final RedissonLockService redissonLockService;
 
-    @Operation(summary = "지갑 생성", description = "새로운 지갑을 생성합니다.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "지갑 생성 성공", content = @Content(mediaType = "application/json")),
-            @ApiResponse(responseCode = "400", description = "지갑 생성 실패",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(value = "{\n  \"code\": \"W002\"," +
-                                                              "\n  \"message\": \"지갑 생성에 실패했습니다.\"," +
-                                                              "\n  \"validation\": {\n    \"email\": \"이미 지갑이 존재합니다.\"\n  }\n}"))
-            ),
-            @ApiResponse(responseCode = "400", description = "사용자를 찾을 수 없음",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(value = "{\n  \"code\": \"U001\"," +
-                                                              "\n  \"message\": \"존재 하지 않는 회원입니다.\"}"))
-            )
-    })
-    @PostMapping("/create")
-    @ResponseStatus(HttpStatus.CREATED)
-    public void create(@RequestBody WalletCreateRequest request){
-        walletService.createWallet(request.userId());
-    }
-
-
     @Operation(summary = "거래내역 조회", description = "거래내역을 조회합니다.")
     @ApiResponses(value = {
     })

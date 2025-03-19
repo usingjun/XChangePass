@@ -13,6 +13,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -60,6 +62,15 @@ public class UserService {
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
         existUser.softDelete();
+    }
+
+    /**
+     * ✅ 사용자 삭제 (Hard Delete)
+     * 트랜잭션 관리를 위해 비동기 처리와 따로 분리
+     */
+    @Transactional
+    public void deleteUserBatch(LocalDateTime thirtyDaysAgo) {
+        userRepository.deleteOldUsers(thirtyDaysAgo);
     }
 
     public UserLoginResponse readUserByUserId(String userId) {

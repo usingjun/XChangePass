@@ -18,14 +18,15 @@ public enum ErrorCode {
     INVALID_GENDER(HttpStatus.BAD_REQUEST, "U008", "잘못된 성별 값입니다."),
     INVALID_NICKNAME_PREFIX(HttpStatus.BAD_REQUEST, "U010", "닉네임은 'User_'로 시작할 수 없습니다."),
 
+    /*Wallet*/
     WALLET_NOT_FOUND(HttpStatus.BAD_REQUEST, "W001", "지갑을 찾을 수 없습니다."),
     WALLET_ALREADY_EXIST(HttpStatus.BAD_REQUEST,"W002","이미 지갑이 존재합니다."),
 
-    //Balance
+    /*Balance*/
     BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "B001", "해당 화폐 잔액이 존재하지 않습니다."),
     BALANCE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "B002", "충전 금액이 부족합니다."),
 
-    //Exchange_rate
+    /*Exchange_rate*/
     EXCHANGE_RATE_NOT_FOUND(HttpStatus.NOT_FOUND, "E001", "존재 하지 않는 환율입니다."),
     EXCHANGE_SAVE_FAIL(HttpStatus.BAD_REQUEST, "E002", "환율 정보 저장 실패"),
     EXCHANGE_RATE_FOR_COUNTRY(HttpStatus.BAD_REQUEST, "E003", "이 나라에 대한 환율 정보가 없습니다."),
@@ -36,11 +37,31 @@ public enum ErrorCode {
     EXCHANGE_TABLE_RENAME_FAIL(HttpStatus.INTERNAL_SERVER_ERROR, "E008", "테이블 이름 변경 실패"),
     EXCHANGE_TABLE_CREATION_FAIL(HttpStatus.INTERNAL_SERVER_ERROR, "E009", "임시 테이블 생성 실패"),
 
-    //TRANSACTION
+    /*TRANSACTION*/
     TRANSACTION_ALREADY_COMPLETED(HttpStatus.BAD_REQUEST, "T001", "이미 완료된 거래입니다."),
     TRANSACTION_AMOUNT_NOTFOUND(HttpStatus.BAD_REQUEST,"T003", "환전 금액은 필수 입니다."),
     TRANSACTION_HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "T002", "존재 하지 않는 환전 내역입니다."),
     TRANSACTION_USERID_NOT_FOUND(HttpStatus.NOT_FOUND, "T004", "회원 아이디 필수"),
+
+    /*Card*/
+    MOBILE_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C001","모바일 카드 발급에 실패했습니다."),
+    PHYSICAL_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C002","실물 카드 발급에 실패했습니다."),
+    CARD_NOT_FOUND(HttpStatus.BAD_REQUEST,"C003","찾는 카드가 존재하지 않습니다."),
+    INVALID_CARD_NUMBER(HttpStatus.BAD_REQUEST, "C004", "잘못된 카드 번호입니다."),
+
+
+    /*Encryption*/
+    AES_KEY_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC001", "AES 키 생성에 실패했습니다."),
+    RSA_KEY_ROAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC002", "RSA 키 로드에 실패했습니다."),
+    IV_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC003", "IV 생성에 실패했습니다."),
+    DATE_ENCRYPTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC004", "데이터 암호화에 실패했습니다."),
+    DATE_DECRYPTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC005", "데이터 복호화에 실패했습니다."),
+    AES_ENCRYPTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC006", "AES 키 암호화에 실패했습니다."),
+    AES_DECRYPTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC007", "AES 키 복호화에 실패했습니다."),
+    INVALID_AES_KEY(HttpStatus.BAD_REQUEST, "ENC008", "잘못된 AES 키입니다."),
+    INVALID_IV(HttpStatus.BAD_REQUEST, "ENC009", "잘못된 IV 값입니다."),
+
+
 
     //Security
     USER_FORBIDDEN(HttpStatus.FORBIDDEN, "S0001", "권한이 없습니다."),

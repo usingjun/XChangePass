@@ -1,6 +1,8 @@
 package bumblebee.xchangepass.domain.user.entity;
 
+import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.ExchangeTransaction;
 import bumblebee.xchangepass.domain.user.entity.value.*;
+import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import jakarta.persistence.*;
 import lombok.Builder;
 import lombok.Getter;
@@ -11,6 +13,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static lombok.AccessLevel.PROTECTED;
 
@@ -61,6 +64,12 @@ public class User {
     @Column(name = "is_deleted")
     private Boolean isDeleted;
 
+    @OneToOne(mappedBy ="user", orphanRemoval = true, cascade = CascadeType.ALL)
+    private Wallet wallet;
+
+    @OneToMany(mappedBy = "user", orphanRemoval = true, cascade = CascadeType.ALL)
+    private List<ExchangeTransaction> exchangeTransactions;
+
     @CreatedDate
     @Column(name = "user_join_date")
     private LocalDateTime userJoinDate;
@@ -90,5 +99,9 @@ public class User {
     public void softDelete() {
         this.isDeleted = true;
         userDeleteDate = LocalDateTime.now();
+    }
+
+    public void changeWallet(Wallet wallet) {
+        this.wallet = wallet;
     }
 }
