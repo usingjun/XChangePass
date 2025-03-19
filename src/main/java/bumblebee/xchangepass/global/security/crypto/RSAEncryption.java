@@ -21,12 +21,13 @@ import static bumblebee.xchangepass.global.common.Constants.RSAES_OAEP_SHA_256;
 public class RSAEncryption {
 
     private final KmsClient kmsClient;
-    private final String kmsKeyId;
+
+    @Value("${aws.kms.key-id}")
+    private String kmsKeyId;
 
     @Autowired
-    public RSAEncryption(KmsClient kmsClient, @Value("${aws.kms.key-id}") String kmsKeyId) {
+    public RSAEncryption(KmsClient kmsClient) {
         this.kmsClient = kmsClient;
-        this.kmsKeyId = kmsKeyId;
     }
 
     /**
