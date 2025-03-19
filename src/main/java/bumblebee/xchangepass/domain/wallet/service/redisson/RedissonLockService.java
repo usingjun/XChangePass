@@ -40,7 +40,8 @@ public class RedissonLockService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
-        Wallet wallet = new Wallet(user);
+        // 나중에 수정 필요
+        Wallet wallet = new Wallet(user, "1234");
 
 
         walletRepository.save(wallet);

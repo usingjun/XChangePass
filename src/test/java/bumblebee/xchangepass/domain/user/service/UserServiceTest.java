@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.user.service;
 
 import bumblebee.xchangepass.config.RedisTestBase;
-import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
+import bumblebee.xchangepass.config.TestUserInitializer;
 import bumblebee.xchangepass.domain.user.dto.request.UserUpdateRequest;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -9,53 +9,32 @@ import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.scheduler.UserCleanupScheduler;
-import bumblebee.xchangepass.global.security.v1.login.UserRegisterService;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @ActiveProfiles("test")
+@Import(TestUserInitializer.class)
 public class UserServiceTest extends RedisTestBase {
 
     @Autowired
     private UserService userService;
 
     @Autowired
-    private UserRegisterService registerService;
-
-    @Autowired
     private UserRepository userRepository;
 
     @Autowired
     private UserCleanupScheduler userCleanupScheduler;
-
-
-    @BeforeEach
-    void setUp() {
-        userRepository.deleteAll();
-        IntStream.rangeClosed(1, 5).forEach(i -> {
-                    UserRegisterRequest testUser = UserRegisterRequest.builder()
-                            .userEmail("Test" + i + "@gmail.com")
-                            .userPwd("Qwer1234!")
-                            .userName("테스터" + i)
-                            .userPhoneNumber("010-0000-000" + i)
-                            .userSex(i >= 4 ? Sex.FEMALE : Sex.MALE)
-                            .build();
-
-                    registerService.signupUser(testUser);
-                });
-    }
 
 
     @Test

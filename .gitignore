@@ -326,6 +326,8 @@ gradle-app.setting
 src/main/resources/application.properties
 src/main/resources/application.yml
 src/test/resources/application-test.yml
+src/main/resources/application-secrets.yml
+src/test/resources/application-test-secrets.yml
 
 
 src/main/resources/data.sql

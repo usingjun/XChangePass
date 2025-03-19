@@ -1,6 +1,8 @@
 package bumblebee.xchangepass.domain.wallet.service;
 
 import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
+import bumblebee.xchangepass.domain.card.entity.CardType;
+import bumblebee.xchangepass.domain.card.service.CardService;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
@@ -29,24 +31,19 @@ import java.util.List;
 public class WalletService {
 
     private final WalletRepository walletRepository;
-    private final UserRepository userRepository;
+    private final CardService cardService;
     private final WalletBalanceService balanceService;
     private final ExchangeService exchangeService;
 
     @Transactional
-    public void createWallet(Long userId) {
-        if (walletRepository.existsByUserId(userId)) {
-            throw new CommonException(ErrorCode.WALLET_ALREADY_EXIST);
-        }
+    public void createWallet(User user, String walletPassword) {
+        Wallet wallet = new Wallet(user, walletPassword);
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
-        Wallet wallet = new Wallet(user);
-
-
-        walletRepository.save(wallet);
-        walletRepository.flush();
+        user.changeWallet(walletRepository.save(wallet));
         balanceService.createBalance(wallet, Currency.getInstance("KRW"));
+
+        // ✅ 모바일 카드 발급 (동기 처리)
+        cardService.generateMobileCard(wallet);
     }
 
 
