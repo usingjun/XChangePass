@@ -12,6 +12,7 @@ import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.RedissonMultiLock;
 import org.redisson.api.RLock;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ import java.util.Currency;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RedissonLockService {
@@ -30,7 +32,7 @@ public class RedissonLockService {
     private final WalletRepository walletRepository;
     private final UserRepository userRepository;
     private final WalletBalanceService balanceService;
-    private final RedissonLock redissonLock; // RedissonLock을 주입받아 사용
+    private final RedissonLock redissonLock;
 
     @Transactional
     public void createWallet(Long userId) {
@@ -104,7 +106,7 @@ public class RedissonLockService {
         try {
             acquired = multiLock.tryLock(10, 30, TimeUnit.SECONDS);
             if (!acquired) {
-                throw new RuntimeException("🔴 송금 중 락을 획득하지 못했습니다.");
+                throw ErrorCode.LOCK_TIME_OUT.commonException();
             }
 
             WalletBalance fromBalance = balanceService.findBalance(wallet.getWalletId(), request.fromCurrency());
@@ -117,10 +119,15 @@ public class RedissonLockService {
             balanceService.transferBalance(fromBalance, toBalance, request.transferAmount());
 
         } catch (InterruptedException e) {
-            throw new RuntimeException("🔴 락 획득 중 인터럽트 발생", e);
+            Thread.currentThread().interrupt();
+            throw ErrorCode.THREAD_INTERRUPTED.commonException();
         } finally {
             if (acquired) {
-                multiLock.unlock();
+                try {
+                    multiLock.unlock(); // ✅ unlock 예외 처리 추가
+                } catch (IllegalMonitorStateException e) {
+                    log.error("⚠️ [MultiLock 해제 실패] senderId: {}, receiverId: {}", senderId, request.receiverWalletId(), e);
+                }
             }
         }
     }
@@ -129,6 +136,9 @@ public class RedissonLockService {
     @Transactional
     public List<WalletBalanceResponse> balance(Long userId) {
         Wallet wallet = walletRepository.findByUserId(userId);
+        if (wallet == null) {
+            throw ErrorCode.WALLET_NOT_FOUND.commonException();
+        }
 
         List<WalletBalance> balanceList = balanceService.findBalances(wallet.getWalletId());
 

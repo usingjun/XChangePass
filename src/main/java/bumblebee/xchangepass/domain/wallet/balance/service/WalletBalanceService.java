@@ -24,7 +24,6 @@ public class WalletBalanceService {
     @Transactional
     public void createBalance(Wallet wallet, Currency currency) {
         if (balanceRepository.existsByCurrency(wallet.getWalletId(), currency)) {
-            // 이미 존재하는 경우 생성하지 않음
             return;
         }
 
