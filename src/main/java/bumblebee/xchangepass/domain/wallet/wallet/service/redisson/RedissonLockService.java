@@ -73,9 +73,9 @@ public class RedissonLockService {
      */
     @Transactional
     public BigDecimal withdrawal(Long userId, WalletInOutRequest request) {
-        String lockKey = "wallet:" + request.userId();
+        String lockKey = "wallet:" + userId;
         return redissonLock.tryLock(lockKey, 10, 10, () -> {
-            Wallet wallet = walletRepository.findByUserId(request.userId());
+            Wallet wallet = walletRepository.findByUserId(userId);
             WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
 
             if (request.amount().compareTo(balance.getBalance()) > 0) {
@@ -91,8 +91,9 @@ public class RedissonLockService {
      * 🔒 지갑 송금 (멀티 락 적용)
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void transfer(WalletTransferRequest request) {
-        String senderLockKey = "wallet:" + request.senderWalletId();
+    public void transfer(Long senderId, WalletTransferRequest request) {
+        Wallet wallet = walletRepository.findByUserIdWithLock(senderId);
+        String senderLockKey = "wallet:" + wallet.getWalletId();
         String receiverLockKey = "wallet:" + request.receiverWalletId();
 
         RLock senderLock = redissonLock.getRedissonClient().getLock(senderLockKey);
@@ -106,7 +107,7 @@ public class RedissonLockService {
                 throw new RuntimeException("🔴 송금 중 락을 획득하지 못했습니다.");
             }
 
-            WalletBalance fromBalance = balanceService.findBalance(request.senderWalletId(), request.fromCurrency());
+            WalletBalance fromBalance = balanceService.findBalance(wallet.getWalletId(), request.fromCurrency());
             WalletBalance toBalance = balanceService.findBalance(request.receiverWalletId(), request.toCurrency());
 
             if (request.transferAmount().compareTo(fromBalance.getBalance()) > 0) {

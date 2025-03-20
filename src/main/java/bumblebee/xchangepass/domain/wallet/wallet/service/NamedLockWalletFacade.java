@@ -26,8 +26,8 @@ public class NamedLockWalletFacade {
     }
 
     @Transactional
-    public void charge(WalletInOutRequest request) {
-        Wallet wallet = walletRepository.findByUserId(request.userId());
+    public void charge(Long userId, WalletInOutRequest request) {
+        Wallet wallet = walletRepository.findByUserId(userId);
 
         if (wallet == null) {
             throw ErrorCode.WALLET_NOT_FOUND.commonException();
@@ -53,11 +53,11 @@ public class NamedLockWalletFacade {
     }
 
     @Transactional
-    public BigDecimal withdrawal(WalletInOutRequest request) {
+    public BigDecimal withdrawal(Long userId, WalletInOutRequest request) {
         Wallet wallet = null;
         WalletBalance balance = null;
         try {
-            wallet = walletRepository.findByUserId(request.userId());
+            wallet = walletRepository.findByUserId(userId);
 
             // Advisory Lock 획득
             lockRepository.getLock(wallet.getWalletId());
@@ -74,9 +74,8 @@ public class NamedLockWalletFacade {
     }
 
     @Transactional
-    public void transfer(WalletTransferRequest request) {
-        Wallet fromWallet = walletRepository.findById(request.senderWalletId())
-                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+    public void transfer(Long senderId, WalletTransferRequest request) {
+        Wallet fromWallet = walletRepository.findByUserId(senderId);
         Wallet toWallet = walletRepository.findById(request.receiverWalletId())
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 

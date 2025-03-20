@@ -108,10 +108,10 @@ class WalletNamedLockServiceTest {
 
     @Test
     void testTransferSuccess() {
-        lockWalletFacade.charge(new WalletInOutRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
+        lockWalletFacade.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest(sender.getUserId(), receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
-        lockWalletFacade.transfer(transferRequest);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        lockWalletFacade.transfer(sender.getUserId(), transferRequest);
 
         WalletBalance senderBalance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         WalletBalance receiverBalance = balanceService.findBalance(receiverWallet.getWalletId(), CURRENCY);
@@ -122,15 +122,15 @@ class WalletNamedLockServiceTest {
 
     @Test
     void testTransferFailureDueToInsufficientFunds() {
-        WalletTransferRequest transferRequest = new WalletTransferRequest(sender.getUserId(), receiver.getUserId(), CHARGE_AMOUNT.add(BigDecimal.ONE), CURRENCY, CURRENCY, null);
-        Exception exception = assertThrows(RuntimeException.class, () -> lockWalletFacade.transfer(transferRequest));
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserId(), CHARGE_AMOUNT.add(BigDecimal.ONE), CURRENCY, CURRENCY, null);
+        Exception exception = assertThrows(RuntimeException.class, () -> lockWalletFacade.transfer(sender.getUserId(), transferRequest));
         assertThat(exception.getMessage()).contains("충전 금액이 부족합니다.");
     }
 
     @Test
     @Transactional
     void testChargeWallet() {
-        lockWalletFacade.charge(new WalletInOutRequest(sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
+        lockWalletFacade.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
 
         WalletBalance balance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         assertThat(balance.getBalance()).isEqualByComparingTo(CHARGE_AMOUNT);
@@ -156,14 +156,14 @@ class WalletNamedLockServiceTest {
         Long receiverId = receiverWallet.getWalletId();
 
         WalletTransferRequest transferRequest = new WalletTransferRequest(
-                senderId, receiverId, TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
+                receiverId, TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 
         for (int i = 0; i < concurrentUsers; i++) {
             executorService.submit(() -> {
                 try {
                     startLatch.await(); // 🔥 모든 스레드가 동시에 실행되도록 대기
-                    lockWalletFacade.transfer(transferRequest);
+                    lockWalletFacade.transfer(senderId, transferRequest);
                 } catch (Exception e) {
                     System.err.println("[송금 중 예외 발생]: " + e.getMessage());
                 } finally {
@@ -204,8 +204,8 @@ class WalletNamedLockServiceTest {
      */
     @RepeatedTest(5) // 5번 반복 실행
     void 송금_도중_발생한_출금은_실패한다() throws Exception {
-        lockWalletFacade.charge(new WalletInOutRequest(
-                sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
+        lockWalletFacade.charge(sender.getUserId(), new WalletInOutRequest(
+                CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         ));
 
         AtomicBoolean isWithdrawFirst = new AtomicBoolean(false);
@@ -220,9 +220,9 @@ class WalletNamedLockServiceTest {
                 Thread.sleep(20); // 🔥 실행 순서를 조정
                 System.out.println("🚀 [송금 시작]");
                 WalletTransferRequest transferRequest = new WalletTransferRequest(
-                        sender.getUserId(), receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
+                        receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
                 );
-                lockWalletFacade.transfer(transferRequest);
+                lockWalletFacade.transfer(sender.getUserId(), transferRequest);
                 isTransferFirst.set(true);
             } catch (Exception e) {
                 System.err.println("[송금 중 예외 발생]: " + e.getMessage());
@@ -234,9 +234,9 @@ class WalletNamedLockServiceTest {
                 latch.await();
                 System.out.println("💸 [출금 시작]");
                 WalletInOutRequest withdrawRequest = new WalletInOutRequest(
-                        sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
+                        CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
                 );
-                lockWalletFacade.withdrawal(withdrawRequest);
+                lockWalletFacade.withdrawal(sender.getUserId(), withdrawRequest);
                 isWithdrawFirst.set(true);
             } catch (Exception e) {
                 System.err.println("[출금 중 예외 발생]: " + e.getMessage());
@@ -267,11 +267,11 @@ class WalletNamedLockServiceTest {
         System.out.println("초기 Sender 잔액 = " + balanceService.findBalance(senderWallet.getWalletId(), CURRENCY).getBalance());
 
         WalletInOutRequest chargeRequest = new WalletInOutRequest(
-                sender.getUserId(), CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
+                CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 
         WalletTransferRequest transferRequest = new WalletTransferRequest(
-                sender.getUserId(), receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
+                receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 
         CountDownLatch latch = new CountDownLatch(1); // 🔥 1로 설정 (이체 먼저 실행)
@@ -280,7 +280,7 @@ class WalletNamedLockServiceTest {
             try {
                 latch.await(); // 🔥 이체가 끝날 때까지 충전 대기
                 System.out.println("💰 충전 시작");
-                lockWalletFacade.charge(chargeRequest);
+                lockWalletFacade.charge(sender.getUserId(), chargeRequest);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -290,7 +290,7 @@ class WalletNamedLockServiceTest {
             try {
                 System.out.println("🚀 이체 시작");
                 Exception exception = assertThrows(CommonException.class, () -> {
-                    lockWalletFacade.transfer(transferRequest);
+                    lockWalletFacade.transfer(sender.getUserId(), transferRequest);
                 });
                 assertThat(exception.getMessage()).contains("충전 금액이 부족합니다.");
             } finally {
