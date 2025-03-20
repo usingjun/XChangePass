@@ -5,9 +5,7 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletTransactionResponse;
-import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.NamedLockWalletService;
-import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.PessimisticLockWalletService;
-import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.RedissonLockWalletService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.WalletServiceFactory;
 import bumblebee.xchangepass.global.security.jwt.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -32,9 +30,7 @@ import java.util.List;
 @Tag(name = "Wallet", description = "Wallet CRUD API")
 public class WalletController {
 
-    private final PessimisticLockWalletService pessimisticLockWalletService;
-    private final NamedLockWalletService namedLockService;
-    private final RedissonLockWalletService redissonLockWalletService;
+    private final WalletServiceFactory walletServiceFactory;
     private final WalletTransactionService transactionService;
 
     @Operation(summary = "거래내역 조회", description = "거래내역을 조회합니다.")
@@ -66,7 +62,7 @@ public class WalletController {
     @ResponseStatus(HttpStatus.CREATED)
     public void charge(@RequestBody @Valid WalletInOutRequest request,
                        Authentication authentication) {
-        pessimisticLockWalletService.charge(JwtUtil.getLoginId(authentication), request);
+        walletServiceFactory.getService("pessimisticLock").charge(JwtUtil.getLoginId(authentication), request);
     }
 
     @Operation(summary = "출금", description = "돈을 출금합니다.")
@@ -83,7 +79,7 @@ public class WalletController {
     @ResponseStatus(HttpStatus.OK)
     public BigDecimal withdrawal(@RequestBody @Valid WalletInOutRequest request,
                                  Authentication authentication) {
-        return pessimisticLockWalletService.withdrawal(JwtUtil.getLoginId(authentication), request);
+        return walletServiceFactory.getService("pessimisticLock").withdrawal(JwtUtil.getLoginId(authentication), request);
     }
 
     @Operation(summary = "송금", description = "돈을 송금합니다.")
@@ -106,7 +102,7 @@ public class WalletController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void transfer(@RequestBody @Valid WalletTransferRequest request,
                          Authentication authentication) {
-        pessimisticLockWalletService.transfer(JwtUtil.getLoginId(authentication), request);
+        walletServiceFactory.getService("pessimisticLock").transfer(JwtUtil.getLoginId(authentication), request);
     }
 
     @Operation(summary = "잔액 조회", description = "잔액을 조회합니다.")
@@ -122,7 +118,7 @@ public class WalletController {
     @GetMapping("/balance")
     @ResponseStatus(HttpStatus.OK)
     public List<WalletBalanceResponse> balance(Authentication authentication) {
-        return pessimisticLockWalletService.balance(JwtUtil.getLoginId(authentication));
+        return walletServiceFactory.getService("pessimisticLock").balance(JwtUtil.getLoginId(authentication));
     }
 
 
