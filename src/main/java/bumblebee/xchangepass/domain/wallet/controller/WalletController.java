@@ -8,6 +8,7 @@ import bumblebee.xchangepass.domain.wallet.dto.response.WalletTransactionRespons
 import bumblebee.xchangepass.domain.wallet.service.NamedLockWalletFacade;
 import bumblebee.xchangepass.domain.wallet.service.WalletService;
 import bumblebee.xchangepass.domain.wallet.service.redisson.RedissonLockService;
+import bumblebee.xchangepass.global.security.jwt.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -15,8 +16,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 
@@ -38,8 +41,8 @@ public class WalletController {
     })
     @GetMapping("/transaction")
     @ResponseStatus(HttpStatus.OK)
-    public List<WalletTransactionResponse> transaction(@RequestParam Long userId) {
-        return walletService.transaction(userId);
+    public List<WalletTransactionResponse> transaction(Authentication authentication) {
+        return walletService.transaction(JwtUtil.getLoginId(authentication));
     }
 
     @Operation(summary = "잔액 충전", description = "잔액을 충전합니다.")
@@ -60,8 +63,9 @@ public class WalletController {
     })
     @PostMapping("/charge")
     @ResponseStatus(HttpStatus.CREATED)
-    public void charge(@RequestBody WalletInOutRequest request) {
-        redissonLockService.charge(request);
+    public void charge(@RequestBody @Valid WalletInOutRequest request,
+                       Authentication authentication) {
+        walletService.charge(JwtUtil.getLoginId(authentication), request);
     }
 
     @Operation(summary = "출금", description = "돈을 출금합니다.")
@@ -76,8 +80,9 @@ public class WalletController {
     })
     @PutMapping("/withdraw")
     @ResponseStatus(HttpStatus.OK)
-    public BigDecimal withdrawal(@RequestBody WalletInOutRequest request) {
-        return redissonLockService.withdrawal(request);
+    public BigDecimal withdrawal(@RequestBody @Valid WalletInOutRequest request,
+                                 Authentication authentication) {
+        return walletService.withdrawal(JwtUtil.getLoginId(authentication), request);
     }
 
     @Operation(summary = "송금", description = "돈을 송금합니다.")
@@ -98,8 +103,9 @@ public class WalletController {
     })
     @PutMapping("/transfer")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void transfer(@RequestBody WalletTransferRequest request) {
-        redissonLockService.transfer(request);
+    public void transfer(@RequestBody @Valid WalletTransferRequest request,
+                         Authentication authentication) {
+        walletService.transfer(JwtUtil.getLoginId(authentication), request);
     }
 
     @Operation(summary = "잔액 조회", description = "잔액을 조회합니다.")
@@ -114,8 +120,8 @@ public class WalletController {
     })
     @GetMapping("/balance")
     @ResponseStatus(HttpStatus.OK)
-    public List<WalletBalanceResponse> balance(@RequestParam Long userId) {
-        return walletService.balance(userId);
+    public List<WalletBalanceResponse> balance(Authentication authentication) {
+        return walletService.balance(JwtUtil.getLoginId(authentication));
     }
 
 
