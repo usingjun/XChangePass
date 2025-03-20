@@ -1,11 +1,10 @@
-package bumblebee.xchangepass.domain.refresh;
+package bumblebee.xchangepass.domain.refresh.repository;
 
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static bumblebee.xchangepass.global.common.Constants.REFRESH_TOKEN_TTL;
