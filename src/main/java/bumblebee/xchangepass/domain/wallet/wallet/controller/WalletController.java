@@ -43,7 +43,7 @@ public class WalletController {
     @GetMapping("/transaction")
     @ResponseStatus(HttpStatus.OK)
     public List<WalletTransactionResponse> transaction(Authentication authentication) {
-        return transactionService.transaction(JwtUtil.getLoginId(authentication));
+        return transactionService.getTransaction(JwtUtil.getLoginId(authentication));
     }
 
     @Operation(summary = "잔액 충전", description = "잔액을 충전합니다.")
