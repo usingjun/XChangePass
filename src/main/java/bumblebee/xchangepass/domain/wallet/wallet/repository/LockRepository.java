@@ -9,8 +9,8 @@ import org.springframework.stereotype.Repository;
 public interface LockRepository extends JpaRepository<Wallet, Long> {
 
     @Query(value = "SELECT pg_advisory_lock(:key)", nativeQuery = true)
-    void getLock(Long key);
+    Boolean getLock(Long key);
 
     @Query(value = "SELECT pg_advisory_unlock(:key)", nativeQuery = true)
-    void releaseLock(Long key);
+    Boolean releaseLock(Long key);
 }

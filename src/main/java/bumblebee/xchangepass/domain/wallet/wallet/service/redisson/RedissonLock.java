@@ -1,6 +1,8 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.redisson;
 
+import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
@@ -8,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RedissonLock {
@@ -23,37 +26,40 @@ public class RedissonLock {
      */
     public <T> T tryLock(String lockName, long waitTime, long leaseTime, Supplier<T> task) {
         RLock lock = redissonClient.getLock(lockName);
+        boolean acquired = false;
+
         try {
-            if (lock.tryLock(waitTime, leaseTime, TimeUnit.SECONDS)) {
-                try {
-                    return task.get(); // 반환값 지원
-                } finally {
-                    unlock(lock);
-                }
-            } else {
-                throw new RuntimeException("🚨 락 획득 실패: " + lockName);
+            acquired = lock.tryLock(waitTime, leaseTime, TimeUnit.SECONDS);
+            if (!acquired) {
+                throw ErrorCode.LOCK_TIME_OUT.commonException();
             }
+            return task.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("🚨 락 시도 중 인터럽트 발생: " + lockName, e);
+            throw ErrorCode.THREAD_INTERRUPTED.commonException();
+        } finally {
+            if (acquired) {
+                unlock(lock);
+            }
         }
     }
 
     public void tryLockVoid(String lockName, long waitTime, long leaseTime, Runnable task) {
         RLock lock = redissonClient.getLock(lockName);
+        boolean acquired = false;
         try {
-            if (lock.tryLock(waitTime, leaseTime, TimeUnit.SECONDS)) {
-                try {
-                    task.run(); // 실행할 로직 수행
-                } finally {
-                    unlock(lock);
-                }
-            } else {
-                throw new RuntimeException("🚨 락 획득 실패: " + lockName);
+            acquired = lock.tryLock(waitTime, leaseTime, TimeUnit.SECONDS);
+            if (!acquired) {
+                throw ErrorCode.LOCK_TIME_OUT.commonException();
             }
+            task.run();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("🚨 락 시도 중 인터럽트 발생: " + lockName, e);
+            throw ErrorCode.THREAD_INTERRUPTED.commonException();
+        } finally {
+            if (acquired) {
+                unlock(lock);
+            }
         }
     }
 
@@ -79,8 +85,10 @@ public class RedissonLock {
      * @param lock 락 객체
      */
     private void unlock(RLock lock) {
-        if (lock.isHeldByCurrentThread()) {
+        try {
             lock.unlock();
+        } catch (IllegalMonitorStateException e) {
+            log.error("⚠️ [Lock 해제 실패] Lock Name: {}", lock.getName(), e);
         }
     }
 
