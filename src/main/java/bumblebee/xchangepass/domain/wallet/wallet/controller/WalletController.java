@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.wallet.controller;
 
+import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
@@ -34,6 +35,7 @@ public class WalletController {
     private final WalletService walletService;
     private final NamedLockWalletFacade namedLockService;
     private final RedissonLockService redissonLockService;
+    private final WalletTransactionService transactionService;
 
     @Operation(summary = "거래내역 조회", description = "거래내역을 조회합니다.")
     @ApiResponses(value = {

@@ -1,5 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.balance.service;
 
+import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
+import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
@@ -17,6 +19,7 @@ import java.util.List;
 public class WalletBalanceService {
 
     private final WalletBalanceRepository balanceRepository;
+    private final WalletTransactionService transactionService;
 
     @Transactional
     public void createBalance(Wallet wallet, Currency currency) {
@@ -60,12 +63,16 @@ public class WalletBalanceService {
     public void chargeBalance(WalletBalance balance, BigDecimal amount) {
         balance.addBalance(amount);
         balanceRepository.save(balance);
+
+        transactionService.saveTransaction(balance.getWallet(), null, amount, null, balance.getCurrency(), WalletTransactionType.DEPOSIT);
     }
 
     @Transactional
     public void withdrawBalance(WalletBalance balance, BigDecimal amount) {
         balance.subtractBalance(amount);
         balanceRepository.save(balance);
+
+        transactionService.saveTransaction(balance.getWallet(), null, amount, null, balance.getCurrency(), WalletTransactionType.WITHDRAWAL);
     }
 
     @Transactional
@@ -74,6 +81,8 @@ public class WalletBalanceService {
         toBalance.addBalance(amount);
         balanceRepository.save(fromBalance);
         balanceRepository.save(toBalance);
+
+        transactionService.saveTransaction(fromBalance.getWallet(), toBalance.getWallet(), amount, fromBalance.getCurrency(), toBalance.getCurrency(), WalletTransactionType.TRANSFER);
     }
 
 }

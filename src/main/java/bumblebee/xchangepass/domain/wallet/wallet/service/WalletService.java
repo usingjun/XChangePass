@@ -45,14 +45,6 @@ public class WalletService {
 
 
     @Transactional
-    public List<WalletTransactionResponse> transaction(Long userId) {
-
-
-        return null;
-    }
-
-
-    @Transactional
     public void charge(Long userId, WalletInOutRequest request) {
         BigDecimal chargeAmount = request.amount();
         if (!request.toCurrency().equals(request.fromCurrency())) {
@@ -130,7 +122,7 @@ public class WalletService {
         return balanceList.stream()
                 .peek(balance -> System.out.println("Processing balance: " + balance.getBalanceId()))
                 .map(balance -> new WalletBalanceResponse(
-                        balance.currency.getCurrencyCode(),
+                        balance.getCurrency().getCurrencyCode(),
                         balance.getBalance()
                 ))
                 .toList();
