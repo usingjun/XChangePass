@@ -1,16 +1,14 @@
-package bumblebee.xchangepass.domain.wallet.wallet.service.redisson;
+package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.redisson;
 
-import bumblebee.xchangepass.domain.user.entity.User;
-import bumblebee.xchangepass.domain.user.repository.UserRepository;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
-import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.RedissonMultiLock;
@@ -20,39 +18,22 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.Currency;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-@Service
+@Service("redisson")
 @RequiredArgsConstructor
-public class RedissonLockService {
+public class RedissonLockWalletService implements WalletService {
 
     private final WalletRepository walletRepository;
-    private final UserRepository userRepository;
     private final WalletBalanceService balanceService;
     private final RedissonLock redissonLock;
-
-    @Transactional
-    public void createWallet(Long userId) {
-        if (walletRepository.existsByUserId(userId)) {
-            throw new CommonException(ErrorCode.WALLET_ALREADY_EXIST);
-        }
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
-        // 나중에 수정 필요
-        Wallet wallet = new Wallet(user, "1234");
-
-        walletRepository.save(wallet);
-        walletRepository.flush();
-        balanceService.createBalance(wallet, Currency.getInstance("KRW"));
-    }
 
     /**
      * 🔒 지갑 충전 (RedissonLock 적용)
      */
+    @Override
     @Transactional
     public void charge(Long userId, WalletInOutRequest request) {
         String lockKey = "wallet:" + userId;
@@ -73,6 +54,7 @@ public class RedissonLockService {
     /**
      * 🔒 지갑 출금 (RedissonLock 적용)
      */
+    @Override
     @Transactional
     public BigDecimal withdrawal(Long userId, WalletInOutRequest request) {
         String lockKey = "wallet:" + userId;
@@ -92,6 +74,7 @@ public class RedissonLockService {
     /**
      * 🔒 지갑 송금 (멀티 락 적용)
      */
+    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void transfer(Long senderId, WalletTransferRequest request) {
         Wallet wallet = walletRepository.findByUserIdWithLock(senderId);
@@ -132,7 +115,7 @@ public class RedissonLockService {
         }
     }
 
-
+    @Override
     @Transactional
     public List<WalletBalanceResponse> balance(Long userId) {
         Wallet wallet = walletRepository.findByUserId(userId);

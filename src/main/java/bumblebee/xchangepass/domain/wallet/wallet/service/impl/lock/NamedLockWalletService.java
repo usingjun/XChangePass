@@ -1,32 +1,35 @@
-package bumblebee.xchangepass.domain.wallet.wallet.service;
+package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock;
 
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.wallet.wallet.repository.LockRepository;
+import bumblebee.xchangepass.domain.wallet.wallet.repository.NamedLockRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.PessimisticLockException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Slf4j
-@Component
-public class NamedLockWalletFacade {
+@Service("namedLock")
+@RequiredArgsConstructor
+public class NamedLockWalletService implements WalletService {
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
-    private final LockRepository lockRepository;
+    private final NamedLockRepository namedLockRepository;
 
-    public NamedLockWalletFacade(WalletRepository walletRepository, WalletBalanceService walletBalanceService, LockRepository lockRepository) {
-        this.walletRepository = walletRepository;
-        this.balanceService = walletBalanceService;
-        this.lockRepository = lockRepository;
-    }
-
+    @Override
     @Transactional
     public void charge(Long userId, WalletInOutRequest request) {
         Wallet wallet = walletRepository.findByUserId(userId);
@@ -35,7 +38,7 @@ public class NamedLockWalletFacade {
             throw ErrorCode.WALLET_NOT_FOUND.commonException();
         }
 
-        Boolean lockAcquired = lockRepository.getLock(wallet.getWalletId());
+        Boolean lockAcquired = namedLockRepository.getLock(wallet.getWalletId());
         if (!lockAcquired) {
             log.error("⚠️ [Named Lock 실패] 사용자 ID: {}", userId);
             throw ErrorCode.LOCK_TIME_OUT.commonException();
@@ -52,13 +55,14 @@ public class NamedLockWalletFacade {
             balanceService.chargeBalance(balance, request.amount());
         } finally {
             // 트랜잭션 종료 시점에서 락을 해제하도록 변경
-            Boolean unlockSuccess = lockRepository.releaseLock(wallet.getWalletId());
+            Boolean unlockSuccess = namedLockRepository.releaseLock(wallet.getWalletId());
             if (!unlockSuccess) {
                 log.error("⚠️ [Named Lock 해제 실패] 사용자 ID: {}", userId);
             }
         }
     }
 
+    @Override
     @Transactional
     public BigDecimal withdrawal(Long userId, WalletInOutRequest request) {
         Wallet wallet = walletRepository.findByUserId(userId);
@@ -66,7 +70,7 @@ public class NamedLockWalletFacade {
             throw ErrorCode.WALLET_NOT_FOUND.commonException();
         }
 
-        Boolean lockAcquired = lockRepository.getLock(wallet.getWalletId());
+        Boolean lockAcquired = namedLockRepository.getLock(wallet.getWalletId());
         if (!lockAcquired) {
             log.error("⚠️ [Named Lock 실패] 사용자 ID: {}", userId);
             throw ErrorCode.LOCK_TIME_OUT.commonException();
@@ -78,7 +82,7 @@ public class NamedLockWalletFacade {
 
             return balance.getBalance();
         }  finally {
-            Boolean unlockSuccess = lockRepository.releaseLock(wallet.getWalletId());
+            Boolean unlockSuccess = namedLockRepository.releaseLock(wallet.getWalletId());
             if (!unlockSuccess) {
                 log.error("⚠️ [Named Lock 해제 실패] 사용자 ID: {}", userId);
             }
@@ -87,6 +91,7 @@ public class NamedLockWalletFacade {
 
     }
 
+    @Override
     @Transactional
     public void transfer(Long senderId, WalletTransferRequest request) {
         Wallet fromWallet = walletRepository.findByUserId(senderId);
@@ -97,16 +102,16 @@ public class NamedLockWalletFacade {
         long smallerId = Math.min(fromWallet.getWalletId(), toWallet.getWalletId());
         long largerId = Math.max(fromWallet.getWalletId(), toWallet.getWalletId());
 
-        Boolean smallLockAcquired = lockRepository.getLock(smallerId);
+        Boolean smallLockAcquired = namedLockRepository.getLock(smallerId);
         if (!smallLockAcquired) {
             log.error("⚠️ [Named Lock 획득 실패] Wallet ID: {}", smallerId);
             throw ErrorCode.LOCK_TIME_OUT.commonException();
         }
 
-        Boolean largeLockAcquired = lockRepository.getLock(largerId);
+        Boolean largeLockAcquired = namedLockRepository.getLock(largerId);
         if (!largeLockAcquired) {
             log.error("⚠️ [Named Lock 획득 실패] Wallet ID: {}", largerId);
-            lockRepository.releaseLock(smallerId); // 🔥 먼저 획득한 Lock 해제 후 예외 발생
+            namedLockRepository.releaseLock(smallerId); // 🔥 먼저 획득한 Lock 해제 후 예외 발생
             throw ErrorCode.LOCK_TIME_OUT.commonException();
         }
 
@@ -122,14 +127,45 @@ public class NamedLockWalletFacade {
 
             balanceService.transferBalance(fromBalance, toBalance, transferAmount);
         } finally {
-            Boolean largeUnlockSuccess = lockRepository.releaseLock(largerId);
+            Boolean largeUnlockSuccess = namedLockRepository.releaseLock(largerId);
             if (!largeUnlockSuccess) {
                 log.error("⚠️ [Named Lock 해제 실패] Wallet ID: {}", largerId);
             }
 
-            Boolean smallUnlockSuccess = lockRepository.releaseLock(smallerId);
+            Boolean smallUnlockSuccess = namedLockRepository.releaseLock(smallerId);
             if (!smallUnlockSuccess) {
                 log.error("⚠️ [Named Lock 해제 실패] Wallet ID: {}", smallerId);
+            }
+        }
+    }
+
+    @Override
+    @Transactional
+    public List<WalletBalanceResponse> balance(Long userId) {
+        Wallet wallet = walletRepository.findByUserId(userId);
+        if (wallet == null) {
+            throw ErrorCode.WALLET_NOT_FOUND.commonException();
+        }
+
+        Boolean lockAcquired = namedLockRepository.getLock(wallet.getWalletId());
+        if (!lockAcquired) {
+            log.error("⚠️ [Named Lock 실패] 사용자 ID: {}", userId);
+            throw ErrorCode.LOCK_TIME_OUT.commonException();
+        }
+
+        try {
+            List<WalletBalance> balanceList = balanceService.findBalances(wallet.getWalletId());
+
+            return balanceList.stream()
+                    .map(balance -> new WalletBalanceResponse(
+                            balance.getCurrency().getCurrencyCode(),
+                            balance.getBalance()
+                    ))
+                    .toList();
+        } finally {
+            Boolean unlockSuccess = namedLockRepository.releaseLock(wallet.getWalletId());
+            if (!unlockSuccess) {
+                log.error("⚠️ [Named Lock 해제 실패] 사용자 ID: {}", userId);
             }
         }
     }

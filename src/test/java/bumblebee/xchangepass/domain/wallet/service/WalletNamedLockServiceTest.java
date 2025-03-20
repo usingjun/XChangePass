@@ -7,8 +7,9 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.wallet.wallet.service.NamedLockWalletFacade;
-import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
+import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.NamedLockWalletService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.PessimisticLockWalletService;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
@@ -42,10 +43,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WalletNamedLockServiceTest {
 
     @Autowired
-    private WalletService walletService;
+    private WalletServiceImpl walletService;
 
     @Autowired
-    private NamedLockWalletFacade lockWalletFacade;
+    private NamedLockWalletService lockWalletFacade;
     @Autowired
     private UserRepository userRepository;
     @Autowired

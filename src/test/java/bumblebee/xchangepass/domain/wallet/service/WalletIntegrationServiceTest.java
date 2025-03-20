@@ -7,7 +7,8 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
+import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.PessimisticLockWalletService;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
@@ -39,7 +40,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WalletIntegrationServiceTest {
 
     @Autowired
-    private WalletService walletService;
+    private WalletServiceImpl walletService;
+    @Autowired
+    private PessimisticLockWalletService pessimisticLockWalletService;
     @Autowired
     private UserRepository userRepository;
     @Autowired
@@ -100,10 +103,10 @@ class WalletIntegrationServiceTest {
 
     @Test
     void testTransferSuccess() {
-        walletService.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
+        pessimisticLockWalletService.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
 
         WalletTransferRequest transferRequest = new WalletTransferRequest( receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
-        walletService.transfer(sender.getUserId(), transferRequest);
+        pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest);
 
         WalletBalance senderBalance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         WalletBalance receiverBalance = balanceService.findBalance(receiverWallet.getWalletId(), CURRENCY);
@@ -115,14 +118,14 @@ class WalletIntegrationServiceTest {
     @Test
     void testTransferFailureDueToInsufficientFunds() {
         WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserId(), CHARGE_AMOUNT.add(BigDecimal.ONE), CURRENCY, CURRENCY, null);
-        Exception exception = assertThrows(RuntimeException.class, () -> walletService.transfer(sender.getUserId(), transferRequest));
+        Exception exception = assertThrows(RuntimeException.class, () -> pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest));
         assertThat(exception.getMessage()).contains("충전 금액이 부족합니다.");
     }
 
     @Test
     @Transactional
     void testChargeWallet() {
-        walletService.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
+        pessimisticLockWalletService.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
 
         WalletBalance balance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         assertThat(balance.getBalance()).isEqualByComparingTo(CHARGE_AMOUNT);
@@ -155,7 +158,7 @@ class WalletIntegrationServiceTest {
             executorService.submit(() -> {
                 try {
                     startLatch.await(); // 🔥 모든 스레드가 동시에 실행되도록 대기
-                    walletService.transfer(senderId, transferRequest);
+                    pessimisticLockWalletService.transfer(senderId, transferRequest);
                 } catch (Exception e) {
                     System.err.println("[송금 중 예외 발생]: " + e.getMessage());
                 } finally {
@@ -200,7 +203,7 @@ class WalletIntegrationServiceTest {
                 CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 
-        walletService.charge(sender.getUserId(), chargeRequest);
+        pessimisticLockWalletService.charge(sender.getUserId(), chargeRequest);
 
         AtomicReference<BigDecimal> withdrawAmount = new AtomicReference<>(BigDecimal.ZERO);
         AtomicBoolean isWithdrawFirst = new AtomicBoolean(false);
@@ -214,7 +217,7 @@ class WalletIntegrationServiceTest {
                 WalletTransferRequest transferRequest = new WalletTransferRequest(
                         receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
                 );
-                walletService.transfer(sender.getUserId(), transferRequest);
+                pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest);
                 isTransferFirst.set(true);
             } catch (Exception e) {
                 System.err.println("[송금 중 예외 발생]: " + e.getMessage());
@@ -230,7 +233,7 @@ class WalletIntegrationServiceTest {
                 WalletInOutRequest withdrawRequest = new WalletInOutRequest(
                         CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
                 );
-                withdrawAmount.set(walletService.withdrawal(sender.getUserId(), withdrawRequest));
+                withdrawAmount.set(pessimisticLockWalletService.withdrawal(sender.getUserId(), withdrawRequest));
                 isWithdrawFirst.set(true);
             } catch (Exception e) {
                 System.err.println("[출금 중 예외 발생]: " + e.getMessage());
@@ -288,7 +291,7 @@ class WalletIntegrationServiceTest {
             try {
                 latch.await(); // 🔥 이체가 끝날 때까지 충전 대기
                 System.out.println("💰 충전 시작");
-                walletService.charge(sender.getUserId(), chargeRequest);
+                pessimisticLockWalletService.charge(sender.getUserId(), chargeRequest);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -298,7 +301,7 @@ class WalletIntegrationServiceTest {
             try {
                 System.out.println("🚀 이체 시작");
                 Exception exception = assertThrows(CommonException.class, () -> {
-                    walletService.transfer(sender.getUserId(), transferRequest);
+                    pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest);
                 });
                 assertThat(exception.getMessage()).contains("충전 금액이 부족합니다.");
             } finally {

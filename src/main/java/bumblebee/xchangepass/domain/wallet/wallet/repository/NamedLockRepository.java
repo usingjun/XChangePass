@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface LockRepository extends JpaRepository<Wallet, Long> {
+public interface NamedLockRepository extends JpaRepository<Wallet, Long> {
 
     @Query(value = "SELECT pg_advisory_lock(:key)", nativeQuery = true)
     Boolean getLock(Long key);

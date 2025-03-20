@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.wallet.service.redisson;
+package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.redisson;
 
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
