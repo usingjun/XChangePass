@@ -10,4 +10,8 @@ public class Constants {
     // 암호화 알고리즘 상수
     public static final String AES_CBC_PADDING = "AES/CBC/PKCS5Padding";
     public static final String RSAES_OAEP_SHA_256 = "RSAES_OAEP_SHA_256";
+
+    // Token 유효 기간
+    public static final Long REFRESH_TOKEN_TTL = 24 * 60 * 60L; // 24시간 (초 단위)
+    public static final Long JWT_TOKEN_VALID = 1000 * 60 * 30L; // jwt AccessToken 만료 시간 1시간
 }

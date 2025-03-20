@@ -8,13 +8,13 @@ import org.springframework.stereotype.Repository;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import static bumblebee.xchangepass.global.common.Constants.REFRESH_TOKEN_TTL;
+
 @Repository
 @RequiredArgsConstructor
 public class RefreshTokenRepository {
 
     private final RedisTemplate<String, Object> jsonRedisTemplate;
-
-    private static final Long REFRESH_TOKEN_TTL = 24 * 60 * 60L; // 24시간 (초 단위)
 
     /**
      * Refresh Token 저장 (사용자당 하나만 유지, 기존 토큰 자동 삭제)
