@@ -43,7 +43,6 @@ public class RefreshTokenController {
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/token-refresh")
     public void tokenRefresh(@RequestBody @Valid RefreshTokenRequest request) {
-        // token 재발급
         refreshTokenService.refreshToken(request.refreshToken());
     }
 

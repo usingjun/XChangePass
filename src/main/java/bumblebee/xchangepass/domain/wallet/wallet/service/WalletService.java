@@ -51,7 +51,6 @@ public class WalletService {
             chargeAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.amount());
         }
 
-        System.out.println("충전시작");
         Wallet wallet = walletRepository.findByUserIdWithLock(userId);
 
         if (!balanceService.checkBalance(wallet.getWalletId(), request.toCurrency())) {
@@ -114,13 +113,10 @@ public class WalletService {
     @Transactional
     public List<WalletBalanceResponse> balance(Long userId) {
         Wallet wallet = walletRepository.findByUserIdWithLock(userId);
-        System.out.println("wallet.getWalletId() = " + wallet.getWalletId());
 
         List<WalletBalance> balanceList = balanceService.findBalancesWithLock(wallet.getWalletId());
-        System.out.println("balanceList.get(0) = " + balanceList.get(0));
 
         return balanceList.stream()
-                .peek(balance -> System.out.println("Processing balance: " + balance.getBalanceId()))
                 .map(balance -> new WalletBalanceResponse(
                         balance.getCurrency().getCurrencyCode(),
                         balance.getBalance()

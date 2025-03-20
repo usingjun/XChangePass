@@ -74,10 +74,8 @@ public class UserService {
     }
 
     public UserLoginResponse readUserByUserId(String userId) {
-        System.out.println("userId = " + userId);
         User user = userRepository.findByUserId(Long.parseLong(userId))
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
-        System.out.println("user = " + user.toString());
         return UserLoginResponse.fromEntity(user);
     }
 

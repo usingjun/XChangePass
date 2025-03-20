@@ -30,7 +30,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         final String token = request.getHeader("Authorization");
 
         String userId = null;
-        System.out.println("dofilter start");
 
         // Bearer token 검증 후 user name 조회
         if(token != null && !token.isEmpty()) {
@@ -39,15 +38,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             userId = jwtProvider.getUserIdFromToken(jwtToken);
         }
 
-        System.out.println("userId = " + userId);
 
         // token 검증 완료 후 SecurityContextHolder 내 인증 정보가 없는 경우 저장
         if(userId != null && !userId.isEmpty() && SecurityContextHolder.getContext().getAuthentication() == null) {
-            // Spring Security Context Holder 인증 정보 set
             SecurityContextHolder.getContext().setAuthentication(getUserAuth(userId));
         }
 
-        System.out.println("dofilter end");
         filterChain.doFilter(request,response);
     }
 
