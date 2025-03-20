@@ -1,8 +1,8 @@
-package bumblebee.xchangepass.domain.walletBalance.service;
+package bumblebee.xchangepass.domain.wallet.balance.service;
 
-import bumblebee.xchangepass.domain.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.walletBalance.repository.WalletBalanceRepository;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

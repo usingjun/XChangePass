@@ -1,6 +1,6 @@
-package bumblebee.xchangepass.domain.wallet.repository;
+package bumblebee.xchangepass.domain.wallet.wallet.repository;
 
-import bumblebee.xchangepass.domain.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;

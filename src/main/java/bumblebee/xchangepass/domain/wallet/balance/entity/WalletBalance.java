@@ -1,6 +1,6 @@
-package bumblebee.xchangepass.domain.walletBalance.entity;
+package bumblebee.xchangepass.domain.wallet.balance.entity;
 
-import bumblebee.xchangepass.domain.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.global.converter.CurrencyConverter;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -13,8 +13,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
 
-import static lombok.AccessLevel.PROTECTED;
-
 @Entity
 @Table(name = "balance")
 @Getter
@@ -23,23 +21,23 @@ import static lombok.AccessLevel.PROTECTED;
 public class WalletBalance {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "balance_id", nullable = false)
-    public Long balanceId;
+    private Long balanceId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "wallet_id")
-    public Wallet wallet;
+    private Wallet wallet;
 
     @Convert(converter = CurrencyConverter.class)
-    public Currency currency;
+    private Currency currency;
 
     @Column(nullable = false, precision = 18, scale = 2)
     private BigDecimal balance = BigDecimal.ZERO;
 
     @CreatedDate
-    public LocalDateTime currencyCreatedAt;
+    private LocalDateTime currencyCreatedAt;
 
     @LastModifiedDate
-    public LocalDateTime currencyModifiedAt;
+    private LocalDateTime currencyModifiedAt;
 
     public WalletBalance(Wallet wallet, Currency currency) {
         this.wallet = wallet;

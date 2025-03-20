@@ -1,20 +1,17 @@
-package bumblebee.xchangepass.domain.wallet.service;
+package bumblebee.xchangepass.domain.wallet.wallet.service;
 
 import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
-import bumblebee.xchangepass.domain.card.entity.CardType;
 import bumblebee.xchangepass.domain.card.service.CardService;
 import bumblebee.xchangepass.domain.user.entity.User;
-import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
-import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
-import bumblebee.xchangepass.domain.wallet.dto.response.WalletTransactionResponse;
-import bumblebee.xchangepass.domain.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.walletBalance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletTransactionResponse;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.global.error.ErrorCode;
-import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -56,14 +53,14 @@ public class WalletService {
 
 
     @Transactional
-    public void charge(WalletInOutRequest request) {
+    public void charge(Long userId, WalletInOutRequest request) {
         BigDecimal chargeAmount = request.amount();
         if (!request.toCurrency().equals(request.fromCurrency())) {
             chargeAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.amount());
         }
 
         System.out.println("충전시작");
-        Wallet wallet = walletRepository.findByUserIdWithLock(request.userId());
+        Wallet wallet = walletRepository.findByUserIdWithLock(userId);
 
         if (!balanceService.checkBalance(wallet.getWalletId(), request.toCurrency())) {
             Wallet findWallet = walletRepository.findById(wallet.getWalletId())
@@ -76,13 +73,13 @@ public class WalletService {
     }
 
     @Transactional
-    public BigDecimal withdrawal(WalletInOutRequest request) {
+    public BigDecimal withdrawal(Long userId, WalletInOutRequest request) {
         BigDecimal amount = request.amount();
         if (!request.toCurrency().equals(request.fromCurrency())) {
             amount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), amount);
         }
 
-        Wallet wallet = walletRepository.findByUserIdWithLock(request.userId());
+        Wallet wallet = walletRepository.findByUserIdWithLock(userId);
         WalletBalance balance = balanceService.findBalanceWithLock(wallet.getWalletId(), request.toCurrency());
 
         if (amount.compareTo(balance.getBalance()) > 0) {
@@ -96,8 +93,9 @@ public class WalletService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
 //    @Transactional
-    public void transfer(WalletTransferRequest request) {
-        WalletBalance fromBalance = balanceService.findBalanceWithLock(request.senderWalletId(), request.fromCurrency());
+    public void transfer(Long senderId, WalletTransferRequest request) {
+        Wallet fromWallet = walletRepository.findByUserId(senderId);
+        WalletBalance fromBalance = balanceService.findBalanceWithLock(fromWallet.getWalletId(), request.fromCurrency());
 
         if (!balanceService.checkBalance(request.receiverWalletId(), request.toCurrency())) {
             Wallet wallet = walletRepository.findById(request.receiverWalletId())

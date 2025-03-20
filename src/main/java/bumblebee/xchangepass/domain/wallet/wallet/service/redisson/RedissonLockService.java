@@ -1,14 +1,14 @@
-package bumblebee.xchangepass.domain.wallet.service.redisson;
+package bumblebee.xchangepass.domain.wallet.wallet.service.redisson;
 
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
-import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
-import bumblebee.xchangepass.domain.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.walletBalance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
@@ -53,11 +53,11 @@ public class RedissonLockService {
      * 🔒 지갑 충전 (RedissonLock 적용)
      */
     @Transactional
-    public void charge(WalletInOutRequest request) {
-        String lockKey = "wallet:" + request.userId();
+    public void charge(Long userId, WalletInOutRequest request) {
+        String lockKey = "wallet:" + userId;
         redissonLock.tryLockVoid(lockKey, 10, 10, () -> {
             System.out.println("🔒 충전 시작");
-            Wallet wallet = walletRepository.findByUserId(request.userId());
+            Wallet wallet = walletRepository.findByUserId(userId);
 
             if (!balanceService.checkBalance(wallet.getWalletId(), request.toCurrency())) {
                 Wallet findWallet = walletRepository.findById(wallet.getWalletId())
@@ -75,7 +75,7 @@ public class RedissonLockService {
      * 🔒 지갑 출금 (RedissonLock 적용)
      */
     @Transactional
-    public BigDecimal withdrawal(WalletInOutRequest request) {
+    public BigDecimal withdrawal(Long userId, WalletInOutRequest request) {
         String lockKey = "wallet:" + request.userId();
         return redissonLock.tryLock(lockKey, 10, 10, () -> {
             Wallet wallet = walletRepository.findByUserId(request.userId());

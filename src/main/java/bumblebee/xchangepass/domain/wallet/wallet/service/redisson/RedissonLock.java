@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.service.redisson;
+package bumblebee.xchangepass.domain.wallet.wallet.service.redisson;
 
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RLock;

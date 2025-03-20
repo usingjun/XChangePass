@@ -1,12 +1,12 @@
-package bumblebee.xchangepass.domain.wallet.service;
+package bumblebee.xchangepass.domain.wallet.wallet.service;
 
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
-import bumblebee.xchangepass.domain.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.wallet.repository.LockRepository;
-import bumblebee.xchangepass.domain.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.walletBalance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.repository.LockRepository;
+import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;

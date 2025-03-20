@@ -1,13 +1,12 @@
-package bumblebee.xchangepass.domain.wallet.controller;
+package bumblebee.xchangepass.domain.wallet.wallet.controller;
 
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletCreateRequest;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletTransferRequest;
-import bumblebee.xchangepass.domain.wallet.dto.response.WalletBalanceResponse;
-import bumblebee.xchangepass.domain.wallet.dto.response.WalletTransactionResponse;
-import bumblebee.xchangepass.domain.wallet.service.NamedLockWalletFacade;
-import bumblebee.xchangepass.domain.wallet.service.WalletService;
-import bumblebee.xchangepass.domain.wallet.service.redisson.RedissonLockService;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletTransactionResponse;
+import bumblebee.xchangepass.domain.wallet.wallet.service.NamedLockWalletFacade;
+import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.redisson.RedissonLockService;
 import bumblebee.xchangepass.global.security.jwt.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;

@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.dto.response;
+package bumblebee.xchangepass.domain.wallet.wallet.dto.response;
 
 import java.math.BigDecimal;
 
