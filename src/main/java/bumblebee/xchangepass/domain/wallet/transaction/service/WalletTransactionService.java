@@ -3,6 +3,7 @@ package bumblebee.xchangepass.domain.wallet.transaction.service;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
+import bumblebee.xchangepass.domain.wallet.wallet.WalletTransactionProducer;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletTransactionResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
@@ -20,11 +21,19 @@ public class WalletTransactionService {
 
     private final WalletTransactionRepository transactionRepository;
     private final WalletRepository walletRepository;
+    private final WalletTransactionProducer transactionProducer;
 
     @Transactional
-    public void saveTransaction(Wallet myWallet, Wallet counterWallet, BigDecimal bigDecimal, Currency fromCurrency, Currency toCurrency, WalletTransactionType transactionType) {
-        WalletTransaction transaction = new WalletTransaction(myWallet, counterWallet, bigDecimal, fromCurrency, toCurrency, transactionType);
-        transactionRepository.save(transaction);
+    public void saveTransaction(Long myWalletId, Long counterWalletId, BigDecimal amount, Currency fromCurrency, Currency toCurrency, WalletTransactionType transactionType) {
+
+        transactionProducer.sendAsyncTransaction(
+                myWalletId,
+                counterWalletId,
+                amount,
+                fromCurrency,
+                toCurrency,
+                transactionType
+        );
     }
 
     @Transactional

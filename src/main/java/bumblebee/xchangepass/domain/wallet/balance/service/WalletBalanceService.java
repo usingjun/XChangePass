@@ -63,7 +63,7 @@ public class WalletBalanceService {
         balance.addBalance(amount);
         balanceRepository.save(balance);
 
-        transactionService.saveTransaction(balance.getWallet(), null, amount, null, balance.getCurrency(), WalletTransactionType.DEPOSIT);
+        transactionService.saveTransaction(balance.getWallet().getWalletId(), null, amount, null, balance.getCurrency(), WalletTransactionType.DEPOSIT);
     }
 
     @Transactional
@@ -71,7 +71,7 @@ public class WalletBalanceService {
         balance.subtractBalance(amount);
         balanceRepository.save(balance);
 
-        transactionService.saveTransaction(balance.getWallet(), null, amount, null, balance.getCurrency(), WalletTransactionType.WITHDRAWAL);
+        transactionService.saveTransaction(balance.getWallet().getWalletId(), null, amount, null, balance.getCurrency(), WalletTransactionType.WITHDRAWAL);
     }
 
     @Transactional
@@ -81,7 +81,7 @@ public class WalletBalanceService {
         balanceRepository.save(fromBalance);
         balanceRepository.save(toBalance);
 
-        transactionService.saveTransaction(fromBalance.getWallet(), toBalance.getWallet(), amount, fromBalance.getCurrency(), toBalance.getCurrency(), WalletTransactionType.TRANSFER);
+        transactionService.saveTransaction(fromBalance.getWallet().getWalletId(), toBalance.getWallet().getWalletId(), amount, fromBalance.getCurrency(), toBalance.getCurrency(), WalletTransactionType.TRANSFER);
     }
 
 }
