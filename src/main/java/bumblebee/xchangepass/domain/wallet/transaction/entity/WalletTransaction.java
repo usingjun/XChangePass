@@ -63,6 +63,5 @@ public class WalletTransaction {
 
     public void updateStatus(WalletTransactionStatus newStatus) {
         this.status = newStatus;
-        this.updatedAt = LocalDateTime.now();
     }
 }
