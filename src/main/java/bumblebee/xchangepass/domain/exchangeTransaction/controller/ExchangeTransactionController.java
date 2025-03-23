@@ -65,7 +65,7 @@ public class ExchangeTransactionController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/execute")
-    public ExchangeResponseDTO executeTransaction(@RequestParam Long transactionId) {
-        return exchangeService.executeTransaction(transactionId);
+    public ExchangeResponseDTO executeTransaction(@RequestParam Long transactionId, Authentication authentication) {
+        return exchangeService.executeTransaction(transactionId, JwtUtil.getLoginId(authentication));
     }
 }
