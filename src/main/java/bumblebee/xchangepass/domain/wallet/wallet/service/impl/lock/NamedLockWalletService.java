@@ -38,12 +38,7 @@ public class NamedLockWalletService implements WalletService {
             throw ErrorCode.WALLET_NOT_FOUND.commonException();
         }
 
-        Boolean lockAcquired = namedLockRepository.getLock(wallet.getWalletId());
-        if (!lockAcquired) {
-            log.error("⚠️ [Named Lock 실패] 사용자 ID: {}", userId);
-            throw ErrorCode.LOCK_TIME_OUT.commonException();
-        }
-
+        namedLockRepository.getLock(wallet.getWalletId());
         try {
             if (!balanceService.checkBalance(wallet.getWalletId(), request.toCurrency())) {
                 Wallet findWallet = walletRepository.findById(wallet.getWalletId())
@@ -70,12 +65,7 @@ public class NamedLockWalletService implements WalletService {
             throw ErrorCode.WALLET_NOT_FOUND.commonException();
         }
 
-        Boolean lockAcquired = namedLockRepository.getLock(wallet.getWalletId());
-        if (!lockAcquired) {
-            log.error("⚠️ [Named Lock 실패] 사용자 ID: {}", userId);
-            throw ErrorCode.LOCK_TIME_OUT.commonException();
-        }
-
+        namedLockRepository.getLock(wallet.getWalletId());
         try {
             WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
             balanceService.withdrawBalance(balance, request.amount());
@@ -102,18 +92,8 @@ public class NamedLockWalletService implements WalletService {
         long smallerId = Math.min(fromWallet.getWalletId(), toWallet.getWalletId());
         long largerId = Math.max(fromWallet.getWalletId(), toWallet.getWalletId());
 
-        Boolean smallLockAcquired = namedLockRepository.getLock(smallerId);
-        if (!smallLockAcquired) {
-            log.error("⚠️ [Named Lock 획득 실패] Wallet ID: {}", smallerId);
-            throw ErrorCode.LOCK_TIME_OUT.commonException();
-        }
-
-        Boolean largeLockAcquired = namedLockRepository.getLock(largerId);
-        if (!largeLockAcquired) {
-            log.error("⚠️ [Named Lock 획득 실패] Wallet ID: {}", largerId);
-            namedLockRepository.releaseLock(smallerId); // 🔥 먼저 획득한 Lock 해제 후 예외 발생
-            throw ErrorCode.LOCK_TIME_OUT.commonException();
-        }
+        namedLockRepository.getLock(smallerId);
+        namedLockRepository.getLock(largerId);
 
         try {
             WalletBalance fromBalance = balanceService.findBalance(fromWallet.getWalletId(), request.fromCurrency());
@@ -147,12 +127,7 @@ public class NamedLockWalletService implements WalletService {
             throw ErrorCode.WALLET_NOT_FOUND.commonException();
         }
 
-        Boolean lockAcquired = namedLockRepository.getLock(wallet.getWalletId());
-        if (!lockAcquired) {
-            log.error("⚠️ [Named Lock 실패] 사용자 ID: {}", userId);
-            throw ErrorCode.LOCK_TIME_OUT.commonException();
-        }
-
+        namedLockRepository.getLock(wallet.getWalletId());
         try {
             List<WalletBalance> balanceList = balanceService.findBalances(wallet.getWalletId());
 
