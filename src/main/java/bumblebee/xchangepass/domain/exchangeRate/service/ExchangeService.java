@@ -69,8 +69,7 @@ public class ExchangeService {
     }
 
     public CompletableFuture<Void> fetchAndSaveAllExchangeRates() {
-// 활성화된 스레드 수 출력
-        System.out.println("Active threads before: " + Thread.activeCount());
+
         List<String> currencies = Country.create();
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
@@ -79,8 +78,6 @@ public class ExchangeService {
                 try {
                     ExchangeService self = applicationContext.getBean(ExchangeService.class);
                     self.fetchAndSaveExchangeRate(baseCurrency);
-                    System.out.println("Running on thread: " + Thread.currentThread().getName());
-                    System.out.println("Active threads: " + Thread.activeCount());
                 } catch (Exception e) {
                     throw ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException();
                 }
@@ -92,7 +89,6 @@ public class ExchangeService {
 
         allOf.thenRun(exchangeTransactionService::swapExchangeRateTables);
 
-        allOf.thenRun(() -> System.out.println("Active threads after: " + Thread.activeCount()));
         return allOf;
     }
 
@@ -123,7 +119,6 @@ public class ExchangeService {
     @Transactional
     public void saveRatesToTempDB(String baseCurrency, ExchangeRateResponse response) {
         try {
-            // JSON 문자열이 아니라 Map 형태로 저장
             Map<String, Double> rates = response.conversionRates();
             ExchangeRateTemp exchangeRateTemp = ExchangeRateTemp.builder()
                     .baseCurrency(baseCurrency)
