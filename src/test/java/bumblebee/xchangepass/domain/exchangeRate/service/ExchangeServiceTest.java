@@ -5,16 +5,20 @@ import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRate;
 import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRateTemp;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRateTempRepository;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRepository;
+import com.sun.management.OperatingSystemMXBean;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.lang.management.ManagementFactory;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 @SpringBootTest
@@ -99,14 +103,60 @@ class ExchangeServiceTest {
 //        assertThrows(ErrorCode.EXCHANGE_RATE_FOR_COUNTRY.commonException().getClass(),
 //                () -> service.getExchangeRateForCountry(baseCurrency, tageCurrency));
 //    }
-//    @Test
-//    @DisplayName("나라 개수 확인")
-//    public void Test7() throws InterruptedException {
-//
-//        CompletableFuture.runAsync( () -> service.fetchAndSaveAllExchangeRates()).join();
-//        List<ExchangeRate> all = exchangeRepository.findAll();
-//        assertEquals(162, all.get(0).getExchangeRates().size());
-//    }
+    @Test
+    @DisplayName("나라 개수 확인")
+    public void Test7() throws InterruptedException {
+
+        service.fetchAndSaveAllExchangeRates().join();
+        List<ExchangeRate> all = exchangeRepository.findAll();
+        assertEquals(162, all.get(0).getExchangeRates().size());
+
+        long startTime = System.currentTimeMillis();
+        service.fetchAndSaveAllExchangeRates().join(); // 비동기 작업이 끝날 때까지 기다림
+        long endTime = System.currentTimeMillis();
+        System.out.println("fetchAndSaveAllExchangeRates total execution time: " + (endTime - startTime) + "ms");
+    }
+    @Test
+    @DisplayName("나라 개수 확인 및 실행 시간 및 CPU 사용량 측정")
+    public void Test8() throws InterruptedException {
+        // 실행 시간 측정 시작
+        long startTime = System.currentTimeMillis();
+
+        // CPU 사용량 측정 (시작 전)
+        OperatingSystemMXBean osBean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+        Thread.sleep(500); // 샘플링 시간 확보
+        double cpuBefore = osBean.getProcessCpuLoad() * 100; // JVM 프로세스 CPU 사용률 (%)
+        double systemCpuBefore = osBean.getCpuLoad() * 100; // 시스템 전체 CPU 사용률 (%)
+
+        // fetchAndSaveAllExchangeRates 실행 및 완료 대기
+        service.fetchAndSaveAllExchangeRates().join();
+
+        // 실행 시간 측정 종료
+        long endTime = System.currentTimeMillis();
+
+        // CPU 사용량 측정 (작업 완료 후)
+        Thread.sleep(500); // 처리 후 CPU 사용이 반영되도록 잠깐 대기
+        double cpuAfter = osBean.getProcessCpuLoad() * 100;
+        double systemCpuAfter = osBean.getCpuLoad() * 100;
+
+        // 실행 시간 출력
+        System.out.println("fetchAndSaveAllExchangeRates total execution time: " + (endTime - startTime) + "ms");
+
+        // CPU 사용량 출력
+        System.out.println("JVM CPU Usage Before: " + String.format("%.2f", cpuBefore) + "%");
+        System.out.println("JVM CPU Usage After: " + String.format("%.2f", cpuAfter) + "%");
+        System.out.println("System CPU Usage Before: " + String.format("%.2f", systemCpuBefore) + "%");
+        System.out.println("System CPU Usage After: " + String.format("%.2f", systemCpuAfter) + "%");
+
+        // DB에서 저장된 환율 정보 확인
+        List<ExchangeRate> all = exchangeRepository.findAll();
+        int cpuCores = Runtime.getRuntime().availableProcessors();
+        System.out.println("Available CPU Cores: " + cpuCores);
+
+        // 환율 개수 검증
+        assertEquals(162, all.get(0).getExchangeRates().size());
+
+    }
 
 
     @Test
