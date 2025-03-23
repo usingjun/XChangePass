@@ -5,10 +5,13 @@ import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRate;
 import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRateTemp;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRateTempRepository;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRepository;
+import bumblebee.xchangepass.domain.exchangeRate.util.Country;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.annotation.Async;
@@ -23,9 +26,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.concurrent.Executor;
 
 @Service
-@RequiredArgsConstructor
 public class ExchangeService {
 
     @Value("${api.key}")
@@ -36,9 +39,23 @@ public class ExchangeService {
     private final ExchangeRateTransactionService exchangeTransactionService;
     private final ApplicationContext applicationContext; // 🔹 Lazy 주입을 위한 ApplicationContext 사용
     private final RestTemplate restTemplate = new RestTemplate();
+    private final Executor executor;
+//  todo  private final ExchangeCacheService exchangeCacheService;
 
-    @PersistenceContext
-    private EntityManager entityManager;
+    @Autowired
+    public ExchangeService(@Qualifier("asyncExecutor") Executor executor,
+                           ExchangeRepository exchangeRepository,
+                           ExchangeRateTempRepository exchangeRateTempRepository,
+                           ExchangeRateTransactionService exchangeTransactionService,
+                           ApplicationContext applicationContext
+            /*ExchangeCacheService exchangeCacheService*/) {
+        this.exchangeRepository = exchangeRepository;
+        this.exchangeRateTempRepository = exchangeRateTempRepository;
+        this.exchangeTransactionService = exchangeTransactionService;
+        this.applicationContext = applicationContext;
+        this.executor = executor;
+//        this.exchangeCacheService = exchangeCacheService;
+    }
 
     public ExchangeRateResponse fetchExchangeRates(String baseCurrency) {
         String API_URL = "https://v6.exchangerate-api.com/v6/" + authkey + "/latest/" + baseCurrency;
@@ -51,31 +68,32 @@ public class ExchangeService {
         }
     }
 
-    @Async("asyncExecutor")
     public CompletableFuture<Void> fetchAndSaveAllExchangeRates() {
-
-        List<String> currencies = List.of("USD", "KRW");
+// 활성화된 스레드 수 출력
+        System.out.println("Active threads before: " + Thread.activeCount());
+        List<String> currencies = Country.create();
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
         for (String baseCurrency : currencies) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
                     ExchangeService self = applicationContext.getBean(ExchangeService.class);
-                    self.fetchAndSaveExchangeRate(baseCurrency); // 각 환율 정보를 비동기적으로 가져옵니다.
+                    self.fetchAndSaveExchangeRate(baseCurrency);
+                    System.out.println("Running on thread: " + Thread.currentThread().getName());
+                    System.out.println("Active threads: " + Thread.activeCount());
                 } catch (Exception e) {
                     throw ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException();
                 }
-            });
-            futures.add(future); // 각 비동기 작업을 futures 리스트에 추가
+            }, executor);
+            futures.add(future);
         }
 
-        // 모든 비동기 작업이 완료될 때까지 기다립니다.
         CompletableFuture<Void> allOf = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
 
-        // 통화 변환 작업은 모든 환율 정보가 저장된 후에 실행되어야 하므로, 마지막에 실행하도록 합니다.
         allOf.thenRun(exchangeTransactionService::swapExchangeRateTables);
-        System.out.println(1);
-        return allOf;  // 모든 작업이 완료될 때까지 기다립니다.
+
+        allOf.thenRun(() -> System.out.println("Active threads after: " + Thread.activeCount()));
+        return allOf;
     }
 
     @Transactional
@@ -83,6 +101,7 @@ public class ExchangeService {
         ExchangeRateResponse response = fetchExchangeRates(baseCurrency);
         saveRatesToTempDB(baseCurrency, response);
     }
+
     @Transactional
     public ExchangeRateResponse getExchangeRateAll(String baseCurrency) {
         List<ExchangeRate> exchangeRates = exchangeRepository.findByBaseCurrency(baseCurrency);
@@ -95,8 +114,7 @@ public class ExchangeService {
                     .build();
         } else {
             // 🔹 비동기 방식으로 환율 정보를 가져오도록 변경 (ApplicationContext 사용)
-            ExchangeService asyncService = applicationContext.getBean(ExchangeService.class);
-            asyncService.fetchAndSaveAllExchangeRates();
+            fetchAndSaveAllExchangeRates();
 
             return fetchExchangeRates(baseCurrency);
         }
@@ -112,7 +130,7 @@ public class ExchangeService {
                     .rate(rates)
                     .build();
             exchangeRateTempRepository.save(exchangeRateTemp);
-        } catch (Exception e){
+        } catch (Exception e) {
             throw ErrorCode.EXCHANGE_SAVE_FAIL.commonException();
         }
     }
@@ -136,7 +154,9 @@ public class ExchangeService {
 
     @Transactional
     public BigDecimal getExchangeMoney(Currency baseCurrency, Currency targetCurrency, BigDecimal amount) {
-        BigDecimal rate = BigDecimal.valueOf(getExchangeRateForCountry(baseCurrency.toString(), targetCurrency.toString()).conversionRates().get(baseCurrency));
+        BigDecimal rate = BigDecimal.valueOf(getExchangeRateForCountry(baseCurrency.toString(), targetCurrency.toString())
+                .conversionRates().get(targetCurrency.toString()));
+        System.out.println(1);
         return rate.multiply(amount);
     }
 }
