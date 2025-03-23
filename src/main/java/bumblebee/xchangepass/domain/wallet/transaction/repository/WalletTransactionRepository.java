@@ -3,6 +3,7 @@ package bumblebee.xchangepass.domain.wallet.transaction.repository;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -14,6 +15,6 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
                 where t.myWallet.walletId=:walletId
                 order by t.updatedAt DESC
             """)
-    List<WalletTransaction> getWalletTransaction(Long walletId);
+    List<WalletTransaction> getWalletTransaction(@Param("walletId") Long walletId);
 
 }
