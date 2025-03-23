@@ -9,6 +9,7 @@ import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionStatus;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
+import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
@@ -40,10 +41,10 @@ public class WalletTransactionIntegrationTest {
     private WalletRepository walletRepository;
 
     @Autowired
-    private WalletBalanceRepository balanceRepository;
+    private WalletBalanceService balanceService;
 
     @Autowired
-    private WalletBalanceService balanceService;
+    private WalletTransactionService transactionService;
 
     @Autowired
     private WalletTransactionRepository transactionRepository;
@@ -73,14 +74,15 @@ public class WalletTransactionIntegrationTest {
 
         // when
         balanceService.chargeBalance(balance, new BigDecimal("5000")); // 💰 동기 잔액 증가
+        System.out.println("balance.getBalance().toString() = " + balance.getBalance().toString());
 
         // then
         Thread.sleep(3000); // ⏱ 메시지 큐 비동기 소비 기다림
 
-        List<WalletTransaction> transactions = transactionRepository.findAll();
+        List<WalletTransaction> transactions = transactionRepository.getWalletTransaction(wallet.getWalletId());
         assertEquals(1, transactions.size());
 
-        var tx = transactions.get(0);
+        WalletTransaction tx = transactions.get(0);
         assertEquals(WalletTransactionType.DEPOSIT, tx.getTransactionType());
         assertEquals(WalletTransactionStatus.SUCCESS, tx.getStatus());
         assertEquals("KRW", tx.getToCurrency().getCurrencyCode());
