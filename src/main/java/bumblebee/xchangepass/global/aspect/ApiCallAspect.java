@@ -18,7 +18,7 @@ public class ApiCallAspect {
     @Autowired
     private MeterRegistry meterRegistry;  // 메트릭스를 기록할 MeterRegistry
 
-    @Around("execution(* bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService.*(..))")
+    @Around("execution(* bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService.*(..))")
     public Object logApiMetrics(ProceedingJoinPoint joinPoint) throws Throwable {
         // Windows에서도 CPU 사용량을 가져올 수 있도록 `com.sun.management.OperatingSystemMXBean` 사용
         OperatingSystemMXBean osBean =
