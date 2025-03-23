@@ -24,11 +24,11 @@ public class WalletTransaction {
     private Long walletTransactionId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "wallet_id")
+    @JoinColumn(name = "my_wallet_id")
     private Wallet myWallet;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "wallet_id", nullable = false)
+    @JoinColumn(name = "counter_wallet_id", nullable = false)
     private Wallet counterWallet;
 
     @Column(nullable = false)
