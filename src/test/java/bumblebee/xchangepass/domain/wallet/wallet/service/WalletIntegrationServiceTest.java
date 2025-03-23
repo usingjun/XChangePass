@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.service;
+package bumblebee.xchangepass.domain.wallet.wallet.service;
 
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -14,6 +14,7 @@ import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepos
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.global.exception.CommonException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -102,6 +103,7 @@ class WalletIntegrationServiceTest {
     }
 
     @Test
+    @DisplayName("잔액이 충분할 때 송금이 성공한다")
     void testTransferSuccess() {
         pessimisticLockWalletService.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
 
@@ -116,6 +118,7 @@ class WalletIntegrationServiceTest {
     }
 
     @Test
+    @DisplayName("잔액이 부족할 때 송금이 실패한다")
     void testTransferFailureDueToInsufficientFunds() {
         WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserId(), CHARGE_AMOUNT.add(BigDecimal.ONE), CURRENCY, CURRENCY, null);
         Exception exception = assertThrows(RuntimeException.class, () -> pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest));
@@ -124,6 +127,7 @@ class WalletIntegrationServiceTest {
 
     @Test
     @Transactional
+    @DisplayName("계좌에 충전이 성공한다")
     void testChargeWallet() {
         pessimisticLockWalletService.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
 
@@ -136,7 +140,8 @@ class WalletIntegrationServiceTest {
      * //
      */
     @Test
-    void 동시에_같은_계좌에_송금이_발생한다() throws InterruptedException {
+    @DisplayName("여러 사용자가 동시에 같은 계좌로 송금하면 모든 송금이 처리된다")
+    void concurrentTransfersToSameWallet() throws InterruptedException {
         // Given: 초기 충전
         WalletBalance balance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         balanceService.chargeBalance(balance, CHARGE_AMOUNT.multiply(BigDecimal.valueOf(100)));
@@ -198,7 +203,8 @@ class WalletIntegrationServiceTest {
      * ✅ 송금 도중 출금이 발생하면 한쪽이 실패하는지 확인하는 동시성 테스트 (5번 반복)
      */
     @RepeatedTest(5) // 5번 반복 실행
-    void 송금_도중_발생한_출금은_실패한다() throws Exception {
+    @DisplayName("송금 도중 출금이 발생하면 둘 중 하나는 실패한다")
+    void eitherTransferOrWithdrawalFailsDuringConcurrentExecution() throws Exception {
         WalletInOutRequest chargeRequest = new WalletInOutRequest(
                 CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
@@ -273,7 +279,8 @@ class WalletIntegrationServiceTest {
      * ✅ 충전과 이체가 동시에 발생할 때 이체가 실패하는지 확인하는 동시성 테스트
      */
     @RepeatedTest(5) // 5번 반복 실행
-    void 계좌_충전과_이체가_동시에_발생하면_이체는_실패한다() throws Exception {
+    @DisplayName("충전과 이체가 동시에 발생하면 이체는 실패하고 충전은 성공한다")
+    void chargeSucceedsAndTransferFailsOnConcurrentRequest() throws Exception {
         // Given: 초기 잔액 설정
         System.out.println("초기 Sender 잔액 = " + balanceService.findBalance(senderWallet.getWalletId(), CURRENCY).getBalance());
 
