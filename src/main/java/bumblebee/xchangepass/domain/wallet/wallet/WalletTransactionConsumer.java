@@ -45,7 +45,7 @@ public class WalletTransactionConsumer {
                     WalletTransactionType.valueOf(message.transactionType())
             );
 
-            transaction.updateStatus(WalletTransactionStatus.SUCCESS); // ✅ 동기 처리에서 이미 성공한 거래
+            transaction.updateStatus(WalletTransactionStatus.SUCCESS);
 
             transactionRepository.save(transaction);
         } catch (Exception e) {
