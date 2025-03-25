@@ -1,10 +1,10 @@
 package bumblebee.xchangepass.domain.wallet.balance.service;
 
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -68,6 +68,10 @@ public class WalletBalanceService {
 
     @Transactional
     public void withdrawBalance(WalletBalance balance, BigDecimal amount) {
+        if (amount.compareTo(balance.getBalance()) > 0) {
+            throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
+        }
+
         balance.subtractBalance(amount);
         balanceRepository.save(balance);
 
