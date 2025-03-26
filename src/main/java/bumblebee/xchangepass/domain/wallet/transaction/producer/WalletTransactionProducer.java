@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.transaction.producer;
 
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
-import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransactionMessage;
+import bumblebee.xchangepass.domain.wallet.transaction.dto.WalletTransactionMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;

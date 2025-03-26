@@ -4,7 +4,7 @@ import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionStatus;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
-import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransactionMessage;
+import bumblebee.xchangepass.domain.wallet.transaction.dto.WalletTransactionMessage;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;

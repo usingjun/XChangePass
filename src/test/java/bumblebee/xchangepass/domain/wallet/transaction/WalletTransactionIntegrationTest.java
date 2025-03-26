@@ -11,7 +11,7 @@ import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransact
 import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
 import bumblebee.xchangepass.domain.wallet.transaction.consumer.DeadLetterConsumer;
 import bumblebee.xchangepass.domain.wallet.transaction.consumer.SlackNotifier;
-import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransactionMessage;
+import bumblebee.xchangepass.domain.wallet.transaction.dto.WalletTransactionMessage;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import com.rabbitmq.client.Channel;
