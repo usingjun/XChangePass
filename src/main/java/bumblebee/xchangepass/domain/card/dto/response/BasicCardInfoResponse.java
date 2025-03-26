@@ -9,6 +9,9 @@ import lombok.Builder;
 @Schema(description = "기본 카드 정보 응답 DTO")
 @Builder
 public record BasicCardInfoResponse(
+        @Schema(description = "카드 ID", example = "1")
+        Long cardId,
+
         @Schema(description = "카드 타입", example = "PHYSICAL")
         CardType cardType,
 
@@ -34,6 +37,7 @@ public record BasicCardInfoResponse(
      */
     public static BasicCardInfoResponse from(DetailedCardInfoResponse detailedInfo) {
         return BasicCardInfoResponse.builder()
+                .cardId(detailedInfo.cardId())
                 .cardType(detailedInfo.cardType())
                 .cardStatus(detailedInfo.cardStatus())
                 .maskedCardNumber(maskCardNumber(detailedInfo.cardNumber()))
