@@ -23,13 +23,18 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Slf4j
-@Service("pessimisticLock")
+@Service
 @RequiredArgsConstructor
 public class PessimisticLockWalletService implements WalletService {
 
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final ExchangeService exchangeService;
+
+    @Override
+    public String getType() {
+        return "pessimisticLock";
+    }
 
     @Override
     @Transactional

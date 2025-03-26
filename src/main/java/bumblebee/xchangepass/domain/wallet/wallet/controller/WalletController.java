@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.wallet.controller;
 
+import bumblebee.xchangepass.domain.wallet.transaction.dto.request.WalletTransactionSearchCondition;
 import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
@@ -16,6 +17,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.ErrorResponse;
@@ -38,8 +40,10 @@ public class WalletController {
     })
     @GetMapping("/transaction")
     @ResponseStatus(HttpStatus.OK)
-    public List<WalletTransactionResponse> transaction(Authentication authentication) {
-        return transactionService.getTransaction(JwtUtil.getLoginId(authentication));
+    public List<WalletTransactionResponse> transaction(Authentication authentication,
+                                                       @ModelAttribute WalletTransactionSearchCondition condition,
+                                                       Pageable pageable) {
+        return transactionService.getTransaction(JwtUtil.getLoginId(authentication), condition, pageable);
     }
 
     @Operation(summary = "잔액 충전", description = "잔액을 충전합니다.")

@@ -22,12 +22,17 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Slf4j
-@Service("namedLock")
+@Service
 @RequiredArgsConstructor
 public class NamedLockWalletService implements WalletService {
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final NamedLockRepository namedLockRepository;
+
+    @Override
+    public String getType() {
+        return "namedLock";
+    }
 
     @Override
     @Transactional

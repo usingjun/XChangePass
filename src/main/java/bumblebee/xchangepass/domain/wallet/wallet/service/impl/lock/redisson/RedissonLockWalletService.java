@@ -22,13 +22,18 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-@Service("redisson")
+@Service
 @RequiredArgsConstructor
 public class RedissonLockWalletService implements WalletService {
 
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final RedissonLock redissonLock;
+
+    @Override
+    public String getType() {
+        return "redissonLock";
+    }
 
     /**
      * 🔒 지갑 충전 (RedissonLock 적용)

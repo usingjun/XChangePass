@@ -15,7 +15,7 @@ public class WalletServiceFactory {
     @Autowired
     public WalletServiceFactory(List<WalletService> walletServiceList) {
         this.walletServices = walletServiceList.stream()
-                .collect(Collectors.toMap(service -> service.getClass().getSimpleName(), Function.identity()));
+                .collect(Collectors.toMap(WalletService::getType, Function.identity()));
     }
 
     public WalletService getService(String type) {
