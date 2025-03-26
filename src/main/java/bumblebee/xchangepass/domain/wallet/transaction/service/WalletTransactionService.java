@@ -1,13 +1,14 @@
 package bumblebee.xchangepass.domain.wallet.transaction.service;
 
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
+import bumblebee.xchangepass.domain.wallet.transaction.dto.request.WalletTransactionSearchCondition;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
-import bumblebee.xchangepass.domain.wallet.wallet.WalletTransactionProducer;
+import bumblebee.xchangepass.domain.wallet.transaction.producer.WalletTransactionProducer;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletTransactionResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,9 +38,9 @@ public class WalletTransactionService {
     }
 
     @Transactional
-    public List<WalletTransactionResponse> getTransaction(Long userId) {
+    public List<WalletTransactionResponse> getTransaction(Long userId, WalletTransactionSearchCondition cond, Pageable pageable) {
         Wallet wallet = walletRepository.findByUserIdWithLock(userId);
-        return transactionRepository.getWalletTransaction(wallet.getWalletId())
+        return transactionRepository.search(wallet.getWalletId(), cond, pageable)
                 .stream().map(WalletTransactionResponse::fromEntity)
                 .toList();
     }
