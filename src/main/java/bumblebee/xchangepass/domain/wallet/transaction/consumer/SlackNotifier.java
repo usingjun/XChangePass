@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.wallet.consumer;
+package bumblebee.xchangepass.domain.wallet.transaction.consumer;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

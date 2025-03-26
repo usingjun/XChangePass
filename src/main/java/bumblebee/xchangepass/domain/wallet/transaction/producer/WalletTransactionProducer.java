@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.wallet;
+package bumblebee.xchangepass.domain.wallet.transaction.producer;
 
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransactionMessage;

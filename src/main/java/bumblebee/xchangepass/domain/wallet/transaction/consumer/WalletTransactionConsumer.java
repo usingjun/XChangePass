@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.wallet;
+package bumblebee.xchangepass.domain.wallet.transaction.consumer;
 
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionStatus;

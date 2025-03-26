@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.wallet.consumer;
+package bumblebee.xchangepass.domain.wallet.transaction.consumer;
 
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransactionMessage;
 import com.rabbitmq.client.Channel;
