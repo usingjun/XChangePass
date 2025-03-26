@@ -25,17 +25,17 @@ repositories {
 
 dependencies {
     // Spring Boot 핵심 기능 라이브러리
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'   // JPA 및 Hibernate를 통한 데이터 접근 지원
-    implementation 'org.springframework.boot:spring-boot-starter-validation' // 데이터 검증을 위한 라이브러리 (Bean Validation)
-    implementation 'org.springframework.boot:spring-boot-starter-web'        // 웹 애플리케이션 개발을 위한 라이브러리 (Spring MVC 포함)
-    implementation 'org.springframework.boot:spring-boot-starter-websocket'  // WebSocket 기능을 제공하는 라이브러리
-    implementation 'org.springframework.boot:spring-boot-starter-webflux'    // WebFlux 라이브러리
-    implementation 'org.springframework.boot:spring-boot-starter-batch'      // Spring Batch 의존성
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'   // Spring 모니터링
-    implementation 'org.springframework.boot:spring-boot-starter-aop'        // Spring AOP
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'          // JPA 및 Hibernate를 통한 데이터 접근 지원
+    implementation 'org.springframework.boot:spring-boot-starter-validation'        // 데이터 검증을 위한 라이브러리 (Bean Validation)
+    implementation 'org.springframework.boot:spring-boot-starter-web'               // 웹 애플리케이션 개발을 위한 라이브러리 (Spring MVC 포함)
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'         // WebSocket 기능을 제공하는 라이브러리
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'           // WebFlux 라이브러리
+    implementation 'org.springframework.boot:spring-boot-starter-batch'             // Spring Batch 의존성
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'          // Spring 모니터링
+    implementation 'org.springframework.boot:spring-boot-starter-aop'               // Spring AOP
 
     // Spring Security (인증 및 인가 관련 보안 기능)
-    implementation 'org.springframework.boot:spring-boot-starter-security'   // Spring Security 기본 설정 및 기능 제공
+    implementation 'org.springframework.boot:spring-boot-starter-security'          // Spring Security 기본 설정 및 기능 제공
     testImplementation 'org.springframework.security:spring-security-test'
 
     // JWT (JSON Web Token) 관련 라이브러리
@@ -44,36 +44,36 @@ dependencies {
     implementation 'io.jsonwebtoken:jjwt-jackson:0.11.5'
 
     // 테스트
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'   // Spring Boot의 테스트 도구 모음 (JUnit, Mockito 포함)
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'             // JUnit 플랫폼 런처 (테스트 실행 환경 제공)
-    testImplementation "org.testcontainers:testcontainers:1.19.2"            // Docker 기반 통합 테스트 지원 (Testcontainers 기본 라이브러리)
-    testImplementation "org.testcontainers:junit-jupiter:1.19.2"             // JUnit 5(Testcontainers 연동) 지원
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'          // Spring Boot의 테스트 도구 모음 (JUnit, Mockito 포함)
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'                    // JUnit 플랫폼 런처 (테스트 실행 환경 제공)
+    testImplementation "org.testcontainers:testcontainers:1.19.2"                   // Docker 기반 통합 테스트 지원 (Testcontainers 기본 라이브러리)
+    testImplementation "org.testcontainers:junit-jupiter:1.19.2"                    // JUnit 5(Testcontainers 연동) 지원
 
     // 데이터베이스
-    runtimeOnly 'com.h2database:h2'                                          // 인메모리 데이터베이스a H2 (테스트 및 개발 환경용)
-    runtimeOnly 'org.postgresql:postgresql:42.5.2'                           // PostgreSQL 데이터베이스 드라이버 (운영 환경에서 사용)
+    runtimeOnly 'com.h2database:h2'                                                 // 인메모리 데이터베이스a H2 (테스트 및 개발 환경용)
+    runtimeOnly 'org.postgresql:postgresql:42.5.2'                                  // PostgreSQL 데이터베이스 드라이버 (운영 환경에서 사용)
 
     // Redis
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis' // Spring Data Redis 라이브러리
-    testImplementation 'com.redis:testcontainers-redis:2.2.2'                // Redis용 Testcontainers (테스트 환경에서 Redis 컨테이너 실행)
-    implementation 'org.redisson:redisson-spring-boot-starter:3.23.4'        // Redisson 락 적용
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'        // Spring Data Redis 라이브러리
+    testImplementation 'com.redis:testcontainers-redis:2.2.2'                       // Redis용 Testcontainers (테스트 환경에서 Redis 컨테이너 실행)
+    implementation 'org.redisson:redisson-spring-boot-starter:3.23.4'               // Redisson 락 적용
 
     // 쿼리DSL
-    implementation 'com.querydsl:querydsl-jpa:5.0.0:jakarta'                 // QueryDSL의 JPA 모듈
-    annotationProcessor "com.querydsl:querydsl-apt:5.0.0:jakarta"            // QueryDSL 코드 자동 생성 도구
-    annotationProcessor "jakarta.annotation:jakarta.annotation-api"          // Jakarta Annotation API (자바 표준 어노테이션 지원)
-    annotationProcessor "jakarta.persistence:jakarta.persistence-api"        // Jakarta Persistence API (JPA 관련 표준 API 지원)
+    implementation 'com.querydsl:querydsl-jpa:5.0.0:jakarta'                        // QueryDSL의 JPA 모듈
+    annotationProcessor "com.querydsl:querydsl-apt:5.0.0:jakarta"                   // QueryDSL 코드 자동 생성 도구
+    annotationProcessor "jakarta.annotation:jakarta.annotation-api"                 // Jakarta Annotation API (자바 표준 어노테이션 지원)
+    annotationProcessor "jakarta.persistence:jakarta.persistence-api"               // Jakarta Persistence API (JPA 관련 표준 API 지원)
 
     // AWS
-    implementation 'software.amazon.awssdk:kms:2.20.0'                       // AWS KMS 의존성
+    implementation 'software.amazon.awssdk:kms:2.20.0'                              // AWS KMS 의존성
 
     // 기타
-    compileOnly 'org.projectlombok:lombok'                                   // Lombok (Getter, Setter, Constructor 자동 생성)
-    annotationProcessor 'org.projectlombok:lombok'                           // Lombok 사용을 위한 어노테이션 프로세서
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4' // Swagger Ui
-    implementation 'io.projectreactor.netty:reactor-netty:1.1.22'            // Reactor Netty 의존성
-    implementation 'com.fasterxml.jackson.core:jackson-databind'             // JSON 파싱을 위한 의존성
-    implementation 'com.google.code.gson:gson:2.10.1'                        // JSON 데이터를 다룰 수 있는 클래스
+    compileOnly 'org.projectlombok:lombok'                                          // Lombok (Getter, Setter, Constructor 자동 생성)
+    annotationProcessor 'org.projectlombok:lombok'                                  // Lombok 사용을 위한 어노테이션 프로세서
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4'        // Swagger Ui
+    implementation 'io.projectreactor.netty:reactor-netty:1.1.22'                   // Reactor Netty 의존성
+    implementation 'com.fasterxml.jackson.core:jackson-databind'                    // JSON 파싱을 위한 의존성
+    implementation 'com.google.code.gson:gson:2.10.1'                               // JSON 데이터를 다룰 수 있는 클래스
 }
 
 tasks.named('test') {
