@@ -1,6 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.transaction;
 
-import bumblebee.xchangepass.domain.wallet.wallet.consumer.SlackNotifier;
+import bumblebee.xchangepass.domain.wallet.transaction.consumer.SlackNotifier;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
