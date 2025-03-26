@@ -80,7 +80,7 @@ services:
       - ./k6-scripts:/k6-scripts    # K6 스크립트가 있는 디렉토리
     environment:
       - K6_OUT=influxdb=http://influxdb:8086/k6
-    command: ["run", "/k6-scripts/.."]
+    command: ["run", "/k6-scripts/test.js"]
 
   # 🔹 Spring Boot 애플리케이션
   app:
