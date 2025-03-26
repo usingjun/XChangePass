@@ -64,7 +64,7 @@ public class User {
     @Column(name = "is_deleted")
     private Boolean isDeleted;
 
-    @OneToOne(mappedBy ="user", orphanRemoval = true, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy ="user", orphanRemoval = true, cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     private Wallet wallet;
 
     @OneToMany(mappedBy = "user", orphanRemoval = true, cascade = CascadeType.ALL)
