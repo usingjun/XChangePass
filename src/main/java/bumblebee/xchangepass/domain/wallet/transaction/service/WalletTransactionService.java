@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.transaction.service;
 
 import bumblebee.xchangepass.domain.wallet.transaction.dto.request.WalletTransactionSearchCondition;
+import bumblebee.xchangepass.domain.wallet.transaction.dto.response.WalletTransactionListResponse;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
 import bumblebee.xchangepass.domain.wallet.transaction.producer.WalletTransactionProducer;
@@ -38,10 +39,10 @@ public class WalletTransactionService {
     }
 
     @Transactional
-    public List<WalletTransactionResponse> getTransaction(Long userId, WalletTransactionSearchCondition cond, Pageable pageable) {
+    public List<WalletTransactionListResponse> getTransaction(Long userId, WalletTransactionSearchCondition cond, Pageable pageable) {
         Wallet wallet = walletRepository.findByUserIdWithLock(userId);
         return transactionRepository.search(wallet.getWalletId(), cond, pageable)
-                .stream().map(WalletTransactionResponse::fromEntity)
+                .stream().map(WalletTransactionListResponse::fromEntity)
                 .toList();
     }
 
