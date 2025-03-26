@@ -107,6 +107,6 @@ export function getCardDetailRepeated(BASE_URL, authParams, cardId, repeatCount)
             console.error(`[${i + 1}/${repeatCount}] 카드 상세 정보 조회 실패`);
         }
 
-        sleep(1);
+        sleep(0.1);
     }
 }
