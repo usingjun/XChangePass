@@ -29,5 +29,5 @@ public interface UserRepository extends JpaRepository<User, Long>, UserRepositor
             FROM User u
             WHERE u.userId = :userId
             """)
-    Optional<User> findByUserId(Long userId);
+    Optional<User> findByUserId(@Param("userId") Long userId);
 }
