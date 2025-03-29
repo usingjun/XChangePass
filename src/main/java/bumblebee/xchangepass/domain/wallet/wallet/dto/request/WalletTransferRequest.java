@@ -12,10 +12,13 @@ import java.util.Currency;
 
 @Schema(description = "송금 요청 객체")
 public record WalletTransferRequest(
-        //추후 수정 고려
-        @Schema(description = "받으시는 분 walletId", example = "1")
+        @Schema(description = "받으시는 분 성함", example = "홍길동")
         @NotNull
-        Long receiverWalletId,
+        String receiverName,
+
+        @Schema(description = "받으시는 분 전화번호", example = "010-1234-1234")
+        @NotNull
+        String receiverPhoneNumber,
 
         @Schema(description = "송금할 금액", example = "10000.00")
         @DecimalMin(value = "1.00", message = "금액은 1.00 이상이어야 합니다.")

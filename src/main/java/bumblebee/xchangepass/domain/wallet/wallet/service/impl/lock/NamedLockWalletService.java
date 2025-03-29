@@ -87,8 +87,11 @@ public class NamedLockWalletService implements WalletService {
     @Override
     @Transactional
     public void transfer(Long senderId, WalletTransferRequest request) {
-        Wallet fromWallet = walletRepository.findByUserId(senderId);
-        Wallet toWallet = walletRepository.findById(request.receiverWalletId())
+        User receiver = userService.readUser(request.receiverName(), request.receiverPhoneNumber());
+
+        Wallet fromWallet = walletRepository.findByUserId(senderId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+        Wallet toWallet = walletRepository.findById(receiver.getUserId())
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
         // Deadlock 방지를 위해 ID 크기 순으로 Advisory Lock을 획득

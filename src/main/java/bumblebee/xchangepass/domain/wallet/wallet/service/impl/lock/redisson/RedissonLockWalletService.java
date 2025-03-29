@@ -87,9 +87,15 @@ public class RedissonLockWalletService implements WalletService {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void transfer(Long senderId, WalletTransferRequest request) {
-        Wallet wallet = walletRepository.findByUserIdWithLock(senderId);
-        String senderLockKey = "wallet:" + wallet.getWalletId();
-        String receiverLockKey = "wallet:" + request.receiverWalletId();
+        User receiver = userService.readUser(request.receiverName(), request.receiverPhoneNumber());
+
+        Wallet senderWallet = walletRepository.findByUserIdWithLock(senderId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+        Wallet receiverWallet = walletRepository.findByUserIdWithLock(receiver.getUserId())
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+
+        String senderLockKey = "senderWallet:" + senderWallet.getWalletId();
+        String receiverLockKey = "senderWallet:" + receiverWallet.getWalletId();
 
         RLock senderLock = redissonLock.getRedissonClient().getLock(senderLockKey);
         RLock receiverLock = redissonLock.getRedissonClient().getLock(receiverLockKey);

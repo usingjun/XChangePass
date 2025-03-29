@@ -6,7 +6,6 @@ import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransaction
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
-import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletTransactionResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletServiceFactory;
 import bumblebee.xchangepass.global.security.jwt.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -93,7 +92,7 @@ public class WalletController {
         return walletServiceFactory.getService("pessimisticLock").withdrawal(JwtUtil.getLoginId(authentication), request);
     }
 
-    @Operation(summary = "송금", description = "돈을 송금합니다.")
+    @Operation(summary = "앱 내 송금", description = "돈을 송금합니다.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "송금 성공", content = @Content(mediaType = "application/json")),
             @ApiResponse(responseCode = "400", description = "먼저 충전이 필요합니다.",

@@ -101,10 +101,13 @@ public class PessimisticLockWalletService implements WalletService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void transfer(Long senderId, WalletTransferRequest request) {
         try {
-            Wallet senderWallet = walletRepository.findByUserIdWithLock(senderId);
-            if (senderWallet == null) {
-                throw ErrorCode.WALLET_NOT_FOUND.commonException();
-            }
+            User receiver = userService.readUser(request.receiverName(), request.receiverPhoneNumber());
+
+            Wallet senderWallet = walletRepository.findByUserIdWithLock(senderId)
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+            Wallet receiverWallet = walletRepository.findByUserIdWithLock(receiver.getUserId())
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+
             WalletBalance fromBalance = balanceService.findBalanceWithLock(senderWallet.getWalletId(), request.fromCurrency());
             if (fromBalance == null) {
                 throw ErrorCode.BALANCE_NOT_FOUND.commonException();
