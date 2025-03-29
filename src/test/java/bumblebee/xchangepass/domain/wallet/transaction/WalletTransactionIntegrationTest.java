@@ -22,8 +22,7 @@ import org.mockito.Mockito;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.util.TestPropertyValues;
-import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -61,20 +60,8 @@ public class WalletTransactionIntegrationTest {
 
     @Autowired private WalletTransactionRepository transactionRepository;
 
+    @MockBean
     private SlackNotifier slackNotifier;
-
-    @Autowired
-    private ConfigurableApplicationContext context;
-
-    @BeforeEach
-    void setUpMocks() {
-        slackNotifier = Mockito.mock(SlackNotifier.class);
-        TestPropertyValues.of("spring.main.allow-bean-definition-overriding=true")
-                .applyTo(context);
-
-        context.getBeanFactory()
-                .registerSingleton("slackNotifier", slackNotifier);
-    }
 
     @Container
     static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
