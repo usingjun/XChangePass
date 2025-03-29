@@ -5,24 +5,33 @@ import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
-import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
-import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
 import bumblebee.xchangepass.domain.wallet.transaction.consumer.DeadLetterConsumer;
 import bumblebee.xchangepass.domain.wallet.transaction.consumer.SlackNotifier;
 import bumblebee.xchangepass.domain.wallet.transaction.dto.WalletTransactionMessage;
+import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
+import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
+import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
+import bumblebee.xchangepass.global.error.ErrorCode;
 import com.rabbitmq.client.Channel;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.util.TestPropertyValues;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -38,7 +47,7 @@ import static org.mockito.Mockito.verify;
 
 @SpringBootTest
 @ActiveProfiles("test")
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Testcontainers
 @Import(TestUserInitializer.class)
 public class WalletTransactionIntegrationTest {
 
@@ -50,24 +59,68 @@ public class WalletTransactionIntegrationTest {
 
     @Autowired private WalletBalanceService balanceService;
 
-    @Autowired private WalletTransactionService transactionService;
-
     @Autowired private WalletTransactionRepository transactionRepository;
 
-    @MockBean
     private SlackNotifier slackNotifier;
+
+    @Autowired
+    private ConfigurableApplicationContext context;
+
+    @BeforeEach
+    void setUpMocks() {
+        slackNotifier = Mockito.mock(SlackNotifier.class);
+        TestPropertyValues.of("spring.main.allow-bean-definition-overriding=true")
+                .applyTo(context);
+
+        context.getBeanFactory()
+                .registerSingleton("slackNotifier", slackNotifier);
+    }
+
+    @Container
+    static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
+            .withDatabaseName("xcp_test")
+            .withUsername("testuser")
+            .withPassword("testpass");
+
+    @Container
+    static GenericContainer<?> rabbitMqContainer = new GenericContainer<>("rabbitmq:3-management")
+            .withExposedPorts(5672, 15672)
+            .withEnv("RABBITMQ_DEFAULT_USER", "guest")
+            .withEnv("RABBITMQ_DEFAULT_PASS", "guest");
+
+    @DynamicPropertySource
+    static void overrideDataSourceProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
+        registry.add("spring.datasource.username", postgresContainer::getUsername);
+        registry.add("spring.datasource.password", postgresContainer::getPassword);
+    }
+
+    @DynamicPropertySource
+    static void overrideProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.rabbitmq.host", rabbitMqContainer::getHost);
+        registry.add("spring.rabbitmq.port", () -> rabbitMqContainer.getMappedPort(5672));
+    }
 
     private Wallet testWallet1;
     private Wallet testWallet2;
     Currency krw = Currency.getInstance("KRW");
 
-    @BeforeAll
+    @BeforeEach
+    void initAll() throws InterruptedException {
+        setup();
+        clearTransactions();
+        Thread.sleep(3000);
+    }
+
+
     void setup() {
         User user1 = userRepository.findByUserEmail("Test1@gmail.com").orElseThrow();
         User user2 = userRepository.findByUserEmail("Test2@gmail.com").orElseThrow();
 
-        testWallet1 = walletRepository.findByUserId(user1.getUserId());
-        testWallet2 = walletRepository.findByUserId(user2.getUserId());
+        testWallet1 = walletRepository.findByUserId(user1.getUserId())
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+        testWallet2 = walletRepository.findByUserId(user2.getUserId())
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
         if (!balanceService.checkBalance(testWallet1.getWalletId(), krw))
             balanceService.createBalance(testWallet1, krw);
@@ -75,7 +128,6 @@ public class WalletTransactionIntegrationTest {
             balanceService.createBalance(testWallet2, krw);
     }
 
-    @BeforeEach
     void clearTransactions() {
         transactionRepository.deleteAll(); // 트랜잭션만 초기화
         balanceRepository.zeroBalance(testWallet1.getWalletId(), krw);
