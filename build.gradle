@@ -48,6 +48,7 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'             // JUnit 플랫폼 런처 (테스트 실행 환경 제공)
     testImplementation "org.testcontainers:testcontainers:1.19.2"            // Docker 기반 통합 테스트 지원 (Testcontainers 기본 라이브러리)
     testImplementation "org.testcontainers:junit-jupiter:1.19.2"             // JUnit 5(Testcontainers 연동) 지원
+    testImplementation 'org.testcontainers:postgresql:1.19.2'
 
     // 데이터베이스
     runtimeOnly 'com.h2database:h2'                                          // 인메모리 데이터베이스a H2 (테스트 및 개발 환경용)
