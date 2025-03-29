@@ -1,6 +1,10 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock;
 
 import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
+import bumblebee.xchangepass.domain.user.dto.response.UserResponse;
+import bumblebee.xchangepass.domain.user.entity.User;
+import bumblebee.xchangepass.domain.user.repository.UserRepository;
+import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
@@ -30,6 +34,7 @@ public class PessimisticLockWalletService implements WalletService {
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final ExchangeService exchangeService;
+    private final UserService userService;
 
     @Override
     public String getType() {
@@ -45,10 +50,8 @@ public class PessimisticLockWalletService implements WalletService {
         }
 
         try {
-            Wallet wallet = walletRepository.findByUserIdWithLock(userId);
-            if (wallet == null) {
-                throw ErrorCode.WALLET_NOT_FOUND.commonException();
-            }
+            Wallet wallet = walletRepository.findByUserIdWithLock(userId)
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
             if (!balanceService.checkBalance(wallet.getWalletId(), request.toCurrency())) {
                 Wallet findWallet = walletRepository.findById(wallet.getWalletId())
@@ -74,10 +77,8 @@ public class PessimisticLockWalletService implements WalletService {
         }
 
         try {
-            Wallet wallet = walletRepository.findByUserIdWithLock(userId);
-            if (wallet == null) {
-                throw ErrorCode.WALLET_NOT_FOUND.commonException();
-            }
+            Wallet wallet = walletRepository.findByUserIdWithLock(userId)
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
             WalletBalance balance = balanceService.findBalanceWithLock(wallet.getWalletId(), request.toCurrency());
             if (balance == null) {
@@ -109,14 +110,14 @@ public class PessimisticLockWalletService implements WalletService {
                 throw ErrorCode.BALANCE_NOT_FOUND.commonException();
             }
 
-            if (!balanceService.checkBalance(request.receiverWalletId(), request.toCurrency())) {
-                Wallet wallet = walletRepository.findById(request.receiverWalletId())
+            if (!balanceService.checkBalance(receiverWallet.getWalletId(), request.toCurrency())) {
+                Wallet wallet = walletRepository.findById(receiverWallet.getWalletId())
                         .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
                 balanceService.createBalance(wallet, request.toCurrency());
             }
 
-            WalletBalance toBalance = balanceService.findBalanceWithLock(request.receiverWalletId(), request.toCurrency());
+            WalletBalance toBalance = balanceService.findBalanceWithLock(receiverWallet.getWalletId(), request.toCurrency());
 
             BigDecimal transferAmount = request.transferAmount();
             if (transferAmount.compareTo(fromBalance.getBalance()) > 0) {
@@ -138,10 +139,8 @@ public class PessimisticLockWalletService implements WalletService {
     @Transactional
     public List<WalletBalanceResponse> balance(Long userId) {
         try {
-            Wallet wallet = walletRepository.findByUserIdWithLock(userId);
-            if (wallet == null) {
-                throw ErrorCode.WALLET_NOT_FOUND.commonException();
-            }
+            Wallet wallet = walletRepository.findByUserIdWithLock(userId)
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
             List<WalletBalance> balanceList = balanceService.findBalancesWithLock(wallet.getWalletId());
 

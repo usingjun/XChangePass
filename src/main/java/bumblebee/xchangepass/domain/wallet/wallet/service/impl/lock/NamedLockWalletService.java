@@ -1,5 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock;
 
+import bumblebee.xchangepass.domain.user.entity.User;
+import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
@@ -28,6 +30,7 @@ public class NamedLockWalletService implements WalletService {
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final NamedLockRepository namedLockRepository;
+    private final UserService userService;
 
     @Override
     public String getType() {
@@ -37,11 +40,8 @@ public class NamedLockWalletService implements WalletService {
     @Override
     @Transactional
     public void charge(Long userId, WalletInOutRequest request) {
-        Wallet wallet = walletRepository.findByUserId(userId);
-
-        if (wallet == null) {
-            throw ErrorCode.WALLET_NOT_FOUND.commonException();
-        }
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
         namedLockRepository.getLock(wallet.getWalletId());
         try {
@@ -65,10 +65,8 @@ public class NamedLockWalletService implements WalletService {
     @Override
     @Transactional
     public BigDecimal withdrawal(Long userId, WalletInOutRequest request) {
-        Wallet wallet = walletRepository.findByUserId(userId);
-        if (wallet == null) {
-            throw ErrorCode.WALLET_NOT_FOUND.commonException();
-        }
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
         namedLockRepository.getLock(wallet.getWalletId());
         try {
@@ -127,10 +125,8 @@ public class NamedLockWalletService implements WalletService {
     @Override
     @Transactional
     public List<WalletBalanceResponse> balance(Long userId) {
-        Wallet wallet = walletRepository.findByUserId(userId);
-        if (wallet == null) {
-            throw ErrorCode.WALLET_NOT_FOUND.commonException();
-        }
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
         namedLockRepository.getLock(wallet.getWalletId());
         try {

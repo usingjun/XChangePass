@@ -1,5 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.redisson;
 
+import bumblebee.xchangepass.domain.user.entity.User;
+import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
@@ -29,6 +31,7 @@ public class RedissonLockWalletService implements WalletService {
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final RedissonLock redissonLock;
+    private final UserService userService;
 
     @Override
     public String getType() {
@@ -43,7 +46,8 @@ public class RedissonLockWalletService implements WalletService {
     public void charge(Long userId, WalletInOutRequest request) {
         String lockKey = "wallet:" + userId;
         redissonLock.tryLockVoid(lockKey, 10, 10, () -> {
-            Wallet wallet = walletRepository.findByUserId(userId);
+            Wallet wallet = walletRepository.findByUserId(userId)
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
             if (!balanceService.checkBalance(wallet.getWalletId(), request.toCurrency())) {
                 Wallet findWallet = walletRepository.findById(wallet.getWalletId())
@@ -64,7 +68,8 @@ public class RedissonLockWalletService implements WalletService {
     public BigDecimal withdrawal(Long userId, WalletInOutRequest request) {
         String lockKey = "wallet:" + userId;
         return redissonLock.tryLock(lockKey, 10, 10, () -> {
-            Wallet wallet = walletRepository.findByUserId(userId);
+            Wallet wallet = walletRepository.findByUserId(userId)
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
             WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
 
             if (request.amount().compareTo(balance.getBalance()) > 0) {
@@ -97,8 +102,8 @@ public class RedissonLockWalletService implements WalletService {
                 throw ErrorCode.LOCK_TIME_OUT.commonException();
             }
 
-            WalletBalance fromBalance = balanceService.findBalance(wallet.getWalletId(), request.fromCurrency());
-            WalletBalance toBalance = balanceService.findBalance(request.receiverWalletId(), request.toCurrency());
+            WalletBalance fromBalance = balanceService.findBalance(senderWallet.getWalletId(), request.fromCurrency());
+            WalletBalance toBalance = balanceService.findBalance(receiverWallet.getWalletId(), request.toCurrency());
 
             if (request.transferAmount().compareTo(fromBalance.getBalance()) > 0) {
                 throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
@@ -114,7 +119,7 @@ public class RedissonLockWalletService implements WalletService {
                 try {
                     multiLock.unlock(); // ✅ unlock 예외 처리 추가
                 } catch (IllegalMonitorStateException e) {
-                    log.error("⚠️ [MultiLock 해제 실패] senderId: {}, receiverId: {}", senderId, request.receiverWalletId(), e);
+                    log.error("⚠️ [MultiLock 해제 실패] senderId: {}, receiverId: {}", senderId, receiverWallet.getWalletId(), e);
                 }
             }
         }
@@ -123,10 +128,8 @@ public class RedissonLockWalletService implements WalletService {
     @Override
     @Transactional
     public List<WalletBalanceResponse> balance(Long userId) {
-        Wallet wallet = walletRepository.findByUserId(userId);
-        if (wallet == null) {
-            throw ErrorCode.WALLET_NOT_FOUND.commonException();
-        }
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
         List<WalletBalance> balanceList = balanceService.findBalances(wallet.getWalletId());
 

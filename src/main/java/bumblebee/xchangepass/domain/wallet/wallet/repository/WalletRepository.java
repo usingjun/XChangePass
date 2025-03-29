@@ -9,19 +9,18 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 @Repository
-//@Transactional(readOnly = true)
 public interface WalletRepository extends JpaRepository<Wallet, Long> {
 
-//    @Lock(LockModeType.PESSIMISTIC_WRITE)
-//    @Transactional(readOnly = false)
     @Query("SELECT w FROM Wallet w WHERE w.user.userId = :userId")
-    Wallet findByUserId(@Param("userId") Long userId);
+    Optional<Wallet> findByUserId(@Param("userId") Long userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Transactional(readOnly = false)
     @Query("SELECT w FROM Wallet w WHERE w.user.userId = :userId")
-    Wallet findByUserIdWithLock(@Param("userId") Long userId);
+    Optional<Wallet> findByUserIdWithLock(@Param("userId") Long userId);
 
     @Query("SELECT COUNT(w) > 0 FROM Wallet w WHERE w.user.userId = :userId")
     boolean existsByUserId(@Param("userId") Long userId);

@@ -31,6 +31,11 @@ public class UserService {
         return new UserResponse(user);
     }
 
+    public User readUser(String userName, String userPhoneNumber) {
+        return userRepository.findByUserId(userName, userPhoneNumber)
+                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+    }
+
     /**
      * ✅ 사용자 정보 수정
      */
