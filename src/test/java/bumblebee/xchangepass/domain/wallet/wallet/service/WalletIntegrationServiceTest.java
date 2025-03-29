@@ -3,32 +3,41 @@ package bumblebee.xchangepass.domain.wallet.wallet.service;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
+import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.PessimisticLockWalletService;
-import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
-import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -36,8 +45,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SpringBootTest
+@Testcontainers
 @ActiveProfiles("test")
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class WalletIntegrationServiceTest {
 
     @Autowired
@@ -52,6 +61,8 @@ class WalletIntegrationServiceTest {
     private WalletBalanceRepository walletBalanceRepository;
     @Autowired
     private WalletBalanceService balanceService;
+    @Autowired
+    private WalletTransactionRepository walletTransactionRepository;
 
     private final BigDecimal CHARGE_AMOUNT = new BigDecimal("10000.00");
     private final BigDecimal TRANSFER_AMOUNT = new BigDecimal("5000.00");
@@ -62,11 +73,37 @@ class WalletIntegrationServiceTest {
     private Wallet senderWallet;
     private Wallet receiverWallet;
 
-    /**
-     * 💡 모든 테스트 실행 전에 사용자 & 지갑을 미리 생성
-     */
+
+    @Container
+    static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
+            .withDatabaseName("xcp_test")
+            .withUsername("testuser")
+            .withPassword("testpass");
+
+    @Container
+    static GenericContainer<?> rabbitMqContainer = new GenericContainer<>("rabbitmq:3-management")
+            .withExposedPorts(5672, 15672)
+            .withEnv("RABBITMQ_DEFAULT_USER", "guest")
+            .withEnv("RABBITMQ_DEFAULT_PASS", "guest");
+
+    @DynamicPropertySource
+    static void overrideDataSourceProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
+        registry.add("spring.datasource.username", postgresContainer::getUsername);
+        registry.add("spring.datasource.password", postgresContainer::getPassword);
+    }
+
+    @DynamicPropertySource
+    static void overrideProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.rabbitmq.host", rabbitMqContainer::getHost);
+        registry.add("spring.rabbitmq.port", () -> rabbitMqContainer.getMappedPort(5672));
+    }
+
+
     @BeforeEach
-    void setup() {
+    void setup() throws InterruptedException {
+        Thread.sleep(300);
+        walletTransactionRepository.deleteAll();
         walletBalanceRepository.deleteAll();
         walletRepository.deleteAll();
         userRepository.deleteAll(); // 기존 데이터 삭제
@@ -95,7 +132,8 @@ class WalletIntegrationServiceTest {
     private Wallet createWalletForUser(User user, String walletPassword) {
         walletService.createWallet(user, walletPassword);
 
-        return walletRepository.findByUserId(user.getUserId());
+        return walletRepository.findByUserId(user.getUserId())
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
     }
 
     private String generateRandomId() {
@@ -107,7 +145,7 @@ class WalletIntegrationServiceTest {
     void testTransferSuccess() {
         pessimisticLockWalletService.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest( receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
         pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest);
 
         WalletBalance senderBalance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
@@ -120,13 +158,12 @@ class WalletIntegrationServiceTest {
     @Test
     @DisplayName("잔액이 부족할 때 송금이 실패한다")
     void testTransferFailureDueToInsufficientFunds() {
-        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserId(), CHARGE_AMOUNT.add(BigDecimal.ONE), CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
         Exception exception = assertThrows(RuntimeException.class, () -> pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest));
         assertThat(exception.getMessage()).contains("충전 금액이 부족합니다.");
     }
 
     @Test
-    @Transactional
     @DisplayName("계좌에 충전이 성공한다")
     void testChargeWallet() {
         pessimisticLockWalletService.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()));
@@ -155,9 +192,7 @@ class WalletIntegrationServiceTest {
         Long senderId = senderWallet.getWalletId();
         Long receiverId = receiverWallet.getWalletId();
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest(
-                receiverId, TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
-        );
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
 
         for (int i = 0; i < concurrentUsers; i++) {
             executorService.submit(() -> {
@@ -220,9 +255,8 @@ class WalletIntegrationServiceTest {
         Future<?> transferFuture = executorService.submit(() -> {
             try {
                 System.out.println("🚀 [송금 시작]");
-                WalletTransferRequest transferRequest = new WalletTransferRequest(
-                        receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
-                );
+                WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+
                 pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest);
                 isTransferFirst.set(true);
             } catch (Exception e) {
@@ -288,9 +322,7 @@ class WalletIntegrationServiceTest {
                 CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest(
-                receiver.getUserId(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
-        );
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
 
         CountDownLatch latch = new CountDownLatch(1); // 🔥 1로 설정 (이체 먼저 실행)
 
