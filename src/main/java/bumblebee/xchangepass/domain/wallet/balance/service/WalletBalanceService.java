@@ -21,7 +21,6 @@ public class WalletBalanceService {
     private final WalletBalanceRepository balanceRepository;
     private final WalletTransactionService transactionService;
 
-    @Transactional
     public void createBalance(Wallet wallet, Currency currency) {
         if (balanceRepository.existsByCurrency(wallet.getWalletId(), currency)) {
             return;
@@ -31,34 +30,32 @@ public class WalletBalanceService {
         balanceRepository.save(balance);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public WalletBalance findBalance(Long walletId, Currency currency) {
         return balanceRepository.findByWalletIdAndCurrency(walletId, currency)
                 .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public WalletBalance findBalanceWithLock(Long walletId, Currency currency) {
         return balanceRepository.findByWalletIdAndCurrencyWithPessimisticLock(walletId, currency)
                 .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<WalletBalance> findBalances(Long walletId) {
         return balanceRepository.findByWalletId(walletId);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<WalletBalance> findBalancesWithLock(Long walletId) {
         return balanceRepository.findByWalletIdWithPessimisticLock(walletId);
     }
 
-    @Transactional
     public boolean checkBalance(Long walletId, Currency currency) {
         return balanceRepository.existsByCurrency(walletId, currency);
     }
 
-    @Transactional
     public void chargeBalance(WalletBalance balance, BigDecimal amount) {
         balance.addBalance(amount);
         balanceRepository.save(balance);
@@ -66,7 +63,6 @@ public class WalletBalanceService {
         transactionService.saveTransaction(balance.getWallet().getWalletId(), null, amount, null, balance.getCurrency(), WalletTransactionType.DEPOSIT);
     }
 
-    @Transactional
     public void withdrawBalance(WalletBalance balance, BigDecimal amount) {
         if (amount.compareTo(balance.getBalance()) > 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
@@ -78,7 +74,6 @@ public class WalletBalanceService {
         transactionService.saveTransaction(balance.getWallet().getWalletId(), null, amount, null, balance.getCurrency(), WalletTransactionType.WITHDRAWAL);
     }
 
-    @Transactional
     public void transferBalance(WalletBalance fromBalance, WalletBalance toBalance, BigDecimal amount) {
         fromBalance.subtractBalance(amount);
         toBalance.addBalance(amount);
