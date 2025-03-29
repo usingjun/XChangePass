@@ -36,7 +36,7 @@ public class WalletBalanceService {
                 .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public WalletBalance findBalanceWithLock(Long walletId, Currency currency) {
         return balanceRepository.findByWalletIdAndCurrencyWithPessimisticLock(walletId, currency)
                 .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
@@ -47,7 +47,7 @@ public class WalletBalanceService {
         return balanceRepository.findByWalletId(walletId);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<WalletBalance> findBalancesWithLock(Long walletId) {
         return balanceRepository.findByWalletIdWithPessimisticLock(walletId);
     }
