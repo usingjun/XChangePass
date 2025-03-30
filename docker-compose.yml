@@ -56,7 +56,7 @@ services:
     networks:
       - monitoring
     ports:
-      - "5673:5672"
+      - "5672:5672"
       - "15673:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=guest
@@ -114,7 +114,6 @@ services:
     ports:
       - "9090:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/xchangepass
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
