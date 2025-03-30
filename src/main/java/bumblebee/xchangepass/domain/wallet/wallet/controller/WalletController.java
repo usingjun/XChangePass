@@ -72,7 +72,7 @@ public class WalletController {
     @ResponseStatus(HttpStatus.CREATED)
     public void charge(@RequestBody @Valid WalletInOutRequest request,
                        Authentication authentication) {
-        walletServiceFactory.getService("pessimisticLock").charge(JwtUtil.getLoginId(authentication), request);
+        walletServiceFactory.getService("namedLock").charge(JwtUtil.getLoginId(authentication), request);
     }
 
     @Operation(summary = "출금", description = "돈을 출금합니다.")
@@ -89,7 +89,7 @@ public class WalletController {
     @ResponseStatus(HttpStatus.OK)
     public BigDecimal withdrawal(@RequestBody @Valid WalletInOutRequest request,
                                  Authentication authentication) {
-        return walletServiceFactory.getService("pessimisticLock").withdrawal(JwtUtil.getLoginId(authentication), request);
+        return walletServiceFactory.getService("namedLock").withdrawal(JwtUtil.getLoginId(authentication), request);
     }
 
     @Operation(summary = "앱 내 송금", description = "돈을 송금합니다.")
@@ -112,7 +112,7 @@ public class WalletController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void transfer(@RequestBody @Valid WalletTransferRequest request,
                          Authentication authentication) {
-        walletServiceFactory.getService("pessimisticLock").transfer(JwtUtil.getLoginId(authentication), request);
+        walletServiceFactory.getService("namedLock").transfer(JwtUtil.getLoginId(authentication), request);
     }
 
     @Operation(summary = "잔액 조회", description = "잔액을 조회합니다.")
@@ -128,7 +128,7 @@ public class WalletController {
     @GetMapping("/balance")
     @ResponseStatus(HttpStatus.OK)
     public List<WalletBalanceResponse> balance(Authentication authentication) {
-        return walletServiceFactory.getService("pessimisticLock").balance(JwtUtil.getLoginId(authentication));
+        return walletServiceFactory.getService("namedLock").balance(JwtUtil.getLoginId(authentication));
     }
 
 

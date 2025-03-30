@@ -42,6 +42,8 @@ public record WalletTransactionListResponse(
 
 ) {
     public static WalletTransactionListResponse fromEntity(WalletTransaction transaction) {
+        Wallet counterWallet = transaction.getCounterWallet();
+
         return new WalletTransactionListResponse(
                 transaction.getWalletTransactionId(),
                 transaction.getAmount(),
@@ -50,8 +52,9 @@ public record WalletTransactionListResponse(
                 transaction.getTransactionType(),
                 transaction.getStatus(),
                 transaction.getUpdatedAt(),
-                transaction.getCounterWallet().getWalletId(),
-                transaction.getCounterWallet().getUser().getUserName().getValue()
+                counterWallet != null ? counterWallet.getWalletId() : null,
+                counterWallet != null ? counterWallet.getUser().getUserName().getValue() : null
+
         );
     }
 }
