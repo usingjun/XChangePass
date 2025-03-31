@@ -1,10 +1,14 @@
 package bumblebee.xchangepass.domain.exchangeRate.repository.exchangeTemp;
 
+import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRate;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.PersistenceException;
+import jakarta.persistence.Query;
 import org.springframework.stereotype.Repository;
+
+import java.util.List;
 
 @Repository
 public class ExchangeRepositoryImpl implements ExchangeRepositoryCustom {
@@ -15,7 +19,7 @@ public class ExchangeRepositoryImpl implements ExchangeRepositoryCustom {
     public void renameTable(String oldTableName, String newTableName) {
         try {
             entityManager.createNativeQuery("ALTER TABLE " + oldTableName + " RENAME TO " + newTableName).executeUpdate();
-        }catch (PersistenceException e) {
+        } catch (PersistenceException e) {
             throw ErrorCode.EXCHANGE_TABLE_RENAME_FAIL.commonException();
         }
     }
@@ -32,7 +36,7 @@ public class ExchangeRepositoryImpl implements ExchangeRepositoryCustom {
             String indexSql = "CREATE INDEX IF NOT EXISTS exchange_rate_temp_jsonb_idx " +
                     "ON exchange_rate_temp USING GIN (exchange_rates)";
             entityManager.createNativeQuery(indexSql).executeUpdate();
-        }catch (PersistenceException e) {
+        } catch (PersistenceException e) {
             throw ErrorCode.EXCHANGE_TABLE_RENAME_FAIL.commonException();
         }
     }
@@ -50,5 +54,13 @@ public class ExchangeRepositoryImpl implements ExchangeRepositoryCustom {
         } catch (PersistenceException e) {
             throw ErrorCode.EXCHANGE_TABLE_RENAME_FAIL.commonException();
         }
+    }
+
+    public List findByBaseCurrencyAndKey(String base, String targetKey) {
+        String sql = "SELECT * FROM exchange_rate WHERE base_currency = :base AND jsonb_exists(exchange_rates, :target)";
+        Query query = entityManager.createNativeQuery(sql, ExchangeRate.class);
+        query.setParameter("base", base);
+        query.setParameter("target", targetKey);
+        return query.getResultList();
     }
 }
