@@ -82,6 +82,8 @@ public class SecurityConfig {
                         .requestMatchers("/login", "/api/v1/user/signup", "/token-refresh", "/favicon.ico", "/error").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui", "/v3/api-docs/**", "/v3/api-docs").permitAll() //swagger-ui
 
+                        // 🔓 환율 조회는 인증 없이 허용
+                        .requestMatchers("/api/exchange-rate/**").permitAll()
                         // 관리자만 사용자 삭제 가능
                         .requestMatchers("/user").hasRole("ADMIN")
 
