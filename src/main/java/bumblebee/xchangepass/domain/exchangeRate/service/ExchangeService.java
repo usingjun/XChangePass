@@ -104,6 +104,7 @@ public class ExchangeService {
     public void evictExchangeRateCache(String baseCurrency) {
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(value = "exchangeRates", key = "#baseCurrency", sync = true)
     public ExchangeRateResponse getExchangeRateAll(String baseCurrency) {
 
