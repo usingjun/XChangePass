@@ -1,7 +1,6 @@
 package bumblebee.xchangepass.global.config;
 
 import bumblebee.xchangepass.domain.card.dto.response.DetailedCardInfoResponse;
-import bumblebee.xchangepass.domain.exchangeRate.dto.response.ExchangeRateResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.context.annotation.Bean;
