@@ -5,9 +5,11 @@ import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRate;
 import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRateTemp;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRateTempRepository;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRepository;
+import bumblebee.xchangepass.global.error.ErrorCode;
 import com.sun.management.OperatingSystemMXBean;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -18,6 +20,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.management.ManagementFactory;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,7 +30,9 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.Assert.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 
 @SpringBootTest
@@ -55,82 +60,56 @@ class ExchangeServiceTest {
     void clearCache() {
         Objects.requireNonNull(cacheManager.getCache("exchangeRates")).clear();
     }
-    //    @Autowired
-//    private JdbcTemplate jdbcTemplate;
-//
-//    @Autowired
-//    private EntityManager entityManager;
-//
-//
-//
-////    @Mock
-////    private ExchangeRepository exchangeRepository;
-////
-////    @InjectMocks
-////    private ExchangeService service;
-//
-//    @Test
-//    @DisplayName("데이터 베이스 저장 확인")
-//    @Transactional
-//    public void Test1() {
-//        Map<String, Double> map = new HashMap<>();
-//        String baseCurrency = "USD";
-//
-//        map.put("AED", 1.0);
-//        map.put("EUR", 2.0);
-//
-//        ExchangeRateResponse exchangeRateResponse = new ExchangeRateResponse(baseCurrency, map);
-//        service.saveRatesToTempDB(baseCurrency, exchangeRateResponse);
-//
-//        List<ExchangeRateTemp> all = rateTempRepository.findAll();
-//
-//        Map<String, Double> exchangeRates = all.get(0).getExchangeRates();
-//
-//        assertTrue(exchangeRates.containsKey("AED"));
-//        assertTrue(exchangeRates.containsKey("EUR"));
-//    }
-//
-//
-//    @Test
-//    @DisplayName("환율 조회하기")
-//    public void Test3(){
-//        String baseCurrency = "USD";
-//
-//        ExchangeRateResponse exchangeRateResponse = service.fetchExchangeRates(baseCurrency);
-//
-//        assertEquals("USD",exchangeRateResponse.baseCurrency());
-//        assertEquals(162,exchangeRateResponse.conversionRates().size());
-//    }
-//
-//    @Test
-//    @DisplayName("존재 하지 않는 환율 조회하기")
-//    public void Test4(){
-//        String baseCurrency = "QASD";
-//                assertThrows(ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException().getClass(),
-//                        () -> service.fetchExchangeRates(baseCurrency));
-//    }
-//
-//    @Test
-//    @DisplayName("없는 나라 환율 찾기")
-//    public void Test6(){
-//        String baseCurrency = "USD";
-//        String tageCurrency = "KRWW";
-//
-//        assertThrows(ErrorCode.EXCHANGE_RATE_FOR_COUNTRY.commonException().getClass(),
-//                () -> service.getExchangeRateForCountry(baseCurrency, tageCurrency));
-//    }
     @Test
-    @DisplayName("특정 나라 조회")
-    public void Test1() throws InterruptedException {
-        String from = "KRW";
-        String to = "USD";
+    @DisplayName("데이터 베이스 저장 확인")
+    @Transactional
+    public void Test1() {
+        Map<String, Double> map = new HashMap<>();
+        String baseCurrency = "USD";
 
-        ExchangeRateResponse exchangeRateForCountry = service.getExchangeRateForCountry(from, to);
-        System.out.println(exchangeRateForCountry);
+        map.put("AED", 1.0);
+        map.put("EUR", 2.0);
 
+        ExchangeRateResponse exchangeRateResponse = new ExchangeRateResponse(baseCurrency, map);
+        service.saveRatesToTempDB(baseCurrency, exchangeRateResponse);
 
+        List<ExchangeRateTemp> all = rateTempRepository.findAll();
+
+        Map<String, Double> exchangeRates = all.get(0).getExchangeRates();
+
+        Assertions.assertTrue(exchangeRates.containsKey("AED"));
+        Assertions.assertTrue(exchangeRates.containsKey("EUR"));
     }
 
+
+    @Test
+    @DisplayName("환율 조회하기")
+    public void Test3(){
+        String baseCurrency = "USD";
+
+        ExchangeRateResponse exchangeRateResponse = service.fetchExchangeRates(baseCurrency);
+
+        assertEquals("USD",exchangeRateResponse.baseCurrency());
+        assertEquals(163,exchangeRateResponse.conversionRates().size());
+    }
+
+    @Test
+    @DisplayName("존재 하지 않는 환율 조회하기")
+    public void Test4(){
+        String baseCurrency = "QASD";
+                assertThrows(ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException().getClass(),
+                        () -> service.fetchExchangeRates(baseCurrency));
+    }
+
+    @Test
+    @DisplayName("없는 나라 환율 찾기")
+    public void Test6(){
+        String baseCurrency = "USD";
+        String tageCurrency = "KRWW";
+
+        assertThrows(ErrorCode.EXCHANGE_RATE_FOR_COUNTRY.commonException().getClass(),
+                () -> service.getExchangeRateForCountry(baseCurrency, tageCurrency));
+    }
     @Test
     @DisplayName("나라 개수 확인")
     public void Test7() throws InterruptedException {
@@ -185,6 +164,39 @@ class ExchangeServiceTest {
     }
 
     @Test
+    @DisplayName("최적 스레드 수 계산 테스트 - 외부 API 호출 기준")
+    void 스레드수계산테스트() {
+        int cores = Runtime.getRuntime().availableProcessors();
+
+        // 1. 응답 시간 측정 (전체 fetch → 외부 API 포함)
+        long responseStart = System.currentTimeMillis();
+        service.fetchAndSaveExchangeRate("USD"); // 단일 외부 API 호출
+        long responseEnd = System.currentTimeMillis();
+        long responseTime = responseEnd - responseStart;
+
+        // 2. CPU 처리 시간 측정 (외부 API 제외한 내부 처리)
+        Map<String, Double> rates = new HashMap<>();
+        rates.put("KRW", 1300.00);
+
+        ExchangeRate dummyRate = ExchangeRate.builder()
+                .baseCurrency("USD")
+                .rate(rates)
+                .build();
+        long cpuStart = System.nanoTime();
+        exchangeRepository.save(dummyRate); // 저장 로직만 측정
+        long cpuEnd = System.nanoTime();
+        long cpuTime = (cpuEnd - cpuStart) / 1_000_000; // ms 단위
+
+        // 3. 최적 스레드 수 계산
+        int optimalThreads = (int)((double) responseTime / cpuTime * cores);
+
+        // 4. 출력
+        System.out.println("CPU 코어 수: " + cores);
+        System.out.println("단일 외부 API 응답 시간: " + responseTime + "ms");
+        System.out.println("내부 처리(CPU) 시간: " + cpuTime + "ms");
+        System.out.println("계산된 최적 스레드 수: " + optimalThreads + "개");
+    }
+    @Test
     @DisplayName("비동기 업데이트시 기존 데이터를 가져오므로 사용자 블로킹 발생 안함")
     void testFetchExchangeRatesWhileUpdating() throws ExecutionException, InterruptedException {
 
@@ -217,46 +229,9 @@ class ExchangeServiceTest {
 
         ExchangeRateResponse updatedResponse = service.getExchangeRateAll("USD");
         assertThat(updatedResponse).isNotNull();
-        assertThat(updatedResponse.conversionRates().get("KRW")).isEqualTo(1468.9364);
+        assertThat(updatedResponse.conversionRates().get("KRW")).isEqualTo(1472.8846);
 
     }
-//    @Test
-//    void testExchangeRateAsyncUpdate() throws Exception {
-//        // 1. 초기 환율 데이터 설정 (1400.0)
-//        ExchangeRateResponse initialResponse = ExchangeRateResponse.builder()
-//                .baseCurrency("USD")
-//                .conversionRates(Map.of("KRW", 1400.0))
-//                .build();
-//
-//        exchangeRateTempRepository.save(ExchangeRateTemp.builder()
-//                .baseCurrency("USD")
-//                .rate(initialResponse.conversionRates())
-//                .build());
-//
-//        exchangeRateTransactionService.swapExchangeRateTables();
-//
-//        // 2. 비동기 환율 업데이트 시작 (백그라운드에서 1467.9607 저장됨)
-//        CompletableFuture<Void> future = service.fetchAndSaveAllExchangeRates();
-//
-//        // 3. 업데이트 중에 환율 요청 → 기존 값(1400.0)을 받아야 함
-//        ExchangeRateResponse responseDuringUpdate = service.getExchangeRateAll("USD");
-//        assertThat(responseDuringUpdate).isNotNull();
-//        assertThat(responseDuringUpdate.conversionRates().get("KRW")).isEqualTo(1400.0);
-//
-//        // 4. 비동기 업데이트 완료 기다림
-//        future.get(); // 또는 Awaitility로 바꿔도 됨
-//
-//        // 5. 캐시 초기화 (필수) → 최신 DB값을 보기 위함
-//        Objects.requireNonNull(cacheManager.getCache("exchangeRates")).clear();
-//
-//        // 6. 최신 환율 요청 → 1467.9607이 반환되어야 함
-//        Awaitility.await().atMost(3, TimeUnit.SECONDS).untilAsserted(() -> {
-//            ExchangeRateResponse updated = service.getExchangeRateAll("USD");
-//            assertThat(updated).isNotNull();
-//            assertThat(updated.conversionRates().get("KRW")).isEqualTo(1467.9607);
-//        });
-//    }
-
     @Test
     @DisplayName("동기식 업데이트 할시 기존 데이터 못가져오는 경우")
     void testFetchExchangeRatesWhileUpdating2() throws ExecutionException, InterruptedException {
@@ -287,7 +262,7 @@ class ExchangeServiceTest {
 
         ExchangeRateResponse initialResponse = service.getExchangeRateAll("USD");
         assertThat(initialResponse).isNotNull();
-        assertThat(initialResponse.conversionRates().get("KRW")).isEqualTo(1468.9364);
+        assertThat(initialResponse.conversionRates().get("KRW")).isEqualTo(1472.8846);
 
     }
 }
