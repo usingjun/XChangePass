@@ -5,11 +5,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
+import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
 
+@Builder
 @Schema(description = "입금, 출금 요청 객체")
 public record WalletInOutRequest(
         @Schema(description = "입금 및 출금할 금액", example = "10000.00")

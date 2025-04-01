@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock;
 
+import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
@@ -16,6 +17,7 @@ import jakarta.persistence.LockTimeoutException;
 import jakarta.persistence.PessimisticLockException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Primary;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,12 +26,14 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Slf4j
+@Primary
 @Service
 @RequiredArgsConstructor
 public class NamedLockWalletService implements WalletService {
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final NamedLockRepository namedLockRepository;
+    private final ExchangeService exchangeService;
     private final UserService userService;
 
     @Override
@@ -43,6 +47,11 @@ public class NamedLockWalletService implements WalletService {
         Wallet wallet = walletRepository.findByUserId(userId)
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
+        BigDecimal chargeAmount = request.amount();
+        if (!request.toCurrency().equals(request.fromCurrency())) {
+            chargeAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.amount());
+        }
+
         namedLockRepository.getLock(wallet.getWalletId());
         try {
             if (!balanceService.checkBalance(wallet.getWalletId(), request.toCurrency())) {
@@ -52,7 +61,7 @@ public class NamedLockWalletService implements WalletService {
             }
 
             WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
-            balanceService.chargeBalance(balance, request.amount());
+            balanceService.chargeBalance(balance, chargeAmount);
         } finally {
             // 트랜잭션 종료 시점에서 락을 해제하도록 변경
             Boolean unlockSuccess = namedLockRepository.releaseLock(wallet.getWalletId());
@@ -68,10 +77,15 @@ public class NamedLockWalletService implements WalletService {
         Wallet wallet = walletRepository.findByUserId(userId)
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
+        BigDecimal amount = request.amount();
+        if (!request.toCurrency().equals(request.fromCurrency())) {
+            amount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), amount);
+        }
+
         namedLockRepository.getLock(wallet.getWalletId());
         try {
             WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
-            balanceService.withdrawBalance(balance, request.amount());
+            balanceService.withdrawBalance(balance, amount);
 
             return balance.getBalance();
         }  finally {
@@ -109,6 +123,10 @@ public class NamedLockWalletService implements WalletService {
 
             if (transferAmount.compareTo(fromBalance.getBalance()) > 0) {
                 throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
+            }
+
+            if (!request.toCurrency().equals(request.fromCurrency())) {
+                transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
             }
 
             balanceService.transferBalance(fromBalance, toBalance, transferAmount);

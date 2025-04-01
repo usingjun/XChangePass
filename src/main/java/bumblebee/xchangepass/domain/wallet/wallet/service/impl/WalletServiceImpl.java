@@ -1,6 +1,5 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.impl;
 
-import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.card.service.CardService;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;

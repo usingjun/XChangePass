@@ -1,17 +1,15 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock;
 
-import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
-import bumblebee.xchangepass.domain.user.dto.response.UserResponse;
+import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.user.entity.User;
-import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.user.service.UserService;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import jakarta.persistence.LockTimeoutException;

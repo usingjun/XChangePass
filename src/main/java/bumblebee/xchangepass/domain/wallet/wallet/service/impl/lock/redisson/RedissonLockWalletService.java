@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.redisson;
 
+import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
@@ -31,6 +32,7 @@ public class RedissonLockWalletService implements WalletService {
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final RedissonLock redissonLock;
+    private final ExchangeService exchangeService;
     private final UserService userService;
 
     @Override
@@ -44,6 +46,13 @@ public class RedissonLockWalletService implements WalletService {
     @Override
     @Transactional
     public void charge(Long userId, WalletInOutRequest request) {
+        BigDecimal chargeAmount;
+        if (!request.toCurrency().equals(request.fromCurrency())) {
+            chargeAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.amount());
+        } else {
+            chargeAmount = request.amount();
+        }
+
         String lockKey = "wallet:" + userId;
         redissonLock.tryLockVoid(lockKey, 10, 10, () -> {
             Wallet wallet = walletRepository.findByUserId(userId)
@@ -56,7 +65,7 @@ public class RedissonLockWalletService implements WalletService {
             }
 
             WalletBalance balance = balanceService.findBalance(wallet.getWalletId(), request.toCurrency());
-            balanceService.chargeBalance(balance, request.amount());
+            balanceService.chargeBalance(balance, chargeAmount);
         });
     }
 
@@ -66,6 +75,13 @@ public class RedissonLockWalletService implements WalletService {
     @Override
     @Transactional
     public BigDecimal withdrawal(Long userId, WalletInOutRequest request) {
+        BigDecimal amount;
+        if (!request.toCurrency().equals(request.fromCurrency())) {
+            amount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.amount());
+        } else {
+            amount = request.amount();
+        }
+
         String lockKey = "wallet:" + userId;
         return redissonLock.tryLock(lockKey, 10, 10, () -> {
             Wallet wallet = walletRepository.findByUserId(userId)
@@ -76,7 +92,7 @@ public class RedissonLockWalletService implements WalletService {
                 throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
             }
 
-            balanceService.withdrawBalance(balance, request.amount());
+            balanceService.withdrawBalance(balance, amount);
             return balance.getBalance();
         });
     }
@@ -111,12 +127,16 @@ public class RedissonLockWalletService implements WalletService {
             WalletBalance fromBalance = balanceService.findBalance(senderWallet.getWalletId(), request.fromCurrency());
             WalletBalance toBalance = balanceService.findBalance(receiverWallet.getWalletId(), request.toCurrency());
 
+            BigDecimal transferAmount = request.transferAmount();
             if (request.transferAmount().compareTo(fromBalance.getBalance()) > 0) {
                 throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
             }
 
-            balanceService.transferBalance(fromBalance, toBalance, request.transferAmount());
+            if (!request.toCurrency().equals(request.fromCurrency())) {
+                transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
+            }
 
+            balanceService.transferBalance(fromBalance, toBalance, transferAmount);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw ErrorCode.THREAD_INTERRUPTED.commonException();
