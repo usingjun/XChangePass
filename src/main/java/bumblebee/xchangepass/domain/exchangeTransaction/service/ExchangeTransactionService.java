@@ -27,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.Currency;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -84,11 +85,15 @@ public class ExchangeTransactionService {
 
     @Transactional
     public ExchangeResponseDTO executeTransaction(Long transactionId, Long userId) {
-        ExchangeTransaction transaction = repository.findByIdForUpdate(transactionId)
+        ExchangeTransaction transaction = repository.findById(transactionId)
                 .orElseThrow(ErrorCode.TRANSACTION_HISTORY_NOT_FOUND::commonException);
 
         if (!TransactionStatus.PENDING.equals(transaction.getStatus())) {
             throw ErrorCode.TRANSACTION_ALREADY_COMPLETED.commonException();
+        }
+
+        if(!Objects.equals(transaction.getUser().getUserId(), userId)){
+            throw ErrorCode.UNAUTHORIZED_TRANSACTION_ACCESS.commonException();
         }
 
         User user = userRepository.findByUserId(userId)
