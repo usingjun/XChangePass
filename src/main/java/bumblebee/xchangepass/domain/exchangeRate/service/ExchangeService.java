@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationContext;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,9 +41,10 @@ public class ExchangeService {
     private final ExchangeRateTransactionService exchangeTransactionService;
     private final ApplicationContext applicationContext;
     private final RestTemplate restTemplate = new RestTemplate();
+    private RedisTemplate<String, Object> redisTemplate;
     private final Executor executor;
     private final ExchangeRateTempRepository exchangeRateTempRepository;
-
+    private final String url = "https://v6.exchangerate-api.com/v6/" + authkey + "/latest/";
     @Autowired
     public ExchangeService(@Qualifier("asyncExecutor") Executor executor,
                            ExchangeRepository exchangeRepository,
@@ -58,7 +60,7 @@ public class ExchangeService {
     }
 
     public ExchangeRateResponse fetchExchangeRates(String baseCurrency) {
-        String API_URL = "https://v6.exchangerate-api.com/v6/" + authkey + "/latest/" + baseCurrency;
+        String API_URL = url + baseCurrency;
         try {
             return restTemplate.getForObject(API_URL, ExchangeRateResponse.class);
         } catch (HttpClientErrorException e) {
@@ -100,12 +102,19 @@ public class ExchangeService {
         ExchangeService self = applicationContext.getBean(ExchangeService.class);
         self.evictExchangeRateCache(baseCurrency);
     }
-    @CacheEvict(value = "exchangeRates", key = "#baseCurrency")
     public void evictExchangeRateCache(String baseCurrency) {
+        // 전체 캐시
+        redisTemplate.delete("all::" + baseCurrency);
+
+        // 단건 환율 캐시
+        Set<String> rateKeys = redisTemplate.keys("rate::" + baseCurrency + "::*");
+        if (rateKeys != null && !rateKeys.isEmpty()) {
+            redisTemplate.delete(rateKeys);
+        }
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "exchangeRates", key = "#baseCurrency", sync = true)
+    @Cacheable(value = "exchangeRates", key = "'all::' + #baseCurrency", sync = true)
     public ExchangeRateResponse getExchangeRateAll(String baseCurrency) {
 
         List<ExchangeRate> exchangeRates = exchangeRepository.findByBaseCurrency(baseCurrency);
@@ -136,7 +145,7 @@ public class ExchangeService {
         }
     }
 
-    @Cacheable(value = "exchangeRates", key = "'rate::' + #baseCurrency", unless = "#result == null")
+    @Cacheable(value = "exchangeRates", key = "'rate::' + #baseCurrency + '::' + #targetCurrency", unless = "#result == null")
     public ExchangeRateResponse getExchangeRateForCountry(String baseCurrency, String targetCurrency) {
         ExchangeRate rateEntity = exchangeRepository
                 .findByBaseCurrencyAndKey(baseCurrency, targetCurrency)
