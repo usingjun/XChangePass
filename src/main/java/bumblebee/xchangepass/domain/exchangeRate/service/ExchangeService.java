@@ -41,7 +41,7 @@ public class ExchangeService {
     private final ExchangeRateTransactionService exchangeTransactionService;
     private final ApplicationContext applicationContext;
     private final RestTemplate restTemplate = new RestTemplate();
-    private RedisTemplate<String, Object> redisTemplate;
+    private final RedisTemplate<String, Object> redisTemplate = new RedisTemplate<>();
     private final Executor executor;
     private final ExchangeRateTempRepository exchangeRateTempRepository;
     private final String url = "https://v6.exchangerate-api.com/v6/" + authkey + "/latest/";
