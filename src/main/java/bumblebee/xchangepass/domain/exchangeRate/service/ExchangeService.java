@@ -103,10 +103,8 @@ public class ExchangeService {
         self.evictExchangeRateCache(baseCurrency);
     }
     public void evictExchangeRateCache(String baseCurrency) {
-        // 전체 캐시
         redisTemplate.delete("all::" + baseCurrency);
 
-        // 단건 환율 캐시
         Set<String> rateKeys = redisTemplate.keys("rate::" + baseCurrency + "::*");
         if (rateKeys != null && !rateKeys.isEmpty()) {
             redisTemplate.delete(rateKeys);
