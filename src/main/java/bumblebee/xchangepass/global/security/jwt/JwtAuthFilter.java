@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.global.security.jwt;
 
+import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -54,11 +55,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
      * @return 사용자 UsernamePasswordAuthenticationToken
      */
     private UsernamePasswordAuthenticationToken getUserAuth(String userEmail) {
-        var userInfo = userService.readUserByUserId(userEmail);
+        UserLoginResponse userInfo = userService.readUserByUserId(userEmail);
 
-        return new UsernamePasswordAuthenticationToken(userInfo.userId(),
+        CustomUserDetails userDetails = new CustomUserDetails(
+                userInfo.userId(),
+                userInfo.userEmail(),
                 userInfo.password(),
-                Collections.singleton(new SimpleGrantedAuthority(userInfo.role().toString()))
+                userInfo.role().toString()
+        );
+
+        return new UsernamePasswordAuthenticationToken(
+                userDetails,
+                null,
+                userDetails.getAuthorities()
         );
     }
 
