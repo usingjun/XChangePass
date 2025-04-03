@@ -8,7 +8,6 @@ import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import bumblebee.xchangepass.domain.user.login.LoginService;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
 import bumblebee.xchangepass.domain.refresh.RefreshToken;
 import bumblebee.xchangepass.domain.refresh.RefreshTokenService;
 import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
@@ -87,7 +86,7 @@ class UserLoginScenarioTest {
         verify(userRepository, times(1)).save(any());
 
         // 2️⃣ 로그인 → AccessToken, RefreshToken 발급 확인
-        LoginResponse loginResponse = loginService.login(loginRequest);
+        RefreshTokenResponse loginResponse = loginService.login(loginRequest);
 
         assertNotNull(loginResponse);
         assertEquals("accessToken", loginResponse.accessToken());

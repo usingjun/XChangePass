@@ -9,7 +9,6 @@ import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import bumblebee.xchangepass.domain.user.login.LoginService;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
 import bumblebee.xchangepass.domain.refresh.RefreshToken;
 import bumblebee.xchangepass.domain.refresh.RefreshTokenService;
 import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
@@ -90,7 +89,7 @@ class UserLoginUnitTest {
         when(jwtProvider.generateAccessToken(userInfo.userId())).thenReturn("accessToken");
         when(jwtProvider.generateRefreshToken(userInfo.userId())).thenReturn("refreshToken");
 
-        LoginResponse response = loginService.login(loginRequest);
+        RefreshTokenResponse response = loginService.login(loginRequest);
 
         assertNotNull(response);
         assertEquals("accessToken", response.accessToken());
