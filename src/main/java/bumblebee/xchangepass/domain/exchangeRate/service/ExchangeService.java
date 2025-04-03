@@ -113,7 +113,7 @@ public class ExchangeService {
         }
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     @Cacheable(value = "exchangeRates", key = "'all::' + #baseCurrency", sync = true)
     public ExchangeRateResponse getExchangeRateAll(String baseCurrency) {
 
