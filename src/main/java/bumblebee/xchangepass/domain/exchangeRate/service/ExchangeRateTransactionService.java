@@ -21,37 +21,39 @@ public class ExchangeRateTransactionService {
 
     public final EntityManager entityManager;
 
+    private final Object lock = new Object();
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void swapExchangeRateTables() {
-        try {
-            boolean isMainTableExist = exchangeRepository.isTableExist("exchange_rate");
-            boolean isTempTableExist = exchangeRepository.isTableExist("exchange_rate_temp");
+        synchronized (lock) {
+            try {
+                boolean isMainTableExist = exchangeRepository.isTableExist("exchange_rate");
+                boolean isTempTableExist = exchangeRepository.isTableExist("exchange_rate_temp");
 
-            if (isMainTableExist) {
-                exchangeRepository.renameTable("exchange_rate", "exchange_rate_old");
-            }
-            if (isTempTableExist) {
-                exchangeRepository.renameTable("exchange_rate_temp", "exchange_rate");
-            }
+                if (isMainTableExist) {
+                    exchangeRepository.renameTable("exchange_rate", "exchange_rate_old");
+                }
+                if (isTempTableExist) {
+                    exchangeRepository.renameTable("exchange_rate_temp", "exchange_rate");
+                }
 
-            // 기존 테이블 삭제
-            if (exchangeRepository.isTableExist("exchange_rate_old")) {
-                exchangeRepository.dropTableIfExists("exchange_rate_old");
-            }
+                // 기존 테이블 삭제
+                if (exchangeRepository.isTableExist("exchange_rate_old")) {
+                    exchangeRepository.dropTableIfExists("exchange_rate_old");
+                }
 
-            // 새로운 임시 테이블 생성
-            if (!exchangeRepository.isTableExist("exchange_rate_temp")) {
-                exchangeRepository.createTempTable();
-                addIndexToExchangeRateTable();
+                // 새로운 임시 테이블 생성
+                if (!exchangeRepository.isTableExist("exchange_rate_temp")) {
+                    exchangeRepository.createTempTable();
+                    addIndexToExchangeRateTable();
+                }
+            } catch (DataAccessException e) {
+                throw ErrorCode.EXCHANGE_DATA_ACCESS_EXCEPTION.commonException();
+            } catch (CommonException e) {
+                throw ErrorCode.EXCHANGE_SQL_EXECUTION_ERROR.commonException();
             }
-        } catch (DataAccessException e) {
-            throw ErrorCode.EXCHANGE_DATA_ACCESS_EXCEPTION.commonException();
-        } catch (CommonException e){
-            throw ErrorCode.EXCHANGE_SQL_EXECUTION_ERROR.commonException();
         }
     }
-
 
 
     public void addIndexToExchangeRateTable() {

@@ -46,6 +46,7 @@ public enum ErrorCode {
     TRANSACTION_AMOUNT_NOTFOUND(HttpStatus.BAD_REQUEST,"T003", "환전 금액은 필수 입니다."),
     TRANSACTION_HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "T002", "존재 하지 않는 환전 내역입니다."),
     TRANSACTION_USERID_NOT_FOUND(HttpStatus.NOT_FOUND, "T004", "회원 아이디 필수"),
+    UNAUTHORIZED_TRANSACTION_ACCESS(HttpStatus.UNAUTHORIZED, "T005", "당신의 환전 ID가 아닙니다."),
 
     /*Card*/
     MOBILE_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C001","모바일 카드 발급에 실패했습니다."),
