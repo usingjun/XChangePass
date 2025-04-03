@@ -1,13 +1,14 @@
 package bumblebee.xchangepass.domain.user.login;
 
+import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
 import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
 import bumblebee.xchangepass.domain.refresh.RefreshTokenRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +26,7 @@ public class LoginService{
     private final RefreshTokenRepository refreshTokenRepository;
 
     @Transactional
-    public LoginResponse login(final LoginRequest request) {
+    public RefreshTokenResponse login(final LoginRequest request) {
         System.out.println("loginRequestDTO = " + request);
         // 사용자 정보 조회
         UserLoginResponse userInfo = userService.readUserByUserEmail(request.userEmail());
@@ -41,9 +42,20 @@ public class LoginService{
         String refreshToken = jwtProvider.generateRefreshToken(userInfo.userId());
         refreshTokenRepository.saveRefreshToken(refreshToken, userInfo.userId());
 
-        return LoginResponse.builder()
+        return RefreshTokenResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
+                .build();
+    }
+
+    public ResponseCookie saveRefreshToken(RefreshTokenResponse response) {
+        // 쿠키 설정
+        return ResponseCookie.from("refreshToken", response.refreshToken())
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(60 * 60 * 24 * 7) // 7일
+                .sameSite("Strict")
                 .build();
     }
 
@@ -55,5 +67,15 @@ public class LoginService{
 
         Long userId = refreshTokenRepository.getUserIdFromRefreshToken(refreshToken);
         refreshTokenRepository.deleteRefreshToken(userId);
+    }
+
+    public ResponseCookie deleteRefreshToken() {
+        return ResponseCookie.from("refreshToken", "")
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(0)  // 쿠키 만료
+                .sameSite("Strict")
+                .build();
     }
 }

@@ -4,6 +4,7 @@ import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -36,6 +37,16 @@ public class RefreshTokenService {
         return RefreshTokenResponse.builder()
                 .accessToken(newAccessToken)
                 .refreshToken(newRefreshToken)
+                .build();
+    }
+
+    public ResponseCookie saveRefreshToken(RefreshTokenResponse response) {
+        return ResponseCookie.from("refreshToken", response.refreshToken())
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(60 * 60 * 24 * 7)
+                .sameSite("Strict")
                 .build();
     }
 
