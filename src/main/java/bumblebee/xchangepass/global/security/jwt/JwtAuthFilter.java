@@ -84,7 +84,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 "/js/**",
                 "/images/**",
                 "/login",
-                "/api/v1/signup"
+                "/api/v1/signup",
+                "/api/exchange-rate/**"
         );
 
         AntPathMatcher pathMatcher = new AntPathMatcher();

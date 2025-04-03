@@ -13,7 +13,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationContext;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,30 +38,29 @@ public class ExchangeService {
     private String authkey;
 
     private final ExchangeRepository exchangeRepository;
-    private final ExchangeRateTempRepository exchangeRateTempRepository;
     private final ExchangeRateTransactionService exchangeTransactionService;
-    private final ApplicationContext applicationContext; // 🔹 Lazy 주입을 위한 ApplicationContext 사용
+    private final ApplicationContext applicationContext;
     private final RestTemplate restTemplate = new RestTemplate();
+    private final RedisTemplate<String, Object> redisTemplate = new RedisTemplate<>();
     private final Executor executor;
-//  todo  private final ExchangeCacheService exchangeCacheService;
-
+    private final ExchangeRateTempRepository exchangeRateTempRepository;
+    private final String url = "https://v6.exchangerate-api.com/v6/" + authkey + "/latest/";
     @Autowired
     public ExchangeService(@Qualifier("asyncExecutor") Executor executor,
                            ExchangeRepository exchangeRepository,
                            ExchangeRateTempRepository exchangeRateTempRepository,
                            ExchangeRateTransactionService exchangeTransactionService,
-                           ApplicationContext applicationContext
-            /*ExchangeCacheService exchangeCacheService*/) {
+                           ApplicationContext applicationContext) {
         this.exchangeRepository = exchangeRepository;
         this.exchangeRateTempRepository = exchangeRateTempRepository;
         this.exchangeTransactionService = exchangeTransactionService;
         this.applicationContext = applicationContext;
         this.executor = executor;
-//        this.exchangeCacheService = exchangeCacheService;
+
     }
 
     public ExchangeRateResponse fetchExchangeRates(String baseCurrency) {
-        String API_URL = "https://v6.exchangerate-api.com/v6/" + authkey + "/latest/" + baseCurrency;
+        String API_URL = url + baseCurrency;
         try {
             return restTemplate.getForObject(API_URL, ExchangeRateResponse.class);
         } catch (HttpClientErrorException e) {
@@ -96,12 +98,24 @@ public class ExchangeService {
     public void fetchAndSaveExchangeRate(String baseCurrency) {
         ExchangeRateResponse response = fetchExchangeRates(baseCurrency);
         saveRatesToTempDB(baseCurrency, response);
+
+        ExchangeService self = applicationContext.getBean(ExchangeService.class);
+        self.evictExchangeRateCache(baseCurrency);
+    }
+    public void evictExchangeRateCache(String baseCurrency) {
+        redisTemplate.delete("all::" + baseCurrency);
+
+        Set<String> rateKeys = redisTemplate.keys("rate::" + baseCurrency + "::*");
+        if (rateKeys != null && !rateKeys.isEmpty()) {
+            redisTemplate.delete(rateKeys);
+        }
     }
 
     @Transactional
+    @Cacheable(value = "exchangeRates", key = "'all::' + #baseCurrency", sync = true)
     public ExchangeRateResponse getExchangeRateAll(String baseCurrency) {
-        List<ExchangeRate> exchangeRates = exchangeRepository.findByBaseCurrency(baseCurrency);
 
+        List<ExchangeRate> exchangeRates = exchangeRepository.findByBaseCurrency(baseCurrency);
         if (!exchangeRates.isEmpty()) {
             Map<String, Double> conversionRates = exchangeRates.get(0).getExchangeRates();
             return ExchangeRateResponse.builder()
@@ -109,14 +123,13 @@ public class ExchangeService {
                     .conversionRates(conversionRates)
                     .build();
         } else {
-            // 🔹 비동기 방식으로 환율 정보를 가져오도록 변경 (ApplicationContext 사용)
             fetchAndSaveAllExchangeRates();
 
             return fetchExchangeRates(baseCurrency);
         }
     }
 
-    @Transactional
+
     public void saveRatesToTempDB(String baseCurrency, ExchangeRateResponse response) {
         try {
             Map<String, Double> rates = response.conversionRates();
@@ -130,28 +143,32 @@ public class ExchangeService {
         }
     }
 
-    @Transactional
+    @Cacheable(value = "exchangeRates", key = "'rate::' + #baseCurrency + '::' + #targetCurrency", unless = "#result == null")
     public ExchangeRateResponse getExchangeRateForCountry(String baseCurrency, String targetCurrency) {
-        ExchangeRateResponse response = getExchangeRateAll(baseCurrency);
+        ExchangeRate rateEntity = exchangeRepository
+                .findByBaseCurrencyAndKey(baseCurrency, targetCurrency)
+                .stream()
+                .findFirst()
+                .orElseThrow(ErrorCode.EXCHANGE_RATE_FOR_COUNTRY::commonException);
 
-        if (response != null && response.conversionRates().containsKey(targetCurrency)) {
-            Double rate = response.conversionRates().get(targetCurrency);
-            Map<String, Double> filteredRates = new HashMap<>();
-            filteredRates.put(targetCurrency, rate);
+        Double rate = rateEntity.getExchangeRates().get(targetCurrency);
 
-            return ExchangeRateResponse.builder()
-                    .baseCurrency(baseCurrency)
-                    .conversionRates(filteredRates)
-                    .build();
-        }
-        throw ErrorCode.EXCHANGE_RATE_FOR_COUNTRY.commonException();
+        Map<String, Double> filteredRates = new HashMap<>();
+        filteredRates.put(targetCurrency, rate);
+
+        return ExchangeRateResponse.builder()
+                .baseCurrency(baseCurrency)
+                .conversionRates(filteredRates)
+                .build();
     }
 
-    @Transactional
+
+    @Transactional(readOnly = true)
     public BigDecimal getExchangeMoney(Currency baseCurrency, Currency targetCurrency, BigDecimal amount) {
-        BigDecimal rate = BigDecimal.valueOf(getExchangeRateForCountry(baseCurrency.toString(), targetCurrency.toString())
+        ExchangeService bean = applicationContext.getBean(ExchangeService.class);
+
+        BigDecimal rate = BigDecimal.valueOf(bean.getExchangeRateForCountry(baseCurrency.toString(), targetCurrency.toString())
                 .conversionRates().get(targetCurrency.toString()));
-        System.out.println(1);
         return rate.multiply(amount);
     }
 }
