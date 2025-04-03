@@ -85,7 +85,7 @@ public class ExchangeTransactionService {
 
     @Transactional
     public ExchangeResponseDTO executeTransaction(Long transactionId, Long userId) {
-        ExchangeTransaction transaction = repository.findById(transactionId)
+        ExchangeTransaction transaction = repository.findByIdForUpdate(transactionId)
                 .orElseThrow(ErrorCode.TRANSACTION_HISTORY_NOT_FOUND::commonException);
 
         if (!TransactionStatus.PENDING.equals(transaction.getStatus())) {
