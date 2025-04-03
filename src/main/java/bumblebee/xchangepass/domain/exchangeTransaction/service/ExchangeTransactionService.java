@@ -27,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.Currency;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +41,7 @@ public class ExchangeTransactionService {
     private final WalletBalanceRepository balanceRepository;
 
 
+    @Transactional
     public ExchangeResponseDTO createTransaction(ExchangeRequestDTO request, Long userId) {
 
         Map<String, Double> conversionRatess = exchangeRateService.getExchangeRateAll(request.fromCurrency())
@@ -83,11 +85,15 @@ public class ExchangeTransactionService {
 
     @Transactional
     public ExchangeResponseDTO executeTransaction(Long transactionId, Long userId) {
-        ExchangeTransaction transaction = repository.findById(transactionId)
+        ExchangeTransaction transaction = repository.findByIdForUpdate(transactionId)
                 .orElseThrow(ErrorCode.TRANSACTION_HISTORY_NOT_FOUND::commonException);
 
         if (!TransactionStatus.PENDING.equals(transaction.getStatus())) {
             throw ErrorCode.TRANSACTION_ALREADY_COMPLETED.commonException();
+        }
+
+        if(!Objects.equals(transaction.getUser().getUserId(), userId)){
+            throw ErrorCode.UNAUTHORIZED_TRANSACTION_ACCESS.commonException();
         }
 
         User user = userRepository.findByUserId(userId)
@@ -100,13 +106,7 @@ public class ExchangeTransactionService {
 
         Wallet wallet = user.getWallet();
 
-        WalletBalance fromBalance;
-        try {
-            fromBalance = walletBalanceService.findBalance(wallet.getWalletId(), Currency.getInstance(fromCurrency));
-        } catch (CommonException e) {
-            walletBalanceService.createBalance(wallet, Currency.getInstance(fromCurrency));
-            fromBalance = walletBalanceService.findBalance(wallet.getWalletId(), Currency.getInstance(fromCurrency));
-        }
+        WalletBalance fromBalance = getOrCreateBalance(wallet, fromCurrency);
 
         if (fromBalance.getBalance().compareTo(amount) < 0) {
             WalletInOutRequest chargeRequest = WalletInOutRequest.builder()
@@ -120,13 +120,7 @@ public class ExchangeTransactionService {
             walletService.charge(chargeRequest);
         }
 
-        WalletBalance toBalance;
-        try {
-            toBalance = walletBalanceService.findBalance(wallet.getWalletId(), Currency.getInstance(toCurrency));
-        } catch (CommonException e) {
-            walletBalanceService.createBalance(wallet, Currency.getInstance(toCurrency));
-            toBalance = walletBalanceService.findBalance(wallet.getWalletId(), Currency.getInstance(toCurrency));
-        }
+        WalletBalance toBalance = getOrCreateBalance(wallet, toCurrency);
 
         fromBalance.subtractBalance(amount);
         toBalance.addBalance(receivedAmount);
@@ -137,4 +131,12 @@ public class ExchangeTransactionService {
 
         return ExchangeResponseDTO.toEntity(transaction);
     }
+    private WalletBalance getOrCreateBalance(Wallet wallet, String currencyCode) {
+        Currency currency = Currency.getInstance(currencyCode);
+        if (!walletBalanceService.checkBalance(wallet.getWalletId(), currency)) {
+            walletBalanceService.createBalance(wallet, currency);
+        }
+        return walletBalanceService.findBalance(wallet.getWalletId(), currency);
+    }
+
 }
