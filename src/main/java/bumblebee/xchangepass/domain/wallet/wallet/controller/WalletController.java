@@ -7,7 +7,7 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletServiceFactory;
-import bumblebee.xchangepass.global.security.jwt.JwtUtil;
+import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 
@@ -46,10 +47,10 @@ public class WalletController {
     })
     @GetMapping("/transaction")
     @ResponseStatus(HttpStatus.OK)
-    public List<WalletTransactionListResponse> transaction(Authentication authentication,
+    public List<WalletTransactionListResponse> transaction(@AuthenticationPrincipal CustomUserDetails user,
                                                            @ModelAttribute WalletTransactionSearchCondition condition,
                                                            Pageable pageable) {
-        return transactionService.getTransaction(JwtUtil.getLoginId(authentication), condition, pageable);
+        return transactionService.getTransaction(user.getUserId(), condition, pageable);
     }
 
     @Operation(summary = "잔액 충전", description = "잔액을 충전합니다.")
@@ -71,8 +72,8 @@ public class WalletController {
     @PostMapping("/charge")
     @ResponseStatus(HttpStatus.CREATED)
     public void charge(@RequestBody @Valid WalletInOutRequest request,
-                       Authentication authentication) {
-        walletServiceFactory.getService("namedLock").charge(JwtUtil.getLoginId(authentication), request);
+                       @AuthenticationPrincipal CustomUserDetails user) {
+        walletServiceFactory.getService("namedLock").charge(user.getUserId(), request);
     }
 
     @Operation(summary = "출금", description = "돈을 출금합니다.")
@@ -88,8 +89,8 @@ public class WalletController {
     @PutMapping("/withdraw")
     @ResponseStatus(HttpStatus.OK)
     public BigDecimal withdrawal(@RequestBody @Valid WalletInOutRequest request,
-                                 Authentication authentication) {
-        return walletServiceFactory.getService("namedLock").withdrawal(JwtUtil.getLoginId(authentication), request);
+                                 @AuthenticationPrincipal CustomUserDetails user) {
+        return walletServiceFactory.getService("namedLock").withdrawal(user.getUserId(), request);
     }
 
     @Operation(summary = "앱 내 송금", description = "돈을 송금합니다.")
@@ -111,8 +112,8 @@ public class WalletController {
     @PutMapping("/transfer")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void transfer(@RequestBody @Valid WalletTransferRequest request,
-                         Authentication authentication) {
-        walletServiceFactory.getService("namedLock").transfer(JwtUtil.getLoginId(authentication), request);
+                         @AuthenticationPrincipal CustomUserDetails user) {
+        walletServiceFactory.getService("namedLock").transfer(user.getUserId(), request);
     }
 
     @Operation(summary = "잔액 조회", description = "잔액을 조회합니다.")
@@ -127,8 +128,8 @@ public class WalletController {
     })
     @GetMapping("/balance")
     @ResponseStatus(HttpStatus.OK)
-    public List<WalletBalanceResponse> balance(Authentication authentication) {
-        return walletServiceFactory.getService("namedLock").balance(JwtUtil.getLoginId(authentication));
+    public List<WalletBalanceResponse> balance(@AuthenticationPrincipal CustomUserDetails user) {
+        return walletServiceFactory.getService("namedLock").balance(user.getUserId());
     }
 
 
