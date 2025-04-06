@@ -1,6 +1,6 @@
 package bumblebee.xchangepass.domain.card.entity;
 
-import bumblebee.xchangepass.domain.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.global.common.EncryptionData;
 import jakarta.persistence.*;
 import lombok.Builder;

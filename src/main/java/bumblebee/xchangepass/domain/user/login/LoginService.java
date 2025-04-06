@@ -6,7 +6,7 @@ import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
 import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
-import bumblebee.xchangepass.domain.refresh.RefreshTokenRepository;
+import bumblebee.xchangepass.domain.refresh.repository.RefreshTokenRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,7 +26,6 @@ public class LoginService{
 
     @Transactional
     public LoginResponse login(final LoginRequest request) {
-        System.out.println("loginRequestDTO = " + request);
         // 사용자 정보 조회
         UserLoginResponse userInfo = userService.readUserByUserEmail(request.userEmail());
 
