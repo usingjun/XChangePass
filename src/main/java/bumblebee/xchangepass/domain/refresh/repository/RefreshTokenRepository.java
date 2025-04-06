@@ -51,4 +51,9 @@ public class RefreshTokenRepository {
         String storedToken = (String) jsonRedisTemplate.opsForValue().get("refresh_token:" + userId);
         return storedToken != null && storedToken.equals(refreshToken);
     }
+
+    public String getRefreshToken(Long userId) {
+        String key = "refresh_token:" + userId;
+        return (String) jsonRedisTemplate.opsForValue().get(key);
+    }
 }

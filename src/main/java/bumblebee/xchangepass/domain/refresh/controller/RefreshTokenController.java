@@ -1,6 +1,5 @@
 package bumblebee.xchangepass.domain.refresh.controller;
 
-import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenRequest;
 import bumblebee.xchangepass.domain.refresh.service.RefreshTokenService;
 import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
 import bumblebee.xchangepass.global.error.ErrorCode;

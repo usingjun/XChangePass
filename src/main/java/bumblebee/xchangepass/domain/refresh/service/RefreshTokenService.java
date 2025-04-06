@@ -28,10 +28,18 @@ public class RefreshTokenService {
         // Redis에서 사용자 ID 조회
         Long userId = refreshTokenRepository.getUserIdFromRefreshToken(refreshToken);
 
+        // Redis에 저장된 토큰과 비교 → 재사용 감지
+        String storedToken = refreshTokenRepository.getRefreshToken(userId);
+
+        if (storedToken == null || !storedToken.equals(refreshToken)) {
+            // 이미 사용된 토큰 or 위조된 토큰 → 재사용 시도
+            refreshTokenRepository.deleteRefreshToken(userId); // Redis 강제 삭제
+
+            throw ErrorCode.REFRESH_TOKEN_INVALID.commonException();
+        }
+
         // 새로운 Access Token 생성
         String newAccessToken = jwtProvider.generateAccessToken(userId);
-
-        // 새로운 Refresh Token 생성 후 Redis에 저장 (기존 것은 자동 삭제됨)
         String newRefreshToken = jwtProvider.generateRefreshToken(userId);
         refreshTokenRepository.saveRefreshToken(newRefreshToken, userId);
 
