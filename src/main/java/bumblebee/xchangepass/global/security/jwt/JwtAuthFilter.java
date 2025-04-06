@@ -4,9 +4,11 @@ import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,6 +20,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -28,25 +31,37 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        final String token = request.getHeader("Authorization");
+        try {
+            final String token = resolveTokenFromCookie(request);
 
-        String userId = null;
+            // Bearer token 검증 후 user name 조회
+            if (token != null && !token.isEmpty()) {
+                String userId = jwtProvider.getUserIdFromToken(token);
 
-        // Bearer token 검증 후 user name 조회
-        if(token != null && !token.isEmpty()) {
-            String jwtToken = token.substring(7);
-
-            userId = jwtProvider.getUserIdFromToken(jwtToken);
-        }
-
-
-        // token 검증 완료 후 SecurityContextHolder 내 인증 정보가 없는 경우 저장
-        if(userId != null && !userId.isEmpty() && SecurityContextHolder.getContext().getAuthentication() == null) {
-            SecurityContextHolder.getContext().setAuthentication(getUserAuth(userId));
+                if (userId != null && !userId.isEmpty()
+                    && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    SecurityContextHolder.getContext().setAuthentication(getUserAuth(userId));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[JwtAuthFilter] JWT 처리 중 예외 발생: {}", e.getMessage());
         }
 
         filterChain.doFilter(request,response);
     }
+
+    private String resolveTokenFromCookie(HttpServletRequest request) {
+        if (request.getCookies() == null) return null;
+
+        for (Cookie cookie : request.getCookies()) {
+            if ("accessToken".equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+
+        return null;
+    }
+
 
     /**
      * token의 사용자 idx를 이용하여 사용자 정보 조회하고, UsernamePasswordAuthenticationToken 생성

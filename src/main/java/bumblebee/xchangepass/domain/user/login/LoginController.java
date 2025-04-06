@@ -47,9 +47,11 @@ public class LoginController {
     public ResponseEntity<RefreshTokenResponse> memberLogin(@RequestBody @Valid LoginRequest loginRequest) {
         RefreshTokenResponse response = loginService.login(loginRequest);
 
+        ResponseCookie accessCookie = loginService.saveAccessToken(response.accessToken());
         ResponseCookie refreshCookie = loginService.saveRefreshToken(response);
 
         return ResponseEntity.ok()
+                .header("Set-Cookie", accessCookie.toString())
                 .header("Set-Cookie", refreshCookie.toString())
                 .body(response);
     }
@@ -73,10 +75,12 @@ public class LoginController {
         // Refresh Token 삭제
         loginService.logout(refreshToken);
 
-        ResponseCookie expiredCookie = loginService.deleteRefreshToken();
+        ResponseCookie expiredRefresh = loginService.deleteRefreshToken();
+        ResponseCookie expiredAccess = loginService.deleteAccessToken();
 
         return ResponseEntity.ok()
-                .header("Set-Cookie", expiredCookie.toString())
+                .header("Set-Cookie", expiredRefresh.toString())
+                .header("Set-Cookie", expiredAccess.toString())
                 .build();
     }
 }

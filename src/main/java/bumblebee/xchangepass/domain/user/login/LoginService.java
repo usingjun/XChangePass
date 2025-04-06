@@ -1,12 +1,12 @@
 package bumblebee.xchangepass.domain.user.login;
 
 import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
+import bumblebee.xchangepass.domain.refresh.repository.RefreshTokenRepository;
 import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.domain.refresh.RefreshTokenRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -47,6 +47,16 @@ public class LoginService{
                 .build();
     }
 
+    public ResponseCookie saveAccessToken(String accessToken) {
+        return ResponseCookie.from("accessToken", accessToken)
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(60 * 15)  // 15분
+                .sameSite("Strict")
+                .build();
+    }
+
     public ResponseCookie saveRefreshToken(RefreshTokenResponse response) {
         // 쿠키 설정
         return ResponseCookie.from("refreshToken", response.refreshToken())
@@ -67,6 +77,17 @@ public class LoginService{
         Long userId = refreshTokenRepository.getUserIdFromRefreshToken(refreshToken);
         refreshTokenRepository.deleteRefreshToken(userId);
     }
+
+    public ResponseCookie deleteAccessToken() {
+        return ResponseCookie.from("accessToken", "")
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(0)  // 즉시 만료
+                .sameSite("Strict")
+                .build();
+    }
+
 
     public ResponseCookie deleteRefreshToken() {
         return ResponseCookie.from("refreshToken", "")
