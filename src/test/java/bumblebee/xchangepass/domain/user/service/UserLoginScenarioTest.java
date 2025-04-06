@@ -1,90 +1,78 @@
 package bumblebee.xchangepass.domain.user.service;
 
+import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
+import bumblebee.xchangepass.domain.refresh.service.RefreshTokenService;
 import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
-import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
-import bumblebee.xchangepass.domain.user.entity.Role;
 import bumblebee.xchangepass.domain.user.entity.Sex;
-import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import bumblebee.xchangepass.domain.user.login.LoginService;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.domain.refresh.RefreshToken;
-import bumblebee.xchangepass.domain.refresh.RefreshTokenService;
-import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
+import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@ExtendWith(MockitoExtension.class)
+@SpringBootTest
+@ActiveProfiles("test")
+@Testcontainers
 class UserLoginScenarioTest {
-
-    @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private NicknameGenerator nicknameGenerator;
-
-    @Mock
-    private BCryptPasswordEncoder bCryptPasswordEncoder;
-
-    @Mock
-    private JwtProvider jwtProvider;
-
-    @Mock
+    @Autowired
     private UserService userService;
 
-    @InjectMocks
+    @Autowired
     private UserRegisterService userRegisterService;
 
-    @InjectMocks
+    @Autowired
     private LoginService loginService;
 
-    @InjectMocks
+    @Autowired
     private RefreshTokenService refreshTokenService;
 
     private UserRegisterRequest registerRequest;
     private LoginRequest loginRequest;
     private String refreshToken;
 
+    @Container
+    static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
+            .withDatabaseName("xcp_test")
+            .withUsername("testuser")
+            .withPassword("testpass");
+
+    @DynamicPropertySource
+    static void overrideDataSourceProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
+        registry.add("spring.datasource.username", postgresContainer::getUsername);
+        registry.add("spring.datasource.password", postgresContainer::getPassword);
+    }
+
+
     @BeforeEach
     void setUp() {
-        registerRequest = new UserRegisterRequest("test@example.com", "Password123!", "test", "010-1234-5678", Sex.MALE, "1234");
-        loginRequest = new LoginRequest("test@example.com", "Password123");
-        refreshToken = "validRefreshToken";
-
-        // 회원가입 시 닉네임 생성
-        when(nicknameGenerator.generateUniqueNickname()).thenReturn("testUser");
-
-        // 비밀번호 암호화 Mock
-        when(bCryptPasswordEncoder.encode(anyString())).thenReturn("hashedPassword");
-
-        // 로그인 시 사용자 조회
-        UserLoginResponse userInfo = new UserLoginResponse(1L, "test@example.com", "hashedPassword", "testUser", "010-1234-5678", Role.ROLE_USER);
-        when(userService.readUserByUserEmail(loginRequest.userEmail())).thenReturn(userInfo);
-        when(bCryptPasswordEncoder.matches(loginRequest.password(), userInfo.password())).thenReturn(true);
-
-        // JWT 발급 Mock
-        when(jwtProvider.generateAccessToken(1L)).thenReturn("accessToken");
-        when(jwtProvider.generateRefreshToken(1L)).thenReturn("refreshToken");
-
-        // Refresh Token 검증 Mock
-        when(jwtProvider.validateToken(refreshToken)).thenReturn(true);
+        registerRequest = new UserRegisterRequest(
+                "test@example.com", "Password123!", "test", "010-1234-5678", Sex.MALE, "1234"
+        );
+        loginRequest = new LoginRequest("test@example.com", "Password123!");
     }
 
     @Test
     void 회원가입_로그인_Refresh토큰_재발급_테스트() {
-        // 1️⃣ 회원가입
-        assertDoesNotThrow(() -> userRegisterService.signupUser(registerRequest));
-        verify(nicknameGenerator, times(1)).generateUniqueNickname();
-        verify(userRepository, times(1)).save(any());
+        // 1. 회원가입
+        userRegisterService.signupUser(registerRequest);
+        assertEquals("test@example.com", userService.readUser("test", "010-1234-5678").getUserEmail().getValue());
 
+        // 2. 로그인 → 토큰 확인
+        LoginResponse loginResponse = loginService.login(loginRequest);
+        assertNotNull(loginResponse.accessToken());
+        assertNotNull(loginResponse.refreshToken());
         // 2️⃣ 로그인 → AccessToken, RefreshToken 발급 확인
         RefreshTokenResponse loginResponse = loginService.login(loginRequest);
 
@@ -92,22 +80,9 @@ class UserLoginScenarioTest {
         assertEquals("accessToken", loginResponse.accessToken());
         assertEquals("refreshToken", loginResponse.refreshToken());
 
-        verify(userService, times(1)).readUserByUserEmail(loginRequest.userEmail());
-        verify(jwtProvider, times(1)).generateAccessToken(1L);
-        verify(jwtProvider, times(1)).generateRefreshToken(1L);
-
-        // 3️⃣ Refresh Token 저장 (테스트 환경에서 직접 추가)
-        RefreshToken.putRefreshToken(refreshToken, 1L);
-
-        // 4️⃣ Refresh Token을 이용하여 새로운 AccessToken, RefreshToken 발급
-        RefreshTokenResponse refreshResponse = refreshTokenService.refreshToken(refreshToken);
-
-        assertNotNull(refreshResponse);
-        assertEquals("accessToken", refreshResponse.accessToken());
-        assertEquals("refreshToken", refreshResponse.refreshToken());
-
-        verify(jwtProvider, times(1)).validateToken(refreshToken);
-        verify(jwtProvider, times(2)).generateAccessToken(1L);
-        verify(jwtProvider, times(2)).generateRefreshToken(1L);
+        // 3. 토큰 재발급
+        RefreshTokenResponse refreshResponse = refreshTokenService.refreshToken(loginResponse.refreshToken());
+        assertNotNull(refreshResponse.accessToken());
+        assertNotNull(refreshResponse.refreshToken());
     }
 }

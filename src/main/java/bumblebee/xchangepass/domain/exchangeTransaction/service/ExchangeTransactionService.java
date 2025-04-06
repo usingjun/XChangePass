@@ -9,12 +9,12 @@ import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.TransactionStatu
 import bumblebee.xchangepass.domain.exchangeTransaction.repository.ExchangeTransactionRepository;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.dto.request.WalletInOutRequest;
-import bumblebee.xchangepass.domain.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.wallet.service.WalletService;
-import bumblebee.xchangepass.domain.walletBalance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.walletBalance.repository.WalletBalanceRepository;
-import bumblebee.xchangepass.domain.walletBalance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
+import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
@@ -110,14 +110,14 @@ public class ExchangeTransactionService {
 
         if (fromBalance.getBalance().compareTo(amount) < 0) {
             WalletInOutRequest chargeRequest = WalletInOutRequest.builder()
-                    .userId(userId)
+//                    .userId(userId)
                     .fromCurrency(Currency.getInstance(fromCurrency))
                     .toCurrency(Currency.getInstance(fromCurrency))
                     .amount(amount)
                     .chargeDatetime(LocalDateTime.now())
                     .build();
 
-            walletService.charge(chargeRequest);
+//            walletService.charge(chargeRequest);
         }
 
         WalletBalance toBalance = getOrCreateBalance(wallet, toCurrency);

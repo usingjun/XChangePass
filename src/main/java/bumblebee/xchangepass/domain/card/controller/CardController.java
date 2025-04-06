@@ -5,7 +5,7 @@ import bumblebee.xchangepass.domain.card.dto.response.BasicCardInfoResponse;
 import bumblebee.xchangepass.domain.card.dto.response.DetailedCardInfoResponse;
 import bumblebee.xchangepass.domain.card.service.CardService;
 import bumblebee.xchangepass.global.error.ErrorCode;
-import bumblebee.xchangepass.global.security.jwt.JwtUtil;
+import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -17,6 +17,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -40,8 +41,8 @@ public class CardController {
     })
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/physical")
-    public void generatePhysicalCard(Authentication authentication) {
-        cardService.generatePhysicalCard(JwtUtil.getLoginId(authentication));
+    public void generatePhysicalCard(@AuthenticationPrincipal CustomUserDetails user) {
+        cardService.generatePhysicalCard(user.getUserId());
     }
 
     @Operation(summary = "카드 상태 변경", description = "현재 로그인한 사용자의 카드 상태를 변경합니다.")
@@ -56,9 +57,9 @@ public class CardController {
     })
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PutMapping("/status")
-    public void changeCardStatus(Authentication authentication,
+    public void changeCardStatus(@AuthenticationPrincipal CustomUserDetails user,
                                  @RequestBody @Valid ChangeCardStatusRequest request) {
-        cardService.changeCardStatus(JwtUtil.getLoginId(authentication), request);
+        cardService.changeCardStatus(user.getUserId(), request);
     }
 
     @Operation(summary = "보유 카드 목록 조회", description = "현재 로그인한 사용자의 보유 카드 목록을 조회합니다.")
@@ -73,8 +74,8 @@ public class CardController {
     })
     @ResponseStatus(HttpStatus.OK)
     @GetMapping
-    public List<BasicCardInfoResponse> getBasicCardInfo(Authentication authentication) {
-        return cardService.getBasicCardInfo(JwtUtil.getLoginId(authentication));
+    public List<BasicCardInfoResponse> getBasicCardInfo(@AuthenticationPrincipal CustomUserDetails user) {
+        return cardService.getBasicCardInfo(user.getUserId());
     }
 
     @Operation(summary = "카드 상세 정보 조회", description = "특정 카드의 상세 정보를 조회합니다.")

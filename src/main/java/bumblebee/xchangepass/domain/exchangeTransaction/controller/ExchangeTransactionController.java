@@ -3,7 +3,7 @@ package bumblebee.xchangepass.domain.exchangeTransaction.controller;
 import bumblebee.xchangepass.domain.exchangeTransaction.dto.request.ExchangeRequestDTO;
 import bumblebee.xchangepass.domain.exchangeTransaction.dto.response.ExchangeResponseDTO;
 import bumblebee.xchangepass.domain.exchangeTransaction.service.ExchangeTransactionService;
-import bumblebee.xchangepass.global.security.jwt.JwtUtil;
+import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 
@@ -42,8 +43,8 @@ public class ExchangeTransactionController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/create")
-    public ExchangeResponseDTO createTransaction(@RequestBody ExchangeRequestDTO request, Authentication authentication) {
-        return exchangeService.createTransaction(request, JwtUtil.getLoginId(authentication));
+    public ExchangeResponseDTO createTransaction(@RequestBody ExchangeRequestDTO request, @AuthenticationPrincipal CustomUserDetails user) {
+        return exchangeService.createTransaction(request, user.getUserId());
     }
 
 
@@ -65,7 +66,7 @@ public class ExchangeTransactionController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/execute")
-    public ExchangeResponseDTO executeTransaction(@RequestParam Long transactionId, Authentication authentication) {
-        return exchangeService.executeTransaction(transactionId, JwtUtil.getLoginId(authentication));
+    public ExchangeResponseDTO executeTransaction(@RequestParam Long transactionId, @AuthenticationPrincipal CustomUserDetails user) {
+        return exchangeService.executeTransaction(transactionId, user.getUserId());
     }
 }

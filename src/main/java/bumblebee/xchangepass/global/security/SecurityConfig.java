@@ -29,14 +29,14 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;  // ✅ 기존 `SecurityConfig`에서 유지
-    private final CustomAuthenticationEntryPointHandler customAuthenticationEntryPointHandler;  // ✅ 기존 `SecurityConfig`에서 유지
-    private final CustomAccessDeniedHandler customAccessDeniedHandler;  // ✅ 기존 `SecurityConfig`에서 유지
+    private final CustomAuthenticationEntryPointHandler customAuthenticationEntryPointHandler;
+    private final CustomAccessDeniedHandler customAccessDeniedHandler;
 
     @Value("${cors.url}")
-    private String corsUrl;  // ✅ 기존 `SpringSecurityConfig`에서 유지
+    private String corsUrl;
 
     @Value("${cors.front.url}")
-    private String frontUrl;  // ✅ 기존 `SpringSecurityConfig`에서 유지
+    private String frontUrl;
 
     /**
      * 🔒 비밀번호 암호화 설정 (BCrypt 사용)
@@ -48,7 +48,6 @@ public class SecurityConfig {
 
     /**
      * 🎭 역할(Role) 계층 구조 설정
-     * ✅ 기존 `SpringSecurityConfig`에서 유지
      */
     @Bean
     public RoleHierarchy roleHierarchy() {
@@ -57,23 +56,17 @@ public class SecurityConfig {
                """);
     }
 
-    /**
-     * 🔥 Spring Security 설정 통합
-     * ✅ 기존 `SpringSecurityConfig`의 CORS 및 기본 설정 유지
-     * ✅ 기존 `SecurityConfig`의 JWT 필터 및 예외 처리 유지
-     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
-        System.out.println("security start");
         http
-                .csrf(AbstractHttpConfigurer::disable) // ✅ 기존 `SpringSecurityConfig` & `SecurityConfig`에서 유지 (CSRF 비활성화)
-                .cors(corsCustomizer -> corsCustomizer.configurationSource(corsConfigurationSource())) // ✅ 기존 `SpringSecurityConfig`에서 유지 (CORS 설정)
-                .formLogin(AbstractHttpConfigurer::disable) // ✅ 기존 `SpringSecurityConfig` & `SecurityConfig`에서 유지 (Form 로그인 비활성화)
-                .logout(AbstractHttpConfigurer::disable) // ✅ 기존 `SpringSecurityConfig` & `SecurityConfig`에서 유지 (로그아웃 비활성화)
-                .httpBasic(AbstractHttpConfigurer::disable) // ✅ 기존 `SpringSecurityConfig`에서 유지 (HTTP Basic 인증 비활성화)
+                .csrf(AbstractHttpConfigurer::disable)
+                .cors(corsCustomizer -> corsCustomizer.configurationSource(corsConfigurationSource()))
+                .formLogin(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // ✅ 기존 `SpringSecurityConfig` & `SecurityConfig`에서 유지 (세션 미사용, JWT 사용)
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 // 🔹 경로별 인가 작업
                 .authorizeHttpRequests(auth -> auth
@@ -90,7 +83,6 @@ public class SecurityConfig {
                         // 그 외 모든 요청은 인증 필요
                         .anyRequest().authenticated())
 
-                // 🔥 JWT 필터 추가 (UsernamePasswordAuthenticationFilter 앞에 배치)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
 
                 // ⚠️ 예외 처리 핸들러 추가
@@ -103,7 +95,6 @@ public class SecurityConfig {
 
     /**
      * 🌍 CORS 설정
-     * ✅ 기존 `SpringSecurityConfig`에서 유지하며 `Bean`으로 관리
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {

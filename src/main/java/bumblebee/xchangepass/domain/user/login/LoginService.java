@@ -27,7 +27,6 @@ public class LoginService{
 
     @Transactional
     public RefreshTokenResponse login(final LoginRequest request) {
-        System.out.println("loginRequestDTO = " + request);
         // 사용자 정보 조회
         UserLoginResponse userInfo = userService.readUserByUserEmail(request.userEmail());
 
