@@ -6,7 +6,6 @@ import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.login.LoginService;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,10 +68,6 @@ class UserLoginScenarioTest {
         userRegisterService.signupUser(registerRequest);
         assertEquals("test@example.com", userService.readUser("test", "010-1234-5678").getUserEmail().getValue());
 
-        // 2. 로그인 → 토큰 확인
-        LoginResponse loginResponse = loginService.login(loginRequest);
-        assertNotNull(loginResponse.accessToken());
-        assertNotNull(loginResponse.refreshToken());
         // 2️⃣ 로그인 → AccessToken, RefreshToken 발급 확인
         RefreshTokenResponse loginResponse = loginService.login(loginRequest);
 
