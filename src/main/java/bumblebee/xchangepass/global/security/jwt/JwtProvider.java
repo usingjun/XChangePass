@@ -12,6 +12,7 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 import static bumblebee.xchangepass.global.common.Constants.JWT_TOKEN_VALID;
@@ -38,7 +39,7 @@ public class JwtProvider {
      * @return token Username
      */
     public String getUserIdFromToken(final String token) {
-        return getClaimFromToken(token, Claims::getId);
+        return getClaimFromToken(token, Claims::getSubject);
     }
 
     /**
@@ -124,7 +125,8 @@ public class JwtProvider {
     private String doGenerateAccessToken(final String id, final Map<String, Object> claims) {
         return Jwts.builder()
                 .setClaims(claims)
-                .setId(id)
+                .setSubject(id)  // 사용자 ID
+                .setId(UUID.randomUUID().toString())
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .setExpiration(new Date(System.currentTimeMillis() + JWT_TOKEN_VALID)) // 30분
                 .signWith(key)
@@ -159,7 +161,8 @@ public class JwtProvider {
      */
     private String doGenerateRefreshToken(final String id) {
         return Jwts.builder()
-                .setId(id)
+                .setSubject(id)  // 사용자 ID
+                .setId(UUID.randomUUID().toString())
                 .setExpiration(new Date(System.currentTimeMillis() + (JWT_TOKEN_VALID * 2) * 24)) // 24시간
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .signWith(key)
