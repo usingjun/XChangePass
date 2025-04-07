@@ -1,15 +1,15 @@
 package bumblebee.xchangepass.domain.wallet.transaction.consumer;
 
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -26,7 +26,7 @@ public class SlackNotifier {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    public void send(String message) {
+    public void failToSaveTransaction(String message) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("text", ":rotating_light: *DLQ 경고 발생*");
         payload.put("blocks", List.of(
@@ -50,5 +50,17 @@ public class SlackNotifier {
         } catch (Exception e) {
             log.error("Slack 전송 실패", e);
         }
+    }
+
+    public void notifyFraud(FraudDetectEvent event) {
+        Map<String, Object> body=Map.of(
+                "text", String.format("🚨 이상 거래 감지!\n사용자 ID: %d\n금액: %s", event.userId(), event.amount())
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<?> request = new HttpEntity<>(body, headers);
+        restTemplate.postForEntity(webhookUrl, request, String.class);
     }
 }
