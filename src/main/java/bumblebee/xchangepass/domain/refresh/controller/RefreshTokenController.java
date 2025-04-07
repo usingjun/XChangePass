@@ -58,7 +58,7 @@ public class RefreshTokenController {
 
         return ResponseEntity.ok()
                 .header("Set-Cookie", refreshCookie.toString())
-                .body(response);
+                .build();
     }
 
 }

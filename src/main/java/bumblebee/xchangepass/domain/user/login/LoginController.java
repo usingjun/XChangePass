@@ -53,7 +53,7 @@ public class LoginController {
         return ResponseEntity.ok()
                 .header("Set-Cookie", accessCookie.toString())
                 .header("Set-Cookie", refreshCookie.toString())
-                .body(response);
+                .build();
     }
 
     @Operation(summary = "로그아웃", description = "로그아웃합니다.")
