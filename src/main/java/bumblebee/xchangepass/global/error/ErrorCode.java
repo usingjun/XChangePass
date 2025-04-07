@@ -21,6 +21,7 @@ public enum ErrorCode {
     /*Wallet*/
     WALLET_NOT_FOUND(HttpStatus.BAD_REQUEST, "W001", "지갑을 찾을 수 없습니다."),
     WALLET_ALREADY_EXIST(HttpStatus.BAD_REQUEST,"W002","이미 지갑이 존재합니다."),
+    INVALID_WALLET_PASSWORD(HttpStatus.UNAUTHORIZED, "WALLET001", "지갑 비밀번호가 일치하지 않습니다."),
 
     /*Balance*/
     BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "B001", "해당 화폐 잔액이 존재하지 않습니다."),
@@ -30,7 +31,7 @@ public enum ErrorCode {
     EXCHANGE_RATE_NOT_FOUND(HttpStatus.NOT_FOUND, "E001", "존재 하지 않는 환율입니다."),
     EXCHANGE_SAVE_FAIL(HttpStatus.BAD_REQUEST, "E002", "환율 정보 저장 실패"),
     EXCHANGE_RATE_FOR_COUNTRY(HttpStatus.BAD_REQUEST, "E003", "이 나라에 대한 환율 정보가 없습니다."),
-   EXCHANGE_RATE_EXCEED(HttpStatus.TOO_MANY_REQUESTS, "E004", "환율 요청 초과"),
+    EXCHANGE_RATE_EXCEED(HttpStatus.TOO_MANY_REQUESTS, "E004", "환율 요청 초과"),
     EXCHANGE_DATA_ACCESS_EXCEPTION(HttpStatus.INTERNAL_SERVER_ERROR, "E005", "데이터베이스 접근 중 오류 발생"),
     EXCHANGE_SQL_EXECUTION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "E006", "SQL 실행 중 오류 발생"),
     EXCHANGE_TABLE_DROP_FAIL(HttpStatus.INTERNAL_SERVER_ERROR, "E007", "테이블 DML 중 오류 발생"),
@@ -48,7 +49,10 @@ public enum ErrorCode {
     PHYSICAL_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C002","실물 카드 발급에 실패했습니다."),
     CARD_NOT_FOUND(HttpStatus.BAD_REQUEST,"C003","찾는 카드가 존재하지 않습니다."),
     INVALID_CARD_NUMBER(HttpStatus.BAD_REQUEST, "C004", "잘못된 카드 번호입니다."),
+    ALREADY_ISSUED_PHYSICAL_CARD(HttpStatus.CONFLICT, "C005", "이미 발급된 실물 카드가 존재합니다."),
 
+    /* Card Transaction */
+    CARD_TRANSACTION_NOT_FOUND(HttpStatus.NOT_FOUND, "CT001", "해당 카드 거래내역을 찾을 수 없습니다."),
 
     /*Encryption*/
     AES_KEY_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC001", "AES 키 생성에 실패했습니다."),
@@ -60,8 +64,6 @@ public enum ErrorCode {
     AES_DECRYPTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "ENC007", "AES 키 복호화에 실패했습니다."),
     INVALID_AES_KEY(HttpStatus.BAD_REQUEST, "ENC008", "잘못된 AES 키입니다."),
     INVALID_IV(HttpStatus.BAD_REQUEST, "ENC009", "잘못된 IV 값입니다."),
-
-
 
     //Security
     USER_FORBIDDEN(HttpStatus.FORBIDDEN, "S0001", "권한이 없습니다."),
