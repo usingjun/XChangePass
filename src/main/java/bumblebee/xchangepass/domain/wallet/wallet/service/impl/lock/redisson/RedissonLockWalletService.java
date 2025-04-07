@@ -9,7 +9,9 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
+import bumblebee.xchangepass.domain.wallet.wallet.scheduler.ScheduledTransferService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,7 @@ public class RedissonLockWalletService implements WalletService {
 
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
+    private final ScheduledTransferService scheduledTransferService;
     private final RedissonLock redissonLock;
     private final ExchangeService exchangeService;
     private final UserService userService;
@@ -103,49 +106,53 @@ public class RedissonLockWalletService implements WalletService {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void transfer(Long senderId, WalletTransferRequest request) {
-        User receiver = userService.readUser(request.receiverName(), request.receiverPhoneNumber());
+        if (request.transferType() == WalletTransferType.SCHEDULE) {
+            scheduledTransferService.saveSchedule(senderId, request);
+        } else {
+            User receiver = userService.readUser(request.receiverName(), request.receiverPhoneNumber());
 
-        Wallet senderWallet = walletRepository.findByUserIdWithLock(senderId)
-                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
-        Wallet receiverWallet = walletRepository.findByUserIdWithLock(receiver.getUserId())
-                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+            Wallet senderWallet = walletRepository.findByUserIdWithLock(senderId)
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+            Wallet receiverWallet = walletRepository.findByUserIdWithLock(receiver.getUserId())
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
-        String senderLockKey = "senderWallet:" + senderWallet.getWalletId();
-        String receiverLockKey = "senderWallet:" + receiverWallet.getWalletId();
+            String senderLockKey = "senderWallet:" + senderWallet.getWalletId();
+            String receiverLockKey = "senderWallet:" + receiverWallet.getWalletId();
 
-        RLock senderLock = redissonLock.getRedissonClient().getLock(senderLockKey);
-        RLock receiverLock = redissonLock.getRedissonClient().getLock(receiverLockKey);
-        RedissonMultiLock multiLock = new RedissonMultiLock(senderLock, receiverLock);
+            RLock senderLock = redissonLock.getRedissonClient().getLock(senderLockKey);
+            RLock receiverLock = redissonLock.getRedissonClient().getLock(receiverLockKey);
+            RedissonMultiLock multiLock = new RedissonMultiLock(senderLock, receiverLock);
 
-        boolean acquired = false;
-        try {
-            acquired = multiLock.tryLock(10, 30, TimeUnit.SECONDS);
-            if (!acquired) {
-                throw ErrorCode.LOCK_TIME_OUT.commonException();
-            }
+            boolean acquired = false;
+            try {
+                acquired = multiLock.tryLock(10, 30, TimeUnit.SECONDS);
+                if (!acquired) {
+                    throw ErrorCode.LOCK_TIME_OUT.commonException();
+                }
 
-            WalletBalance fromBalance = balanceService.findBalance(senderWallet.getWalletId(), request.fromCurrency());
-            WalletBalance toBalance = balanceService.findBalance(receiverWallet.getWalletId(), request.toCurrency());
+                WalletBalance fromBalance = balanceService.findBalance(senderWallet.getWalletId(), request.fromCurrency());
+                WalletBalance toBalance = balanceService.findBalance(receiverWallet.getWalletId(), request.toCurrency());
 
-            BigDecimal transferAmount = request.transferAmount();
-            if (request.transferAmount().compareTo(fromBalance.getBalance()) > 0) {
-                throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
-            }
+                BigDecimal transferAmount = request.transferAmount();
+                if (request.transferAmount().compareTo(fromBalance.getBalance()) > 0) {
+                    throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
+                }
 
-            if (!request.toCurrency().equals(request.fromCurrency())) {
-                transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
-            }
+                if (!request.toCurrency().equals(request.fromCurrency())) {
+                    transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
+                }
 
-            balanceService.transferBalance(fromBalance, toBalance, transferAmount);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw ErrorCode.THREAD_INTERRUPTED.commonException();
-        } finally {
-            if (acquired) {
-                try {
-                    multiLock.unlock(); // ✅ unlock 예외 처리 추가
-                } catch (IllegalMonitorStateException e) {
-                    log.error("⚠️ [MultiLock 해제 실패] senderId: {}, receiverId: {}", senderId, receiverWallet.getWalletId(), e);
+                balanceService.transferBalance(fromBalance, toBalance, transferAmount);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw ErrorCode.THREAD_INTERRUPTED.commonException();
+            } finally {
+                if (acquired) {
+                    try {
+                        multiLock.unlock(); // ✅ unlock 예외 처리 추가
+                    } catch (IllegalMonitorStateException e) {
+                        log.error("⚠️ [MultiLock 해제 실패] senderId: {}, receiverId: {}", senderId, receiverWallet.getWalletId(), e);
+                    }
                 }
             }
         }
