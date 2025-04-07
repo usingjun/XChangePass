@@ -110,14 +110,13 @@ public class ExchangeTransactionService {
 
         if (fromBalance.getBalance().compareTo(amount) < 0) {
             WalletInOutRequest chargeRequest = WalletInOutRequest.builder()
-//                    .userId(userId)
                     .fromCurrency(Currency.getInstance(fromCurrency))
                     .toCurrency(Currency.getInstance(fromCurrency))
                     .amount(amount)
                     .chargeDatetime(LocalDateTime.now())
                     .build();
 
-//            walletService.charge(chargeRequest);
+            walletService.charge(userId, chargeRequest);
         }
 
         WalletBalance toBalance = getOrCreateBalance(wallet, toCurrency);
