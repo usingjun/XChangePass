@@ -30,4 +30,13 @@ public interface UserRepository extends JpaRepository<User, Long>, UserRepositor
             WHERE u.userId = :userId
             """)
     Optional<User> findByUserId(Long userId);
+
+    @Query("""
+    SELECT u
+    FROM User u
+    WHERE u.userName.value = :name
+      AND u.userPhoneNumber.value = :phoneNumber
+""")
+    Optional<User> findByNameAndPhoneNumber(@Param("name") String name,
+                                            @Param("phoneNumber") String phoneNumber);
 }
