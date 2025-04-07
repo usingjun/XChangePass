@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.domain.user.entity;
 
 import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.ExchangeTransaction;
+import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransaction;
 import bumblebee.xchangepass.domain.user.entity.value.*;
 import bumblebee.xchangepass.domain.wallet.entity.Wallet;
 import jakarta.persistence.*;
@@ -69,6 +70,9 @@ public class User {
 
     @OneToMany(mappedBy = "user", orphanRemoval = true, cascade = CascadeType.ALL)
     private List<ExchangeTransaction> exchangeTransactions;
+
+    @OneToMany(mappedBy = "user", orphanRemoval = true, cascade = CascadeType.ALL)
+    private List<CardTransaction> cardTransactions;
 
     @CreatedDate
     @Column(name = "user_join_date")
