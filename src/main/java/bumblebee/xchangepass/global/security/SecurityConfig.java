@@ -81,6 +81,7 @@ public class SecurityConfig {
                         .requestMatchers("/css/**", "/js/**", "/images/**", "/static/**", "/index.html").permitAll()
                         .requestMatchers("/login", "/api/v1/user/signup", "/token-refresh", "/favicon.ico", "/error").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui", "/v3/api-docs/**", "/v3/api-docs").permitAll() //swagger-ui
+                        .requestMatchers("/api/v1/card/payment").permitAll()
 
                         // 관리자만 사용자 삭제 가능
                         .requestMatchers("/user").hasRole("ADMIN")
