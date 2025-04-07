@@ -19,7 +19,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
@@ -112,6 +111,29 @@ public class WalletController {
     @PutMapping("/transfer")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void transfer(@RequestBody @Valid WalletTransferRequest request,
+                         @AuthenticationPrincipal CustomUserDetails user) {
+        walletServiceFactory.getService("namedLock").transfer(user.getUserId(), request);
+    }
+
+    @Operation(summary = "앱 내 예약 송금", description = "돈을 송금합니다.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "송금 성공", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "400", description = "먼저 충전이 필요합니다.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\n  \"code\": \"B001\"," +
+                                                              "\n  \"message\": \"해당 화폐 잔액이 존재하지 않습니다.\"}"))
+            ),
+            @ApiResponse(responseCode = "400", description = "잔액이 부족합니다.",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = "{\n  \"code\": \"B002\"," +
+                                                              "\n  \"message\": \"해당 화폐 잔액이 부족합니다.\"}"))
+            )
+    })
+    @PutMapping("/transfer-schedule")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void scheduleTransfer(@RequestBody @Valid WalletTransferRequest request,
                          @AuthenticationPrincipal CustomUserDetails user) {
         walletServiceFactory.getService("namedLock").transfer(user.getUserId(), request);
     }
