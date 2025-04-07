@@ -14,13 +14,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+import static bumblebee.xchangepass.global.common.Constants.JWT_TOKEN_VALID;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class JwtProvider {
-
-    // jwt 만료 시간 1시간
-    private static final long JWT_TOKEN_VALID = (long) 1000 * 60 * 30;
 
     @Value("${jwt.secret}")
     private String secret;

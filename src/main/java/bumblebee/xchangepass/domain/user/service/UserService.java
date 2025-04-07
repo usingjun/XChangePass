@@ -31,6 +31,11 @@ public class UserService {
         return new UserResponse(user);
     }
 
+    public User readUser(String userName, String userPhoneNumber) {
+        return userRepository.findByUserId(userName, userPhoneNumber)
+                .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+    }
+
     /**
      * ✅ 사용자 정보 수정
      */
@@ -74,10 +79,8 @@ public class UserService {
     }
 
     public UserLoginResponse readUserByUserId(String userId) {
-        System.out.println("userId = " + userId);
         User user = userRepository.findByUserId(Long.parseLong(userId))
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
-        System.out.println("user = " + user.toString());
         return UserLoginResponse.fromEntity(user);
     }
 

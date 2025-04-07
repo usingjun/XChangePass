@@ -26,11 +26,15 @@ public enum ErrorCode {
     BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "B001", "해당 화폐 잔액이 존재하지 않습니다."),
     BALANCE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "B002", "충전 금액이 부족합니다."),
 
+    /*Lock*/
+    LOCK_TIME_OUT(HttpStatus.CONFLICT, "L001", "현재 지갑이 사용 중이거나 다른 요청이 처리 중입니다. 잠시 후 다시 시도해주세요."),
+    THREAD_INTERRUPTED(HttpStatus.INTERNAL_SERVER_ERROR, "L002", "작업이 예상치 못하게 중단되었습니다. 다시 시도해주세요."),
+
     /*Exchange_rate*/
     EXCHANGE_RATE_NOT_FOUND(HttpStatus.NOT_FOUND, "E001", "존재 하지 않는 환율입니다."),
     EXCHANGE_SAVE_FAIL(HttpStatus.BAD_REQUEST, "E002", "환율 정보 저장 실패"),
     EXCHANGE_RATE_FOR_COUNTRY(HttpStatus.BAD_REQUEST, "E003", "이 나라에 대한 환율 정보가 없습니다."),
-   EXCHANGE_RATE_EXCEED(HttpStatus.TOO_MANY_REQUESTS, "E004", "환율 요청 초과"),
+    EXCHANGE_RATE_EXCEED(HttpStatus.TOO_MANY_REQUESTS, "E004", "환율 요청 초과"),
     EXCHANGE_DATA_ACCESS_EXCEPTION(HttpStatus.INTERNAL_SERVER_ERROR, "E005", "데이터베이스 접근 중 오류 발생"),
     EXCHANGE_SQL_EXECUTION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "E006", "SQL 실행 중 오류 발생"),
     EXCHANGE_TABLE_DROP_FAIL(HttpStatus.INTERNAL_SERVER_ERROR, "E007", "테이블 DML 중 오류 발생"),
