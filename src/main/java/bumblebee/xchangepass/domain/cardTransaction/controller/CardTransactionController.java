@@ -4,7 +4,7 @@ import bumblebee.xchangepass.domain.cardTransaction.dto.response.CardTransaction
 import bumblebee.xchangepass.domain.cardTransaction.dto.response.CardTransactionSummaryResponse;
 import bumblebee.xchangepass.domain.cardTransaction.service.CardTransactionService;
 import bumblebee.xchangepass.global.common.CursorResponse;
-import bumblebee.xchangepass.global.security.jwt.JwtUtil;
+import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -13,7 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,12 +35,12 @@ public class CardTransactionController {
     @ResponseStatus(HttpStatus.OK)
     @GetMapping
     public CursorResponse<CardTransactionSummaryResponse> getTransactions(
-            Authentication authentication,
+            @AuthenticationPrincipal CustomUserDetails user,
             @RequestParam(required = false) Long lastTransactionId,
             @RequestParam(defaultValue = "10") int size) {
 
         List<CardTransactionSummaryResponse> transactions =
-                cardTransactionService.getUserTransactions(JwtUtil.getLoginId(authentication), lastTransactionId, size);
+                cardTransactionService.getUserTransactions(user.getUserId(), lastTransactionId, size);
 
         Long nextCursor = transactions.isEmpty() ? null :
                 transactions.get(transactions.size() - 1).transactionId();
@@ -57,9 +57,9 @@ public class CardTransactionController {
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/{transactionId}")
     public CardTransactionDetailResponse getTransactionDetail(
-            Authentication authentication,
+            @AuthenticationPrincipal CustomUserDetails user,
             @PathVariable Long transactionId) {
 
-        return cardTransactionService.getTransactionDetail(JwtUtil.getLoginId(authentication), transactionId);
+        return cardTransactionService.getTransactionDetail(user.getUserId(), transactionId);
     }
 }
