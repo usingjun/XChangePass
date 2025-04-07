@@ -51,9 +51,6 @@ class ExchangeServiceUnitTest {
     @Mock
     private RestTemplate restTemplate;
 
-    @Mock
-    private RedisTemplate<String, Object> redisTemplate;
-
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
@@ -65,8 +62,7 @@ class ExchangeServiceUnitTest {
                 applicationContext,
                 lockManager,
                 cacheManager,
-                restTemplate,
-                redisTemplate
+                restTemplate
         );
     }
 
