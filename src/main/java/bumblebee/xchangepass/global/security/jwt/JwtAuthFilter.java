@@ -30,7 +30,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         final String token = request.getHeader("Authorization");
 
         String userId = null;
-        System.out.println("dofilter start");
 
         // Bearer token 검증 후 user name 조회
         if(token != null && !token.isEmpty()) {
@@ -47,7 +46,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(getUserAuth(userId));
         }
 
-        System.out.println("dofilter end");
         filterChain.doFilter(request,response);
     }
 
@@ -60,7 +58,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private UsernamePasswordAuthenticationToken getUserAuth(String userEmail) {
         var userInfo = userService.readUserByUserId(userEmail);
 
-        return new UsernamePasswordAuthenticationToken(userInfo.userId(),
+        return new UsernamePasswordAuthenticationToken(
+                userInfo.userId(),
                 userInfo.password(),
                 Collections.singleton(new SimpleGrantedAuthority(userInfo.role().toString()))
         );
@@ -84,7 +83,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 "/js/**",
                 "/images/**",
                 "/login",
-                "/api/v1/signup"
+                "/api/v1/signup",
+                "/api/v1/card/payment"
         );
 
         AntPathMatcher pathMatcher = new AntPathMatcher();
