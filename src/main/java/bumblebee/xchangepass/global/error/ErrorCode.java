@@ -27,6 +27,10 @@ public enum ErrorCode {
     BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "B001", "해당 화폐 잔액이 존재하지 않습니다."),
     BALANCE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "B002", "충전 금액이 부족합니다."),
 
+    /*Lock*/
+    LOCK_TIME_OUT(HttpStatus.CONFLICT, "L001", "현재 지갑이 사용 중이거나 다른 요청이 처리 중입니다. 잠시 후 다시 시도해주세요."),
+    THREAD_INTERRUPTED(HttpStatus.INTERNAL_SERVER_ERROR, "L002", "작업이 예상치 못하게 중단되었습니다. 다시 시도해주세요."),
+
     /*Exchange_rate*/
     EXCHANGE_RATE_NOT_FOUND(HttpStatus.NOT_FOUND, "E001", "존재 하지 않는 환율입니다."),
     EXCHANGE_SAVE_FAIL(HttpStatus.BAD_REQUEST, "E002", "환율 정보 저장 실패"),
@@ -43,6 +47,7 @@ public enum ErrorCode {
     TRANSACTION_AMOUNT_NOTFOUND(HttpStatus.BAD_REQUEST,"T003", "환전 금액은 필수 입니다."),
     TRANSACTION_HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "T002", "존재 하지 않는 환전 내역입니다."),
     TRANSACTION_USERID_NOT_FOUND(HttpStatus.NOT_FOUND, "T004", "회원 아이디 필수"),
+    UNAUTHORIZED_TRANSACTION_ACCESS(HttpStatus.UNAUTHORIZED, "T005", "당신의 환전 ID가 아닙니다."),
 
     /*Card*/
     MOBILE_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C001","모바일 카드 발급에 실패했습니다."),

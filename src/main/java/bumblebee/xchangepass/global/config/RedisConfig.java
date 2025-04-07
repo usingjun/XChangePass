@@ -43,4 +43,15 @@ public class RedisConfig {
         return template;
     }
 
+//    @Bean(name = "exchangeRedisTemplate")
+//    public RedisTemplate<String, ExchangeRateResponse> cardInfoRedisTemplate2(RedisConnectionFactory connectionFactory) {
+//        RedisTemplate<String, ExchangeRateResponse> template = new RedisTemplate<>();
+//        template.setConnectionFactory(connectionFactory);
+//
+//        template.setKeySerializer(new StringRedisSerializer());
+//        template.setValueSerializer(new JdkSerializationRedisSerializer());
+//
+//        return template;
+//    }
+
 }

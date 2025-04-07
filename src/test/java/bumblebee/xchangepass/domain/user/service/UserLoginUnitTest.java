@@ -1,17 +1,22 @@
 package bumblebee.xchangepass.domain.user.service;
 
+import bumblebee.xchangepass.config.RedisTestBase;
+import bumblebee.xchangepass.domain.refresh.repository.RefreshTokenRepository;
 import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
+import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.entity.Role;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
+import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import bumblebee.xchangepass.domain.user.login.LoginService;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
 import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
-import bumblebee.xchangepass.domain.refresh.RefreshToken;
-import bumblebee.xchangepass.domain.refresh.RefreshTokenService;
+import bumblebee.xchangepass.domain.refresh.entity.RefreshToken;
+import bumblebee.xchangepass.domain.refresh.service.RefreshTokenService;
 import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,12 +25,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@ActiveProfiles("test")
 @ExtendWith(MockitoExtension.class)
-class UserLoginUnitTest {
+class UserLoginUnitTest extends RedisTestBase {
 
     @Mock
     private UserRepository userRepository;
@@ -37,10 +44,16 @@ class UserLoginUnitTest {
     private BCryptPasswordEncoder bCryptPasswordEncoder;
 
     @Mock
+    private WalletServiceImpl walletService;
+
+    @Mock
     private JwtProvider jwtProvider;
 
     @Mock
     private UserService userService;
+
+    @Mock
+    private RefreshTokenRepository refreshTokenRepository;
 
     @InjectMocks
     private UserRegisterService userRegisterService;
@@ -64,7 +77,10 @@ class UserLoginUnitTest {
 
     @Test
     void signupUser_Success() {
-        when(nicknameGenerator.generateUniqueNickname()).thenReturn("test");
+        when(nicknameGenerator.generateUniqueNickname()).thenReturn("test111");
+
+        User mockUser = registerRequest.toEntity(bCryptPasswordEncoder, "test111");
+        when(userRepository.save(any(User.class))).thenReturn(mockUser);
 
         assertDoesNotThrow(() -> userRegisterService.signupUser(registerRequest));
 
@@ -117,6 +133,7 @@ class UserLoginUnitTest {
     @Test
     void refreshToken_Success() {
         when(jwtProvider.validateToken(refreshToken)).thenReturn(true);
+        when(refreshTokenRepository.getUserIdFromRefreshToken(refreshToken)).thenReturn(1L);
         when(jwtProvider.generateAccessToken(1L)).thenReturn("newAccessToken");
         when(jwtProvider.generateRefreshToken(1L)).thenReturn("newRefreshToken");
 

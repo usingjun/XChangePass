@@ -4,8 +4,8 @@ import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
 import bumblebee.xchangepass.domain.user.dto.request.UserUpdateRequest;
 import bumblebee.xchangepass.domain.user.dto.response.UserResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
-import bumblebee.xchangepass.global.security.jwt.JwtUtil;
 import bumblebee.xchangepass.domain.user.service.UserRegisterService;
+import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -17,6 +17,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 
@@ -64,8 +65,8 @@ public class UserController {
     })
     @ResponseStatus(HttpStatus.OK)
     @GetMapping
-    public UserResponse read(Authentication authentication){
-        return userService.readUser(JwtUtil.getLoginId(authentication));
+    public UserResponse read(@AuthenticationPrincipal CustomUserDetails user){
+        return userService.readUser(user.getUserId());
     }
 
 
@@ -87,9 +88,9 @@ public class UserController {
     })
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PutMapping
-    public void update(Authentication authentication,
+    public void update(@AuthenticationPrincipal CustomUserDetails user,
                        @RequestBody @Valid UserUpdateRequest request) {
-        userService.updateUser(JwtUtil.getLoginId(authentication), request);
+        userService.updateUser(user.getUserId(), request);
     }
 
 
@@ -104,7 +105,7 @@ public class UserController {
     })
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @DeleteMapping
-    public void softDeleteUser(Authentication authentication) {
-        userService.softDeleteUser(JwtUtil.getLoginId(authentication));
+    public void softDeleteUser(@AuthenticationPrincipal CustomUserDetails user) {
+        userService.softDeleteUser(user.getUserId());
     }
 }

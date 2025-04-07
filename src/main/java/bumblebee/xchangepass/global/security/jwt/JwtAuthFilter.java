@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.global.security.jwt;
 
+import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -38,11 +39,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             userId = jwtProvider.getUserIdFromToken(jwtToken);
         }
 
-        System.out.println("userId = " + userId);
 
         // token 검증 완료 후 SecurityContextHolder 내 인증 정보가 없는 경우 저장
         if(userId != null && !userId.isEmpty() && SecurityContextHolder.getContext().getAuthentication() == null) {
-            // Spring Security Context Holder 인증 정보 set
             SecurityContextHolder.getContext().setAuthentication(getUserAuth(userId));
         }
 
@@ -56,12 +55,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
      * @return 사용자 UsernamePasswordAuthenticationToken
      */
     private UsernamePasswordAuthenticationToken getUserAuth(String userEmail) {
-        var userInfo = userService.readUserByUserId(userEmail);
+        UserLoginResponse userInfo = userService.readUserByUserId(userEmail);
+
+        CustomUserDetails userDetails = new CustomUserDetails(
+                userInfo.userId(),
+                userInfo.userEmail(),
+                userInfo.password(),
+                userInfo.role().toString()
+        );
 
         return new UsernamePasswordAuthenticationToken(
-                userInfo.userId(),
-                userInfo.password(),
-                Collections.singleton(new SimpleGrantedAuthority(userInfo.role().toString()))
+                userDetails,
+                null,
+                userDetails.getAuthorities()
         );
     }
 
@@ -84,6 +90,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 "/images/**",
                 "/login",
                 "/api/v1/signup",
+                "/api/exchange-rate/**",
                 "/api/v1/card/payment"
         );
 

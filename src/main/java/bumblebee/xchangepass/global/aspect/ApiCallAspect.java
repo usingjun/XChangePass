@@ -2,6 +2,7 @@ package bumblebee.xchangepass.global.aspect;
 
 import com.sun.management.OperatingSystemMXBean;
 import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.log4j.Log4j2;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -9,16 +10,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.lang.management.ManagementFactory;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 @Aspect
 @Component
+@Log4j2
 public class ApiCallAspect {
 
     @Autowired
     private MeterRegistry meterRegistry;  // 메트릭스를 기록할 MeterRegistry
 
-    @Around("execution(* bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService.*(..))")
+    @Around("execution(* bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService.*(..))")
     public Object logApiMetrics(ProceedingJoinPoint joinPoint) throws Throwable {
         // Windows에서도 CPU 사용량을 가져올 수 있도록 `com.sun.management.OperatingSystemMXBean` 사용
         OperatingSystemMXBean osBean =
@@ -44,6 +47,21 @@ public class ApiCallAspect {
         System.out.println("API call duration: " + duration + "ms");
         System.out.println("CPU Before API Call: " + String.format("%.2f", cpuBefore) + "%");
         System.out.println("CPU After API Call: " + String.format("%.2f", cpuAfter) + "%");
+
+        return result;
+    }
+
+    @Around("@annotation(org.springframework.cache.annotation.Cacheable)")
+    public Object logCacheHitOrMiss(ProceedingJoinPoint pjp) throws Throwable {
+        String method = pjp.getSignature().toShortString();
+        Object[] args = pjp.getArgs();
+
+        long start = System.currentTimeMillis();
+        Object result = pjp.proceed();  // 실제 메서드 실행 (캐시 miss일 경우)
+        long end = System.currentTimeMillis();
+
+        log.info("[Cacheable] 실행 메서드: {} | 파라미터: {} | 실행 시간: {}ms",
+                method, Arrays.toString(args), (end - start));
 
         return result;
     }

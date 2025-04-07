@@ -1,6 +1,6 @@
 package bumblebee.xchangepass.global.scheduler;
 
-import bumblebee.xchangepass.domain.ExchangeRate.service.ExchangeService;
+import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;

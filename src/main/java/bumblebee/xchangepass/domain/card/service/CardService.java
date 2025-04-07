@@ -8,7 +8,7 @@ import bumblebee.xchangepass.domain.card.entity.CardType;
 import bumblebee.xchangepass.domain.card.repository.CardRepository;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.security.crypto.AESEncryption;

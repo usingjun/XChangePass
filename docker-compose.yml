@@ -49,6 +49,24 @@ services:
     environment:
       - INFLUXDB_DB=k6
 
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: rabbitmq
+    restart: always
+    networks:
+      - monitoring
+    ports:
+      - "5672:5672"
+      - "15673:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
   # 🔹 Grafana (InfluxDB 데이터 시각화)
   grafana:
     image: grafana/grafana:9.3.8
@@ -96,7 +114,6 @@ services:
     ports:
       - "9090:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/xchangepass
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
