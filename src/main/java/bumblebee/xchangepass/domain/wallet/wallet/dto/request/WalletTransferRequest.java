@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.wallet.dto.request;
 
+import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.global.validation.ValidCurrency;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
@@ -34,6 +35,9 @@ public record WalletTransferRequest(
         Currency toCurrency,
 
         @Schema(description = "송금 날짜", example = "2024-02-20T12:34:56")
-        LocalDateTime transferDatetime
+        LocalDateTime transferDatetime,
+
+        @Schema(description = "송금 타입", example = "GENERAL")
+        WalletTransferType transferType
 ) {
 }
