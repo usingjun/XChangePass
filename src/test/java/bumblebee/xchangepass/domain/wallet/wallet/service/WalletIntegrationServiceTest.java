@@ -10,6 +10,7 @@ import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransact
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.PessimisticLockWalletService;
@@ -145,7 +146,7 @@ class WalletIntegrationServiceTest {
     void testTransferSuccess() {
         pessimisticLockWalletService.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
         pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest);
 
         WalletBalance senderBalance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
@@ -158,7 +159,7 @@ class WalletIntegrationServiceTest {
     @Test
     @DisplayName("잔액이 부족할 때 송금이 실패한다")
     void testTransferFailureDueToInsufficientFunds() {
-        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
         Exception exception = assertThrows(RuntimeException.class, () -> pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest));
         assertThat(exception.getMessage()).contains("충전 금액이 부족합니다.");
     }
@@ -192,7 +193,7 @@ class WalletIntegrationServiceTest {
         Long senderId = senderWallet.getWalletId();
         Long receiverId = receiverWallet.getWalletId();
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
 
         for (int i = 0; i < concurrentUsers; i++) {
             executorService.submit(() -> {
@@ -255,7 +256,7 @@ class WalletIntegrationServiceTest {
         Future<?> transferFuture = executorService.submit(() -> {
             try {
                 System.out.println("🚀 [송금 시작]");
-                WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+                WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
 
                 pessimisticLockWalletService.transfer(sender.getUserId(), transferRequest);
                 isTransferFirst.set(true);
@@ -322,7 +323,7 @@ class WalletIntegrationServiceTest {
                 CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
 
         CountDownLatch latch = new CountDownLatch(1); // 🔥 1로 설정 (이체 먼저 실행)
 
