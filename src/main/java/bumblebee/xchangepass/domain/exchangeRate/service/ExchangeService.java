@@ -50,7 +50,6 @@ public class ExchangeService {
     private final ExchangeRateTransactionService exchangeTransactionService;
     private final ApplicationContext applicationContext;
     private final RestTemplate restTemplate;
-    private final RedisTemplate<String, Object> redisTemplate;
     private final Executor executor;
     private final ExchangeRateTempRepository exchangeRateTempRepository;
     private final ExchangeRateLockManager lockManager;
@@ -64,15 +63,13 @@ public class ExchangeService {
                            ApplicationContext applicationContext,
                            ExchangeRateLockManager lockManager,
                            CacheManager cacheManager,
-                           RestTemplate restTemplate,
-                           RedisTemplate<String, Object> redisTemplate) {
+                           RestTemplate restTemplate) {
         this.exchangeRepository = exchangeRepository;
         this.exchangeRateTempRepository = exchangeRateTempRepository;
         this.exchangeTransactionService = exchangeTransactionService;
         this.applicationContext = applicationContext;
         this.executor = executor;
         this.restTemplate = restTemplate;
-        this.redisTemplate = redisTemplate;
         this.lockManager = lockManager;
         this.cacheManager = cacheManager;
     }
@@ -124,13 +121,20 @@ public class ExchangeService {
             Cache cache = cacheManager.getCache("exchangeRates");
             if (cache != null) {
                 cache.evict("all::" + baseCurrency);
-            }
 
-            Set<String> rateKeys = redisTemplate.keys("rate::" + baseCurrency + "::*");
-            if (rateKeys != null && !rateKeys.isEmpty()) {
-                redisTemplate.delete(rateKeys);
-            }
+                List<CompletableFuture<Void>> futures = new ArrayList<>();
 
+                for (String targetCurrency : Country.create()) {
+                    CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                        cache.evict("rate::" + baseCurrency + "::" + targetCurrency);
+                    }, executor);
+
+                    futures.add(future);
+                }
+
+                // 모든 작업 완료까지 대기
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            }
         } catch (RedisConnectionFailureException e) {
             throw ErrorCode.REDIS_EVICT_ERROR.commonException();
         } catch (Exception e) {
