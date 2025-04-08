@@ -80,7 +80,9 @@ public enum ErrorCode {
 
     /*기타*/
     ENTITY_FIELD_ACCESS_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "G001", "엔티티 필드 접근 오류"),
-    REDIS_CONNECTION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "R001", "Redis 연결 실패");
+    REDIS_CONNECTION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "R001", "Redis 연결 실패"),
+    CACHE_EVICT_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "R002", "캐시 삭제 중 오류 발생"),
+    REDIS_EVICT_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "R003", "Redis 캐시 삭제 중 오류 발생");
 
 
     @Schema(description = "에러 코드", example = "U003")

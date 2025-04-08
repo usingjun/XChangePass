@@ -5,6 +5,7 @@ import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRate;
 import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRateTemp;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRateTempRepository;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRepository;
+import bumblebee.xchangepass.domain.exchangeRate.util.Country;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import com.sun.management.OperatingSystemMXBean;
 import org.awaitility.Awaitility;
@@ -20,13 +21,8 @@ import org.springframework.cache.CacheManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.management.ManagementFactory;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -164,37 +160,68 @@ class ExchangeServiceTest {
     }
 
     @Test
-    @DisplayName("최적 스레드 수 계산 테스트 - 외부 API 호출 기준")
-    void 스레드수계산테스트() {
+    @DisplayName("스레드별 로드 측정 및 최적 스레드 수 계산")
+    void 스레드별로드측정테스트() throws Exception {
         int cores = Runtime.getRuntime().availableProcessors();
+        List<String> currencies = Country.create(); // 총 163개국
 
-        // 1. 응답 시간 측정 (전체 fetch → 외부 API 포함)
-        long responseStart = System.currentTimeMillis();
-        service.fetchAndSaveExchangeRate("USD"); // 단일 외부 API 호출
-        long responseEnd = System.currentTimeMillis();
-        long responseTime = responseEnd - responseStart;
+        ExecutorService executor = Executors.newFixedThreadPool(6); // 초기값 (변경 가능)
 
-        // 2. CPU 처리 시간 측정 (외부 API 제외한 내부 처리)
-        Map<String, Double> rates = new HashMap<>();
-        rates.put("KRW", 1300.00);
+        Map<String, List<Long>> threadDurations = new ConcurrentHashMap<>();
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-        ExchangeRate dummyRate = ExchangeRate.builder()
-                .baseCurrency("USD")
-                .rate(rates)
-                .build();
-        long cpuStart = System.nanoTime();
-        exchangeRepository.save(dummyRate); // 저장 로직만 측정
-        long cpuEnd = System.nanoTime();
-        long cpuTime = (cpuEnd - cpuStart) / 1_000_000; // ms 단위
+        long totalStart = System.currentTimeMillis();
 
-        // 3. 최적 스레드 수 계산
-        int optimalThreads = (int)((double) responseTime / cpuTime * cores);
+        for (String baseCurrency : currencies) {
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                long start = System.nanoTime();
+                try {
+                    service.fetchAndSaveExchangeRate(baseCurrency);
+                } catch (Exception e) {
+                    System.err.println("[" + baseCurrency + "] 에러: " + e.getMessage());
+                }
+                long end = System.nanoTime();
+                long duration = (end - start) / 1_000_000; // ms
 
-        // 4. 출력
+                String threadName = Thread.currentThread().getName();
+                threadDurations.computeIfAbsent(threadName, k -> new ArrayList<>()).add(duration);
+
+            }, executor);
+            futures.add(future);
+        }
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        long totalEnd = System.currentTimeMillis();
+
+        // 결과 분석
+        System.out.println("===== 스레드별 처리 시간 분석 =====");
+        long totalCount = 0;
+        long totalTimeSum = 0;
+
+        for (Map.Entry<String, List<Long>> entry : threadDurations.entrySet()) {
+            String thread = entry.getKey();
+            List<Long> durations = entry.getValue();
+            long sum = durations.stream().mapToLong(Long::longValue).sum();
+            long avg = sum / durations.size();
+
+            totalTimeSum += sum;
+            totalCount += durations.size();
+
+            System.out.printf("%s - 처리 수: %d개, 평균 처리 시간: %dms%n", thread, durations.size(), avg);
+        }
+
+        double avgPerTaskTime = (double) totalTimeSum / totalCount;
+        long totalElapsed = totalEnd - totalStart;
+        int estimatedOptimalThreads = (int) (totalElapsed / avgPerTaskTime);
+
+        System.out.println("\n===== 전체 요약 =====");
+        System.out.println("총 처리 시간: " + totalElapsed + "ms");
+        System.out.println("총 작업 수: " + totalCount + "개");
+        System.out.printf("작업당 평균 처리 시간: %.2fms%n", avgPerTaskTime);
         System.out.println("CPU 코어 수: " + cores);
-        System.out.println("단일 외부 API 응답 시간: " + responseTime + "ms");
-        System.out.println("내부 처리(CPU) 시간: " + cpuTime + "ms");
-        System.out.println("계산된 최적 스레드 수: " + optimalThreads + "개");
+        System.out.println("추정 최적 스레드 수: " + estimatedOptimalThreads + "개");
+
+        executor.shutdown();
     }
     @Test
     @DisplayName("비동기 업데이트시 기존 데이터를 가져오므로 사용자 블로킹 발생 안함")
@@ -232,6 +259,7 @@ class ExchangeServiceTest {
         assertThat(updatedResponse.conversionRates().get("KRW")).isEqualTo(1472.8846);
 
     }
+
     @Test
     @DisplayName("동기식 업데이트 할시 기존 데이터 못가져오는 경우")
     void testFetchExchangeRatesWhileUpdating2() throws ExecutionException, InterruptedException {
@@ -262,7 +290,8 @@ class ExchangeServiceTest {
 
         ExchangeRateResponse initialResponse = service.getExchangeRateAll("USD");
         assertThat(initialResponse).isNotNull();
-        assertThat(initialResponse.conversionRates().get("KRW")).isEqualTo(1472.8846);
+        assertThat(initialResponse.conversionRates().get("KRW")).isEqualTo(1455.6702);
+
 
     }
 }

@@ -21,4 +21,10 @@ public class Constants {
     // Token 유효 기간
     public static final Long REFRESH_TOKEN_TTL = 24 * 60 * 60L; // 24시간 (초 단위)
     public static final Long JWT_TOKEN_VALID = 1000 * 60 * 30L; // jwt AccessToken 만료 시간 1시간
+
+    // 외부 API 호출
+    public static final String url = "https://v6.exchangerate-api.com/v6/";
+
+    // postgreSQL LOCK_KEY 상수
+    public static final long LOCK_KEY = 987654321L;
 }
