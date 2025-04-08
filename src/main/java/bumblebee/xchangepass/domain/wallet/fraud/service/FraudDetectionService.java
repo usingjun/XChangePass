@@ -18,7 +18,13 @@ public class FraudDetectionService {
         boolean isFraud = ruleEvaluator.isSuspicious(event.userId(), event.amount());
 
         if (isFraud) {
-            slackNotifier.notifyFraud(event);
+            String reason = ruleEvaluator.getLastDetectedReason();
+            slackNotifier.notifyFraud(new FraudDetectEvent(
+                    event.userId(),
+                    event.amount(),
+                    event.timestamp(),
+                    reason
+            ));
         }
     }
 }

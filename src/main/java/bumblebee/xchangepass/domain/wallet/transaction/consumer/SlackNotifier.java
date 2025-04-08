@@ -1,7 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.transaction.consumer;
 
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
-import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,14 +52,42 @@ public class SlackNotifier {
     }
 
     public void notifyFraud(FraudDetectEvent event) {
-        Map<String, Object> body=Map.of(
-                "text", String.format("🚨 이상 거래 감지!\n사용자 ID: %d\n금액: %s", event.userId(), event.amount())
-        );
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("text", "🚨 이상 거래 감지");
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
+        payload.put("blocks", List.of(
+                Map.of(
+                        "type", "header",
+                        "text", Map.of(
+                                "type", "plain_text",
+                                "text", "🚨 이상 거래 탐지",
+                                "emoji", true
+                        )
+                ),
+                Map.of(
+                        "type", "section",
+                        "fields", List.of(
+                                Map.of("type", "mrkdwn", "text", "*사용자 ID:*\n" + event.userId()),
+                                Map.of("type", "mrkdwn", "text", "*금액:*\n" + event.amount()),
+                                Map.of("type", "mrkdwn", "text", "*시각:*\n" + event.timestamp()),
+                                Map.of("type", "mrkdwn", "text", "*사유:*\n" + event.detail())
+                        )
+                ),
+                Map.of(
+                        "type", "context",
+                        "elements", List.of(
+                                Map.of("type", "mrkdwn", "text", ":shield: 이상 거래는 자동으로 기록되고 있습니다.")
+                        )
+                )
+        ));
 
-        HttpEntity<?> request = new HttpEntity<>(body, headers);
-        restTemplate.postForEntity(webhookUrl, request, String.class);
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> request = new HttpEntity<>(payload, headers);
+            restTemplate.postForEntity(webhookUrl, request, String.class);
+        } catch (Exception e) {
+            log.error("Slack 전송 실패", e);
+        }
     }
 }
