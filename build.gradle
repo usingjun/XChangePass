@@ -49,6 +49,7 @@ dependencies {
     testImplementation "org.testcontainers:testcontainers:1.19.2"                   // Docker 기반 통합 테스트 지원 (Testcontainers 기본 라이브러리)
     testImplementation "org.testcontainers:junit-jupiter:1.19.2"                    // JUnit 5(Testcontainers 연동) 지원
     testImplementation 'org.testcontainers:postgresql:1.19.2'
+    testImplementation "org.testcontainers:redis:1.19.1"
 
     // 데이터베이스
     runtimeOnly 'com.h2database:h2'                                                 // 인메모리 데이터베이스a H2 (테스트 및 개발 환경용)
