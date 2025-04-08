@@ -25,6 +25,11 @@ public class WalletBalanceService {
     private final WalletTransactionService transactionService;
     private final FraudDetectionService fraudDetectionService;
 
+    /**
+     * 화폐별 잔액 생성
+     * @param wallet
+     * @param currency
+     */
     public void createBalance(Wallet wallet, Currency currency) {
         if (balanceRepository.existsByCurrency(wallet.getWalletId(), currency)) {
             return;
@@ -34,32 +39,65 @@ public class WalletBalanceService {
         balanceRepository.save(balance);
     }
 
+    /**
+     * 화폐별 잔액 조회
+     * @param walletId
+     * @param currency
+     * @return
+     */
     @Transactional(readOnly = true)
     public WalletBalance findBalance(Long walletId, Currency currency) {
         return balanceRepository.findByWalletIdAndCurrency(walletId, currency)
                 .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
     }
 
+    /**
+     * 비관적 락 적용, 화폐별 잔액 조회
+     * @param walletId
+     * @param currency
+     * @return
+     */
     @Transactional
     public WalletBalance findBalanceWithLock(Long walletId, Currency currency) {
         return balanceRepository.findByWalletIdAndCurrencyWithPessimisticLock(walletId, currency)
                 .orElseThrow(ErrorCode.BALANCE_NOT_FOUND::commonException);
     }
 
+    /**
+     * 화폐별 잔액 목록 조회
+     * @param walletId
+     * @return
+     */
     @Transactional(readOnly = true)
     public List<WalletBalance> findBalances(Long walletId) {
         return balanceRepository.findByWalletId(walletId);
     }
 
+    /**
+     * 비관적 락 적용, 화폐별 잔액 목록 조회
+     * @param walletId
+     * @return
+     */
     @Transactional
     public List<WalletBalance> findBalancesWithLock(Long walletId) {
         return balanceRepository.findByWalletIdWithPessimisticLock(walletId);
     }
 
+    /**
+     * 충전된 화폐별 잔액이 있는지 확인
+     * @param walletId
+     * @param currency
+     * @return
+     */
     public boolean checkBalance(Long walletId, Currency currency) {
         return balanceRepository.existsByCurrency(walletId, currency);
     }
 
+    /**
+     * 화폐별 잔액 입금
+     * @param balance
+     * @param amount
+     */
     public void chargeBalance(WalletBalance balance, BigDecimal amount) {
         balance.addBalance(amount);
         balanceRepository.save(balance);
@@ -67,6 +105,11 @@ public class WalletBalanceService {
         transactionService.saveTransaction(balance.getWallet().getWalletId(), null, amount, null, balance.getCurrency(), WalletTransactionType.DEPOSIT);
     }
 
+    /**
+     * 화폐별 잔액 출금
+     * @param balance
+     * @param amount
+     */
     public void withdrawBalance(WalletBalance balance, BigDecimal amount) {
         if (amount.compareTo(balance.getBalance()) > 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
@@ -78,6 +121,12 @@ public class WalletBalanceService {
         transactionService.saveTransaction(balance.getWallet().getWalletId(), null, amount, null, balance.getCurrency(), WalletTransactionType.WITHDRAWAL);
     }
 
+    /**
+     * 화폐별 잔액 송금
+     * @param fromBalance
+     * @param toBalance
+     * @param amount
+     */
     public void transferBalance(WalletBalance fromBalance, WalletBalance toBalance, BigDecimal amount) {
         fraudDetectionService.detect(new FraudDetectEvent(
                 fromBalance.getWallet().getUser().getUserId(),
