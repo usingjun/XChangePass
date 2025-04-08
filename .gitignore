@@ -333,4 +333,4 @@ src/test/resources/application-test-secrets.yml
 src/main/resources/data.sql
 /scripts/
 init.sql
-k6-scripts/
+k6-scripts/test.js

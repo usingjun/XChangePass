@@ -70,10 +70,15 @@ public class CardService {
     /**
      * ✅ 실물 카드 발급
      */
+    @Transactional
     public void generatePhysicalCard(Long userId) {
 
         User existUser = userRepository.findByUserId(userId)
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
+
+        if(existUser.getWallet().getCards().stream().anyMatch(c -> c.getCardType().equals(CardType.PHYSICAL))) {
+            throw ErrorCode.ALREADY_ISSUED_PHYSICAL_CARD.commonException();
+        }
 
         String cardNumber = cardFactory.generateCardNumber();
         String cvc = cardFactory.generateCvc();
@@ -141,6 +146,7 @@ public class CardService {
     /**
      * ✅ 카드 관리 - 보유 카드 목록 조회
      */
+    @Transactional(readOnly = true)
     public List<BasicCardInfoResponse> getBasicCardInfo(Long userId) {
         User existUser = userRepository.findByUserId(userId)
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
@@ -189,6 +195,7 @@ public class CardService {
         String decryptedCvc = AESEncryption.decryptData(card.getCvc(), decryptedAESKey, card.getEncryptionData().getIv());
 
         DetailedCardInfoResponse cardInfoDTO = DetailedCardInfoResponse.builder()
+                .cardId(card.getCardId())
                 .cardType(card.getCardType())
                 .cardStatus(card.getCardStatus())
                 .cardNumber(decryptedCardNumber)
