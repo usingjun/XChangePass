@@ -9,7 +9,6 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.scheduler.ScheduledTransferService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
@@ -101,45 +100,41 @@ public class PessimisticLockWalletService implements WalletService {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void transfer(Long senderId, WalletTransferRequest request) {
-        if (request.transferType() == WalletTransferType.SCHEDULE) {
-            scheduledTransferService.saveSchedule(senderId, request);
-        } else {
-            try {
-                User receiver = userService.readUser(request.receiverName(), request.receiverPhoneNumber());
+        try {
+            User receiver = userService.readUser(request.receiverName(), request.receiverPhoneNumber());
 
-                Wallet senderWallet = walletRepository.findByUserIdWithLock(senderId)
-                        .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
-                Wallet receiverWallet = walletRepository.findByUserIdWithLock(receiver.getUserId())
-                        .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+            Wallet senderWallet = walletRepository.findByUserIdWithLock(senderId)
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+            Wallet receiverWallet = walletRepository.findByUserIdWithLock(receiver.getUserId())
+                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
-                WalletBalance fromBalance = balanceService.findBalanceWithLock(senderWallet.getWalletId(), request.fromCurrency());
-                if (fromBalance == null) {
-                    throw ErrorCode.BALANCE_NOT_FOUND.commonException();
-                }
-
-                if (!balanceService.checkBalance(receiverWallet.getWalletId(), request.toCurrency())) {
-                    Wallet wallet = walletRepository.findById(receiverWallet.getWalletId())
-                            .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
-
-                    balanceService.createBalance(wallet, request.toCurrency());
-                }
-
-                WalletBalance toBalance = balanceService.findBalanceWithLock(receiverWallet.getWalletId(), request.toCurrency());
-
-                BigDecimal transferAmount = request.transferAmount();
-                if (transferAmount.compareTo(fromBalance.getBalance()) > 0) {
-                    throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
-                }
-
-                if (!request.toCurrency().equals(request.fromCurrency())) {
-                    transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
-                }
-
-                balanceService.transferBalance(fromBalance, toBalance, transferAmount);
-            } catch (LockTimeoutException | PessimisticLockException | CannotAcquireLockException e) {
-                log.error("⚠️ [Lock 획득 실패] 사용자 ID: {}, 이유: {}", senderId, e.getMessage());
-                throw ErrorCode.LOCK_TIME_OUT.commonException();
+            WalletBalance fromBalance = balanceService.findBalanceWithLock(senderWallet.getWalletId(), request.fromCurrency());
+            if (fromBalance == null) {
+                throw ErrorCode.BALANCE_NOT_FOUND.commonException();
             }
+
+            if (!balanceService.checkBalance(receiverWallet.getWalletId(), request.toCurrency())) {
+                Wallet wallet = walletRepository.findById(receiverWallet.getWalletId())
+                        .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+
+                balanceService.createBalance(wallet, request.toCurrency());
+            }
+
+            WalletBalance toBalance = balanceService.findBalanceWithLock(receiverWallet.getWalletId(), request.toCurrency());
+
+            BigDecimal transferAmount = request.transferAmount();
+            if (transferAmount.compareTo(fromBalance.getBalance()) > 0) {
+                throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
+            }
+
+            if (!request.toCurrency().equals(request.fromCurrency())) {
+                transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
+            }
+
+            balanceService.transferBalance(fromBalance, toBalance, transferAmount);
+        } catch (LockTimeoutException | PessimisticLockException | CannotAcquireLockException e) {
+            log.error("⚠️ [Lock 획득 실패] 사용자 ID: {}, 이유: {}", senderId, e.getMessage());
+            throw ErrorCode.LOCK_TIME_OUT.commonException();
         }
     }
 
