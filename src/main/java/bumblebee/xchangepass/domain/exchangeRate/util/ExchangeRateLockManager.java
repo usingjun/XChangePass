@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 
 import java.sql.PreparedStatement;
 
+import static bumblebee.xchangepass.global.common.Constants.LOCK_KEY;
+
 @Component
 @RequiredArgsConstructor
 public class ExchangeRateLockManager {
@@ -16,7 +18,7 @@ public class ExchangeRateLockManager {
     @PersistenceContext
     private final EntityManager entityManager;
 
-    private static final long LOCK_KEY = 987654321L;
+
 
     public boolean tryAcquireLock() {
         Query query = entityManager.createNativeQuery("SELECT pg_try_advisory_lock(:lockKey)");

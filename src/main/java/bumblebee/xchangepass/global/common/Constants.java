@@ -24,4 +24,7 @@ public class Constants {
 
     // 외부 API 호출
     public static final String url = "https://v6.exchangerate-api.com/v6/";
+
+    // postgreSQL LOCK_KEY 상수
+    public static final long LOCK_KEY = 987654321L;
 }
