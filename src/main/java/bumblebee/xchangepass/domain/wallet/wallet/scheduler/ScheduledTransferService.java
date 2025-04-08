@@ -4,7 +4,6 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequ
 import bumblebee.xchangepass.domain.wallet.wallet.entity.ScheduledTransfer;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.ScheduledTransferRepository;
-import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletServiceFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferStatus.*;
+import static bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferStatus.PENDING;
 
 @Slf4j
 @Service
@@ -24,31 +23,19 @@ public class ScheduledTransferService {
     ScheduledTransferRepository repository;
 
     @Autowired
-    WalletServiceFactory walletServiceFactory;
+    ScheduledTransferRepository scheduledTransferRepository;
 
     @Autowired
-    ScheduledTransferRepository scheduledTransferRepository;
+    ScheduledTransferExecutor executor;
 
     @Scheduled(fixedDelay = 60000) // 1분마다 실행
     @Transactional
     public void processScheduledTransfers() {
-        LocalDateTime now = LocalDateTime.now();
-        List<ScheduledTransfer> pendingList =
-                repository.findByStatusAndScheduledAtBefore(PENDING, now);
+        List<ScheduledTransfer> pending = repository.findByStatusAndScheduledAtBefore(PENDING, LocalDateTime.now());
 
-        for (ScheduledTransfer scheduled : pendingList) {
+        for (ScheduledTransfer scheduled : pending) {
             try {
-                WalletTransferRequest request = new WalletTransferRequest(
-                        scheduled.getReceiverName(),
-                        scheduled.getReceiverPhoneNumber(),
-                        scheduled.getTransferAmount(),
-                        scheduled.getFromCurrency(),
-                        scheduled.getToCurrency(),
-                        scheduled.getScheduledAt(),
-                        WalletTransferType.GENERAL
-                );
-                walletServiceFactory.getService("namedLock").transfer(scheduled.getSenderId(), request);
-                scheduled.markSuccess();
+                executor.execute(scheduled);
             } catch (Exception e) {
                 scheduled.markFailed();
                 log.error("예약 송금 실패: {}", scheduled.getScheduledTransferId(), e);

@@ -79,17 +79,17 @@ public class WalletBalanceService {
     }
 
     public void transferBalance(WalletBalance fromBalance, WalletBalance toBalance, BigDecimal amount) {
-        fromBalance.subtractBalance(amount);
-        toBalance.addBalance(amount);
-        balanceRepository.save(fromBalance);
-        balanceRepository.save(toBalance);
-
         fraudDetectionService.detect(new FraudDetectEvent(
                 fromBalance.getWallet().getUser().getUserId(),
                 amount,
                 LocalDateTime.now(),
                 null
         ));
+
+        fromBalance.subtractBalance(amount);
+        toBalance.addBalance(amount);
+        balanceRepository.save(fromBalance);
+        balanceRepository.save(toBalance);
 
         transactionService.saveTransaction(fromBalance.getWallet().getWalletId(), toBalance.getWallet().getWalletId(), amount, fromBalance.getCurrency(), toBalance.getCurrency(), WalletTransactionType.TRANSFER);
     }

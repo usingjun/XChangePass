@@ -5,6 +5,7 @@ import bumblebee.xchangepass.global.validation.ValidCurrency;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
@@ -35,6 +36,7 @@ public record WalletTransferRequest(
         Currency toCurrency,
 
         @Schema(description = "송금 날짜", example = "2024-02-20T12:34:56")
+        @FutureOrPresent
         LocalDateTime transferDatetime,
 
         @Schema(description = "송금 타입", example = "GENERAL")
