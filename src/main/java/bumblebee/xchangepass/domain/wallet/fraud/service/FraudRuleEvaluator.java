@@ -25,11 +25,11 @@ public class FraudRuleEvaluator {
         Long nowEpoch = System.currentTimeMillis() / 1000;
         Boolean isNight = isNightTime();
 
-        DefaultRedisScript<Boolean> script = new DefaultRedisScript<>();
+        DefaultRedisScript<String> script = new DefaultRedisScript<>();
         script.setScriptSource(new ResourceScriptSource(new ClassPathResource("lua/fraud_check.lua")));
-        script.setResultType(Boolean.class);
+        script.setResultType(String.class);
 
-        Boolean result = redisTemplate.execute(
+        String result = redisTemplate.execute(
                 script,
                 List.of("fraud:user:" + userId),
                 amount.toString(),
@@ -40,17 +40,15 @@ public class FraudRuleEvaluator {
                 isNight ? "1" : "0"
         );
 
-        if ("1".equals(result)) {
-            lastDetectedReason = "누적 금액 초과";
-        } else if ("2".equals(result)) {
-            lastDetectedReason = "5분 내 거래 횟수 초과";
-        } else if ("3".equals(result)) {
-            lastDetectedReason = "동일 금액 반복";
-        } else if ("4".equals(result)) {
-            lastDetectedReason = "심야 시간대 거래";
+        switch (result) {
+            case "1" -> lastDetectedReason = "누적 금액 초과";
+            case "2" -> lastDetectedReason = "5분 내 거래 횟수 초과";
+            case "3" -> lastDetectedReason = "동일 금액 반복";
+            case "4" -> lastDetectedReason = "심야 시간대 거래";
+            default -> lastDetectedReason = null;
         }
 
-        return Boolean.TRUE.equals(result);
+        return !"0".equals(result);
     }
 
     public String getLastDetectedReason() {
