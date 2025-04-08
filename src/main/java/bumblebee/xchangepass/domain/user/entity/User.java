@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.domain.user.entity;
 
-import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.ExchangeTransaction;
+import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.ExchangeTransaction;
+import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransaction;
 import bumblebee.xchangepass.domain.user.entity.value.*;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import jakarta.persistence.*;
@@ -64,11 +65,14 @@ public class User {
     @Column(name = "is_deleted")
     private Boolean isDeleted;
 
-    @OneToOne(mappedBy ="user", orphanRemoval = true, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy ="user", orphanRemoval = true, cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     private Wallet wallet;
 
     @OneToMany(mappedBy = "user", orphanRemoval = true, cascade = CascadeType.ALL)
     private List<ExchangeTransaction> exchangeTransactions;
+
+    @OneToMany(mappedBy = "user", orphanRemoval = true, cascade = CascadeType.ALL)
+    private List<CardTransaction> cardTransactions;
 
     @CreatedDate
     @Column(name = "user_join_date")

@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 @Schema(description = "세부 카드 정보 응답 DTO")
 @Builder
 public record DetailedCardInfoResponse(
+        @Schema(description = "카드 ID", example = "1")
+        Long cardId,
+
         @Schema(description = "카드 타입", example = "PHYSICAL")
         CardType cardType,
 
