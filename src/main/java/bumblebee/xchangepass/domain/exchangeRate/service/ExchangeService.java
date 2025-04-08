@@ -8,35 +8,22 @@ import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRepository;
 import bumblebee.xchangepass.domain.exchangeRate.util.Country;
 import bumblebee.xchangepass.domain.exchangeRate.util.ExchangeRateLockManager;
 import bumblebee.xchangepass.global.error.ErrorCode;
-import bumblebee.xchangepass.global.exception.CommonException;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationContext;
 import org.springframework.data.redis.RedisConnectionFailureException;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 import static bumblebee.xchangepass.global.common.Constants.url;
@@ -155,11 +142,6 @@ public class ExchangeService {
 
         if (lockAcquired) {
             try {
-                exchangeRates = exchangeRepository.findByBaseCurrency(baseCurrency);
-                if (!exchangeRates.isEmpty()) {
-                    return toResponse(baseCurrency, exchangeRates);
-                }
-
                 fetchAndSaveAllExchangeRates().join();
 
                 exchangeRates = exchangeRepository.findByBaseCurrency(baseCurrency);
