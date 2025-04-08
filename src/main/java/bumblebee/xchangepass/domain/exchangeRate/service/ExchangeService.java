@@ -42,7 +42,6 @@ import java.util.concurrent.Executor;
 import static bumblebee.xchangepass.global.common.Constants.url;
 
 @Service
-@RequiredArgsConstructor
 public class ExchangeService {
 
     @Value("${api.key}")
