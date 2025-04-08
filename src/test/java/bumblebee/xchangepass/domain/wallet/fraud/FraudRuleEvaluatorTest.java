@@ -28,7 +28,6 @@ class FraudRuleEvaluatorTest {
 
     @Container
     static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
-//            .withInitScript("init.sql")
             .withDatabaseName("xcp_test")
             .withUsername("postgres")
             .withPassword("postgres");
