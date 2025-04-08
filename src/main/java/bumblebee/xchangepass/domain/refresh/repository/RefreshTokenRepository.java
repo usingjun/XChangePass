@@ -52,6 +52,9 @@ public class RefreshTokenRepository {
         return storedToken != null && storedToken.equals(refreshToken);
     }
 
+    /**
+     * 사용자 ID로 Refresh Token 조회
+     */
     public String getRefreshToken(Long userId) {
         String key = "refresh_token:" + userId;
         return (String) jsonRedisTemplate.opsForValue().get(key);
