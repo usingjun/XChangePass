@@ -39,6 +39,8 @@ import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.Executor;
 
+import static bumblebee.xchangepass.global.common.Constants.url;
+
 @Service
 @RequiredArgsConstructor
 public class ExchangeService {
@@ -75,7 +77,7 @@ public class ExchangeService {
     }
 
     public ExchangeRateResponse fetchExchangeRates(String baseCurrency) {
-        String API_URL = "https://v6.exchangerate-api.com/v6/" + authkey + "/latest/" + baseCurrency;
+        String API_URL = url + authkey + "/latest/" + baseCurrency;
         try {
             return restTemplate.getForObject(API_URL, ExchangeRateResponse.class);
         } catch (HttpClientErrorException e) {
@@ -121,10 +123,10 @@ public class ExchangeService {
             Cache cache = cacheManager.getCache("exchangeRates");
             if (cache != null) {
                 cache.evict("all::" + baseCurrency);
-
+                List<String> currencies = List.of("USD","KRW");
                 List<CompletableFuture<Void>> futures = new ArrayList<>();
 
-                for (String targetCurrency : Country.create()) {
+                for (String targetCurrency : currencies) {
                     CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                         cache.evict("rate::" + baseCurrency + "::" + targetCurrency);
                     }, executor);
