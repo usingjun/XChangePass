@@ -2,9 +2,7 @@ package bumblebee.xchangepass.domain.wallet.wallet.scheduler;
 
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.ScheduledTransfer;
-import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.ScheduledTransferRepository;
-import bumblebee.xchangepass.domain.wallet.wallet.service.WalletServiceFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
