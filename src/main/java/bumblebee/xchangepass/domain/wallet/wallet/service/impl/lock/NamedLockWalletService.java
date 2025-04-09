@@ -5,14 +5,14 @@ import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
-import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.NamedLockRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.wallet.wallet.scheduler.ScheduledTransferService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -32,6 +33,7 @@ public class NamedLockWalletService implements WalletService {
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final NamedLockRepository namedLockRepository;
+    private final FraudDetectionService fraudDetectionService;
     private final ExchangeService exchangeService;
     private final UserService userService;
 
@@ -127,6 +129,13 @@ public class NamedLockWalletService implements WalletService {
             if (!request.toCurrency().equals(request.fromCurrency())) {
                 transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
             }
+
+            fraudDetectionService.detect(new FraudDetectEvent(
+                    senderId,
+                    transferAmount,
+                    LocalDateTime.now(),
+                    null
+            ));
 
             balanceService.transferBalance(fromBalance, toBalance, transferAmount);
         } finally {

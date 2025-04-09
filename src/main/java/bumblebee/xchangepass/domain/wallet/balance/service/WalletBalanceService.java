@@ -23,7 +23,6 @@ public class WalletBalanceService {
 
     private final WalletBalanceRepository balanceRepository;
     private final WalletTransactionService transactionService;
-    private final FraudDetectionService fraudDetectionService;
 
     /**
      * 화폐별 잔액 생성
@@ -128,13 +127,6 @@ public class WalletBalanceService {
      * @param amount
      */
     public void transferBalance(WalletBalance fromBalance, WalletBalance toBalance, BigDecimal amount) {
-        fraudDetectionService.detect(new FraudDetectEvent(
-                fromBalance.getWallet().getUser().getUserId(),
-                amount,
-                LocalDateTime.now(),
-                null
-        ));
-
         fromBalance.subtractBalance(amount);
         toBalance.addBalance(amount);
         balanceRepository.save(fromBalance);
