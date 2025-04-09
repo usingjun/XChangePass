@@ -1,7 +1,8 @@
 package bumblebee.xchangepass.domain.refresh.controller;
 
-import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenRequest;
 import bumblebee.xchangepass.domain.refresh.service.RefreshTokenService;
+import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
+import bumblebee.xchangepass.global.error.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -9,12 +10,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponse;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -43,8 +45,20 @@ public class RefreshTokenController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/token-refresh")
-    public void tokenRefresh(@RequestBody @Valid RefreshTokenRequest request) {
-        refreshTokenService.refreshToken(request.refreshToken());
+    public ResponseEntity<RefreshTokenResponse> tokenRefresh(@CookieValue(value = "refreshToken", required = false) String refreshToken) {
+        // refreshToken이 없다면 예외 처리
+        if (refreshToken == null) {
+            throw ErrorCode.REFRESH_TOKEN_INVALID.commonException();
+        }
+
+        // 새 토큰 재발급
+        RefreshTokenResponse response = refreshTokenService.refreshToken(refreshToken);
+
+        ResponseCookie refreshCookie = refreshTokenService.saveRefreshToken(response);
+
+        return ResponseEntity.ok()
+                .header("Set-Cookie", refreshCookie.toString())
+                .build();
     }
 
 }

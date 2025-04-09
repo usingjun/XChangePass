@@ -32,7 +32,7 @@ public class UserService {
     }
 
     public User readUser(String userName, String userPhoneNumber) {
-        return userRepository.findByUserId(userName, userPhoneNumber)
+        return userRepository.findByNameAndPhoneNumber(userName, userPhoneNumber)
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
     }
 

@@ -80,6 +80,7 @@ dependencies {
     implementation 'io.projectreactor.netty:reactor-netty:1.1.22'                   // Reactor Netty 의존성
     implementation 'com.fasterxml.jackson.core:jackson-databind'                    // JSON 파싱을 위한 의존성
     implementation 'com.google.code.gson:gson:2.10.1'                               // JSON 데이터를 다룰 수 있는 클래스
+    implementation 'io.netty:netty-resolver-dns-native-macos:4.1.68.Final:osx-aarch_64'      // MacOS에서 DNS 관련 네이티브 라이브러리
 }
 
 tasks.named('test') {

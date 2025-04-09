@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.user.entity;
 
-import bumblebee.xchangepass.domain.ExchangeTransaction.entitiy.ExchangeTransaction;
 import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransaction;
+import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.ExchangeTransaction;
 import bumblebee.xchangepass.domain.user.entity.value.*;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import jakarta.persistence.*;

@@ -39,7 +39,7 @@ public class DeadLetterConsumer {
             rabbitTemplate.convertAndSend("wallet-transaction-retry-queue", message);
         } else {
             log.error("🚨 DLQ 재시도 초과, 슬랙 알림 전송: {}", message);
-            slackNotifier.send("🚨 DLQ 처리 실패: " + message);
+            slackNotifier.failToSaveTransaction("🚨 DLQ 처리 실패: " + message);
         }
 
         // 수동 ack

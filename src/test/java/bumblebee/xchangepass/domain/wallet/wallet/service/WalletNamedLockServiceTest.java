@@ -3,17 +3,18 @@ package bumblebee.xchangepass.domain.wallet.wallet.service;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
+import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudRuleEvaluator;
 import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
+import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.NamedLockWalletService;
-import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.PessimisticLockWalletService;
-import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
-import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,8 +22,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -45,6 +46,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Testcontainers
@@ -65,6 +68,9 @@ class WalletNamedLockServiceTest {
     private WalletBalanceService balanceService;
     @Autowired
     private WalletTransactionRepository walletTransactionRepository;
+
+    @MockBean
+    private FraudRuleEvaluator fraudRuleEvaluator;
 
     private final BigDecimal CHARGE_AMOUNT = new BigDecimal("10000.00");
     private final BigDecimal TRANSFER_AMOUNT = new BigDecimal("5000.00");
@@ -152,7 +158,7 @@ class WalletNamedLockServiceTest {
     void testTransferSuccess() {
         lockWalletFacade.charge(sender.getUserId(), new WalletInOutRequest(CHARGE_AMOUNT, CURRENCY, CURRENCY, null));
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
         lockWalletFacade.transfer(sender.getUserId(), transferRequest);
 
         WalletBalance senderBalance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
@@ -165,7 +171,7 @@ class WalletNamedLockServiceTest {
     @Test
     @DisplayName("잔액이 부족할 때 송금이 실패한다")
     void testTransferFailureDueToInsufficientFunds() {
-        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
         Exception exception = assertThrows(RuntimeException.class, () -> lockWalletFacade.transfer(sender.getUserId(), transferRequest));
         assertThat(exception.getMessage()).contains("충전 금액이 부족합니다.");
     }
@@ -191,6 +197,8 @@ class WalletNamedLockServiceTest {
         WalletBalance balance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         balanceService.chargeBalance(balance, CHARGE_AMOUNT.multiply(BigDecimal.valueOf(100)));
 
+        when(fraudRuleEvaluator.isSuspicious(any(), any())).thenReturn(false);
+
         // 100명의 사용자가 동시에 송금하도록 설정
         int concurrentUsers = 100;
         ExecutorService executorService = Executors.newFixedThreadPool(concurrentUsers);
@@ -200,7 +208,7 @@ class WalletNamedLockServiceTest {
         Long senderId = senderWallet.getWalletId();
         Long receiverId = receiverWallet.getWalletId();
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
 
         for (int i = 0; i < concurrentUsers; i++) {
             executorService.submit(() -> {
@@ -263,7 +271,7 @@ class WalletNamedLockServiceTest {
                 latch.await();
                 Thread.sleep(20); // 🔥 실행 순서를 조정
                 System.out.println("🚀 [송금 시작]");
-                WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+                WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
 
                 lockWalletFacade.transfer(sender.getUserId(), transferRequest);
                 isTransferFirst.set(true);
@@ -314,7 +322,7 @@ class WalletNamedLockServiceTest {
                 CHARGE_AMOUNT, CURRENCY, CURRENCY, LocalDateTime.now()
         );
 
-        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null);
+        WalletTransferRequest transferRequest = new WalletTransferRequest(receiver.getUserName().getValue(), receiver.getUserPhoneNumber().getValue(), TRANSFER_AMOUNT, CURRENCY, CURRENCY, null, WalletTransferType.GENERAL);
 
         CountDownLatch latch = new CountDownLatch(1); // 🔥 1로 설정 (이체 먼저 실행)
 

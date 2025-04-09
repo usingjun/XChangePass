@@ -10,6 +10,7 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequ
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
+import bumblebee.xchangepass.domain.wallet.wallet.scheduler.ScheduledTransferService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import jakarta.persistence.LockTimeoutException;
@@ -31,6 +32,7 @@ public class PessimisticLockWalletService implements WalletService {
 
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
+    private final ScheduledTransferService scheduledTransferService;
     private final ExchangeService exchangeService;
     private final UserService userService;
 

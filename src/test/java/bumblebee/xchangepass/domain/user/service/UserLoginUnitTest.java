@@ -1,23 +1,20 @@
 package bumblebee.xchangepass.domain.user.service;
 
 import bumblebee.xchangepass.config.RedisTestBase;
+import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
+import bumblebee.xchangepass.domain.refresh.entity.RefreshToken;
 import bumblebee.xchangepass.domain.refresh.repository.RefreshTokenRepository;
+import bumblebee.xchangepass.domain.refresh.service.RefreshTokenService;
 import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
-import bumblebee.xchangepass.domain.user.entity.User;
-import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.entity.Role;
 import bumblebee.xchangepass.domain.user.entity.Sex;
-import bumblebee.xchangepass.domain.user.repository.UserRepository;
-import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
-import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
-import bumblebee.xchangepass.global.exception.CommonException;
-import bumblebee.xchangepass.global.security.jwt.JwtProvider;
+import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.login.LoginService;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
-import bumblebee.xchangepass.domain.refresh.entity.RefreshToken;
-import bumblebee.xchangepass.domain.refresh.service.RefreshTokenService;
-import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
+import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
+import bumblebee.xchangepass.domain.user.repository.UserRepository;
+import bumblebee.xchangepass.global.exception.CommonException;
+import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,8 +40,6 @@ class UserLoginUnitTest extends RedisTestBase {
     @Mock
     private BCryptPasswordEncoder bCryptPasswordEncoder;
 
-    @Mock
-    private WalletServiceImpl walletService;
 
     @Mock
     private JwtProvider jwtProvider;
@@ -106,7 +101,7 @@ class UserLoginUnitTest extends RedisTestBase {
         when(jwtProvider.generateAccessToken(userInfo.userId())).thenReturn("accessToken");
         when(jwtProvider.generateRefreshToken(userInfo.userId())).thenReturn("refreshToken");
 
-        LoginResponse response = loginService.login(loginRequest);
+        RefreshTokenResponse response = loginService.login(loginRequest);
 
         assertNotNull(response);
         assertEquals("accessToken", response.accessToken());
@@ -134,6 +129,7 @@ class UserLoginUnitTest extends RedisTestBase {
     void refreshToken_Success() {
         when(jwtProvider.validateToken(refreshToken)).thenReturn(true);
         when(refreshTokenRepository.getUserIdFromRefreshToken(refreshToken)).thenReturn(1L);
+        when(refreshTokenRepository.getRefreshToken(1L)).thenReturn(refreshToken);
         when(jwtProvider.generateAccessToken(1L)).thenReturn("newAccessToken");
         when(jwtProvider.generateRefreshToken(1L)).thenReturn("newRefreshToken");
 

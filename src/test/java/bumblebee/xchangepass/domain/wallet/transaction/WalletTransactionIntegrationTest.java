@@ -218,7 +218,7 @@ public class WalletTransactionIntegrationTest {
         DeadLetterConsumer consumer = new DeadLetterConsumer(new RabbitTemplate(), slackNotifier);
         consumer.handleDeadLetter(message, 1L, xDeathHeader, channel);
 
-        verify(slackNotifier, times(1)).send(contains("DLQ 처리 실패"));
+        verify(slackNotifier, times(1)).failToSaveTransaction(contains("DLQ 처리 실패"));
     }
 
     @Test

@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.user.login;
 
+import bumblebee.xchangepass.domain.refresh.dto.RefreshTokenResponse;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
-import bumblebee.xchangepass.domain.user.login.dto.response.LoginResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -11,10 +11,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @Tag(name = "Login", description = "Login API")
@@ -40,8 +44,16 @@ public class LoginController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/login")
-    public LoginResponse memberLogin(@RequestBody @Valid LoginRequest loginRequest) {
-        return loginService.login(loginRequest);
+    public ResponseEntity<RefreshTokenResponse> memberLogin(@RequestBody @Valid LoginRequest loginRequest) {
+        RefreshTokenResponse response = loginService.login(loginRequest);
+
+        ResponseCookie accessCookie = loginService.saveAccessToken(response.accessToken());
+        ResponseCookie refreshCookie = loginService.saveRefreshToken(response);
+
+        return ResponseEntity.ok()
+                .header("Set-Cookie", accessCookie.toString())
+                .header("Set-Cookie", refreshCookie.toString())
+                .build();
     }
 
     @Operation(summary = "로그아웃", description = "로그아웃합니다.")
@@ -55,8 +67,20 @@ public class LoginController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/logout")
-    public void logout(@RequestHeader("Authorization") String refreshToken) {
+    public ResponseEntity<RefreshTokenResponse> logout(@RequestHeader("Authorization") String refreshToken) {
+        if (refreshToken.startsWith("Bearer ")) {
+            refreshToken = refreshToken.substring(7);
+        }
+
         // Refresh Token 삭제
         loginService.logout(refreshToken);
+
+        ResponseCookie expiredRefresh = loginService.deleteRefreshToken();
+        ResponseCookie expiredAccess = loginService.deleteAccessToken();
+
+        return ResponseEntity.ok()
+                .header("Set-Cookie", expiredRefresh.toString())
+                .header("Set-Cookie", expiredAccess.toString())
+                .build();
     }
 }

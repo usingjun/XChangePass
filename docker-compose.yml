@@ -13,7 +13,16 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
-    command: [ "redis-server", "--appendonly", "yes" ]
+    command: [
+      "redis-server",
+      "--save", "900 1",            # 900초(15분)마다 최소 1개 이상의 변경이 있으면 스냅샷 저장
+      "--save", "300 10",           # 300초(5분)마다 최소 10개 이상의 변경이 있으면 저장
+      "--save", "60 1000",          # 60초마다 최소 1000개의 변경사항이 있으면 저장
+      "--appendonly", "yes",        # AOF 활성화
+      "--appendfsync", "everysec", # 1초마다 디스크에 기록
+      "--auto-aof-rewrite-percentage", "100",  # AOF 크기가 100% 커지면 리라이트
+      "--auto-aof-rewrite-min-size", "64mb"   # AOF 크기가 최소 64MB일 때 리라이트
+    ]
 
   # 🔹 PostgreSQL (Spring Boot가 사용하는 DB)
   postgres:

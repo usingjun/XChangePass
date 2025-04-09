@@ -3,26 +3,26 @@ package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock;
 import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.service.UserService;
+import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
+import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.NamedLockRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
-import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
-import jakarta.persistence.LockTimeoutException;
-import jakarta.persistence.PessimisticLockException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
-import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -33,6 +33,7 @@ public class NamedLockWalletService implements WalletService {
     private final WalletRepository walletRepository;
     private final WalletBalanceService balanceService;
     private final NamedLockRepository namedLockRepository;
+    private final FraudDetectionService fraudDetectionService;
     private final ExchangeService exchangeService;
     private final UserService userService;
 
@@ -88,7 +89,7 @@ public class NamedLockWalletService implements WalletService {
             balanceService.withdrawBalance(balance, amount);
 
             return balance.getBalance();
-        }  finally {
+        } finally {
             Boolean unlockSuccess = namedLockRepository.releaseLock(wallet.getWalletId());
             if (!unlockSuccess) {
                 log.error("⚠️ [Named Lock 해제 실패] 사용자 ID: {}", userId);
@@ -129,6 +130,13 @@ public class NamedLockWalletService implements WalletService {
                 transferAmount = exchangeService.getExchangeMoney(request.fromCurrency(), request.toCurrency(), request.transferAmount());
             }
 
+            fraudDetectionService.detect(new FraudDetectEvent(
+                    senderId,
+                    transferAmount,
+                    LocalDateTime.now(),
+                    null
+            ));
+
             balanceService.transferBalance(fromBalance, toBalance, transferAmount);
         } finally {
             Boolean largeUnlockSuccess = namedLockRepository.releaseLock(largerId);
@@ -140,6 +148,7 @@ public class NamedLockWalletService implements WalletService {
             if (!smallUnlockSuccess) {
                 log.error("⚠️ [Named Lock 해제 실패] Wallet ID: {}", smallerId);
             }
+
         }
     }
 
