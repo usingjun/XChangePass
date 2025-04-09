@@ -6,6 +6,7 @@ import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudRuleEvaluator;
 import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -44,6 +46,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Testcontainers
@@ -64,6 +68,9 @@ class WalletNamedLockServiceTest {
     private WalletBalanceService balanceService;
     @Autowired
     private WalletTransactionRepository walletTransactionRepository;
+
+    @MockBean
+    private FraudRuleEvaluator fraudRuleEvaluator;
 
     private final BigDecimal CHARGE_AMOUNT = new BigDecimal("10000.00");
     private final BigDecimal TRANSFER_AMOUNT = new BigDecimal("5000.00");
@@ -189,6 +196,8 @@ class WalletNamedLockServiceTest {
         // Given: 초기 충전
         WalletBalance balance = balanceService.findBalance(senderWallet.getWalletId(), CURRENCY);
         balanceService.chargeBalance(balance, CHARGE_AMOUNT.multiply(BigDecimal.valueOf(100)));
+
+        when(fraudRuleEvaluator.isSuspicious(any(), any())).thenReturn(false);
 
         // 100명의 사용자가 동시에 송금하도록 설정
         int concurrentUsers = 100;
