@@ -13,6 +13,7 @@ import bumblebee.xchangepass.domain.user.login.LoginService;
 import bumblebee.xchangepass.domain.user.login.dto.request.LoginRequest;
 import bumblebee.xchangepass.domain.user.login.dto.response.UserLoginResponse;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
+import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
 import bumblebee.xchangepass.global.exception.CommonException;
 import bumblebee.xchangepass.global.security.jwt.JwtProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.utility.DockerImageName;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -40,6 +47,8 @@ class UserLoginUnitTest extends RedisTestBase {
     @Mock
     private BCryptPasswordEncoder bCryptPasswordEncoder;
 
+    @Mock
+    private WalletServiceImpl walletService;
 
     @Mock
     private JwtProvider jwtProvider;
@@ -62,6 +71,27 @@ class UserLoginUnitTest extends RedisTestBase {
     private UserRegisterRequest registerRequest;
     private LoginRequest loginRequest;
     private String refreshToken;
+
+    @Container
+    static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
+            .withDatabaseName("xcp_test")
+            .withUsername("testuser")
+            .withPassword("testpass");
+
+    @Container
+    static GenericContainer<?> redisContainer = new GenericContainer<>(DockerImageName.parse("redis:7"))
+            .withExposedPorts(6379);
+
+    @DynamicPropertySource
+    static void overrideDataSourceProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
+        registry.add("spring.datasource.username", postgresContainer::getUsername);
+        registry.add("spring.datasource.password", postgresContainer::getPassword);
+
+        registry.add("spring.redis.host", redisContainer::getHost);
+        registry.add("spring.redis.port", () -> redisContainer.getMappedPort(6379));
+    }
+
 
     @BeforeEach
     void setUp() {
