@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -67,8 +68,10 @@ public class LoginController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/logout")
-    public ResponseEntity<RefreshTokenResponse> logout(@RequestHeader("Authorization") String refreshToken) {
-        if (refreshToken.startsWith("Bearer ")) {
+    public ResponseEntity<RefreshTokenResponse> logout(HttpServletRequest request) {
+        String refreshToken = loginService.extractTokenFromCookies(request); // ✅ 쿠키에서 꺼냄
+
+        if (refreshToken != null && refreshToken.startsWith("Bearer ")) {
             refreshToken = refreshToken.substring(7);
         }
 
