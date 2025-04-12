@@ -4,13 +4,18 @@ import { useAuthStore } from '@/stores/auth'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import HomeView from '@/views/HomeView.vue'
-import WalletView from '@/views/WalletView.vue'
+import DepositView from '@/views/DepositView.vue'
+import WithdrawView from '@/views/WithdrawView.vue'
+import TransferView from '@/views/TransferView.vue'
 
 const routes = [
     { path: '/', name: 'Home', component: HomeView, meta: { requiresAuth: true } },
     { path: '/user-login', name: 'Login', component: LoginView },
     { path: '/register', name: 'Register', component: RegisterView },
-    { path: '/wallet', name: 'Wallet', component: WalletView, meta: { requiresAuth: true } },
+    {path: '/deposit', name: 'DepositView', component: DepositView, meta: { requiresAuth: true } },
+    {path: '/withdraw', name: 'WithdrawView', component: WithdrawView, meta: { requiresAuth: true } },
+    {path: '/transfer', name: 'TransferView', component: TransferView, meta: { requiresAuth: true } },
+
 ]
 
 const router = createRouter({
