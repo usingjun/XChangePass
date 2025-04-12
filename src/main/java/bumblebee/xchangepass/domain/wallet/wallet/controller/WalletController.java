@@ -3,11 +3,14 @@ package bumblebee.xchangepass.domain.wallet.wallet.controller;
 import bumblebee.xchangepass.domain.wallet.transaction.dto.request.WalletTransactionSearchCondition;
 import bumblebee.xchangepass.domain.wallet.transaction.dto.response.WalletTransactionListResponse;
 import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.WalletPasswordRequest;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.WalletPasswordResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletServiceFactory;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletFacadeService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
 import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -35,6 +38,7 @@ public class WalletController {
 
     private final WalletServiceFactory walletServiceFactory;
     private final WalletTransactionService transactionService;
+    private final WalletServiceImpl walletService;
     private final WalletFacadeService walletFacadeService;
 
     @Operation(summary = "거래내역 조회", description = "거래내역을 조회합니다.")
@@ -156,5 +160,12 @@ public class WalletController {
         return walletServiceFactory.getService("namedLock").balance(user.getUserId());
     }
 
+
+    @PostMapping("/verify-password")
+    @ResponseStatus(HttpStatus.OK)
+    public WalletPasswordResponse checkWalletPassword(@RequestBody WalletPasswordRequest request,
+                                                      @AuthenticationPrincipal CustomUserDetails user) {
+        return walletService.checkWalletPassword(user.getUserId(), request.password());
+    }
 
 }

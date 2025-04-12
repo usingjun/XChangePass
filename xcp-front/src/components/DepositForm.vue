@@ -40,7 +40,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import {onMounted, ref} from 'vue'
 import axios from 'axios'
 import { useExchangeCalculator } from '@/api/useExchangeCalculator.js'
 import PasswordConfirmModal from '@/components/PasswordConfirmModal.vue'

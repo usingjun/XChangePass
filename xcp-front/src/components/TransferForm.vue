@@ -95,7 +95,10 @@ const transferType = ref('GENERAL')
 const { convertedAmount } = useExchangeCalculator(fromCurrency, toCurrency, transferAmount)
 
 // 통화 / 잔액
-const currencyOptions = ['KRW', 'USD', 'EUR', 'JPY']
+const currencyOptions = [
+  'KRW', 'USD', 'EUR', 'JPY', 'CNY', 'GBP', 'AUD', 'CAD', 'CHF',
+  'HKD', 'SGD', 'SEK', 'NOK', 'NZD', 'THB', 'PHP', 'IDR', 'INR', 'MYR', 'VND'
+]
 const balances = ref([])
 
 // 시간

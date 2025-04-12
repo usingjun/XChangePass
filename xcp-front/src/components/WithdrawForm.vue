@@ -15,10 +15,12 @@
       </div>
 
       <div class="mb-3">
-        <label class="form-label">보유 화폐 (From)</label>
+        <label class="form-label">보유 화폐</label>
         <select v-model="fromCurrency" class="form-select" required>
           <option disabled value="">선택하세요</option>
-          <option v-for="c in currencyOptions" :key="c" :value="c">{{ c }}</option>
+          <option v-for="balance in balances" :key="balance.currency" :value="balance.currency">
+            {{ balance.currency }} (잔액: {{ balance.balance }})
+          </option>
         </select>
       </div>
 
@@ -40,7 +42,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import {onMounted, ref} from 'vue'
 import axios from 'axios'
 import { useExchangeCalculator } from '@/api/useExchangeCalculator.js'
 import PasswordConfirmModal from '@/components/PasswordConfirmModal.vue'
@@ -56,8 +58,19 @@ const currencyOptions = [
   'KRW', 'USD', 'EUR', 'JPY', 'CNY', 'GBP', 'AUD', 'CAD', 'CHF',
   'HKD', 'SGD', 'SEK', 'NOK', 'NZD', 'THB', 'PHP', 'IDR', 'INR', 'MYR', 'VND'
 ]
+const balances = ref([])
+
 
 const { convertedAmount } = useExchangeCalculator(fromCurrency, toCurrency, amount)
+
+onMounted(async () => {
+  try {
+    const res = await axios.get('http://localhost:8080/api/v1/wallet/balance')
+    balances.value = res.data
+  } catch (e) {
+    alert('잔액 정보를 불러오는 데 실패했습니다.')
+  }
+})
 
 const onSubmitClicked = () => {
   showPasswordModal.value = true
