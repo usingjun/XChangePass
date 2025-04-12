@@ -28,7 +28,7 @@ public class ExchangeController {
                     content = @Content(mediaType = "application/json",
                             schema = @Schema(implementation = ErrorResponse.class),
                             examples = @ExampleObject(value = "{\n  \"code\": \"E004\"," +
-                                    "\n  \"message\": \"환율 요청 초과\"\n}"))
+                                                              "\n  \"message\": \"환율 요청 초과\"\n}"))
             )
     })
     @ResponseStatus(HttpStatus.OK)
@@ -43,7 +43,7 @@ public class ExchangeController {
                     content = @Content(mediaType = "application/json",
                             schema = @Schema(implementation = ErrorResponse.class),
                             examples = @ExampleObject(value = "{\n  \"code\": \"E004\"," +
-                                    "\n  \"message\": \"특정 나라에 대한 환율 정보 없음\"\n}"))
+                                                              "\n  \"message\": \"특정 나라에 대한 환율 정보 없음\"\n}"))
             )
     })
     @ResponseStatus(HttpStatus.OK)
