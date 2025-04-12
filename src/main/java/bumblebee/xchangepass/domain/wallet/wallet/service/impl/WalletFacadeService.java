@@ -16,7 +16,7 @@ public class WalletFacadeService {
     private final ScheduledTransferService scheduledTransferService;
 
     public void transfer(Long senderId, WalletTransferRequest request) {
-        if (request.transferType() == WalletTransferType.SCHEDULE) {
+        if (request.transferType() == WalletTransferType.SCHEDULED) {
             scheduledTransferService.saveSchedule(senderId, request);
         } else {
             WalletService service = walletServiceFactory.getService("namedLock");
