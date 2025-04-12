@@ -171,6 +171,13 @@ onMounted(() => {
   fetchWallet()
   fetchExchangeKRW()
 })
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+const goToWallet = () => {
+  router.push('/wallet')
+}
 </script>
 
 <style scoped>
