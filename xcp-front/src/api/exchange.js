@@ -1,4 +1,5 @@
-import axios from './axios'
+import axios from '@/api/axios'
+
 
 // 환율 정보 조회 API
 export const fetchExchangeRate = (baseCurrency) => {
