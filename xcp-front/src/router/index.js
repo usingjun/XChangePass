@@ -1,9 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-import LoginView from '../views/LoginView.vue'
-import RegisterView from '../views/RegisterView.vue'
+import LoginView from '@/views/LoginView.vue'
+import RegisterView from '@/views/RegisterView.vue'
 import HomeView from '@/views/HomeView.vue'
+import ExchangeView from '@/views/ExchangeView.vue'  // 환율 조회 페이지 import 추가
+import ExchangeTransferView from '@/views/ExchangeTransferView.vue'
 import DepositView from '@/views/DepositView.vue'
 import WithdrawView from '@/views/WithdrawView.vue'
 import TransferView from '@/views/TransferView.vue'
@@ -14,6 +16,8 @@ import CardTransactions from "@/views/CardTransactions.vue";
 
 const routes = [
     { path: '/', name: 'Home', component: HomeView, meta: { requiresAuth: true } },
+    { path: '/exchange', name: 'Exchange', component: ExchangeView, meta: { requiresAuth: true } },  // 추가
+    { path: '/exchange-transfer', name: 'ExchangeTransfer', component: ExchangeTransferView, meta: { requiresAuth: true } },
     { path: '/user-login', name: 'Login', component: LoginView },
     { path: '/my-page', name: "MyPage", component: MyPageView},
     { path: '/my-info', name: "MyInfo", component: MyInfoView},
