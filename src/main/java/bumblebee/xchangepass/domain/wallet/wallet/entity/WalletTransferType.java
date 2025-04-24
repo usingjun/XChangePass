@@ -2,5 +2,5 @@ package bumblebee.xchangepass.domain.wallet.wallet.entity;
 
 public enum WalletTransferType {
     GENERAL,   // 일반
-    SCHEDULE   // 예약
+    SCHEDULED   // 예약
 }

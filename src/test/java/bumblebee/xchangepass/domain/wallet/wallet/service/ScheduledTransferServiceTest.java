@@ -115,7 +115,7 @@ public class ScheduledTransferServiceTest {
                 Currency.getInstance("KRW"),
                 Currency.getInstance("KRW"),
                 LocalDateTime.now().minusSeconds(5),
-                WalletTransferType.SCHEDULE
+                WalletTransferType.SCHEDULED
         );
 
        walletFacadeService.transfer(senderId, request);

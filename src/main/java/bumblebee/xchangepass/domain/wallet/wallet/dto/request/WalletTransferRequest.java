@@ -36,7 +36,6 @@ public record WalletTransferRequest(
         Currency toCurrency,
 
         @Schema(description = "송금 날짜", example = "2024-02-20T12:34:56")
-        @FutureOrPresent
         LocalDateTime transferDatetime,
 
         @Schema(description = "송금 타입", example = "GENERAL")

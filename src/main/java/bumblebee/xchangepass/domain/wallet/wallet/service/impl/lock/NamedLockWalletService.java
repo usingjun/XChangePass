@@ -106,7 +106,7 @@ public class NamedLockWalletService implements WalletService {
 
         Wallet fromWallet = walletRepository.findByUserId(senderId)
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
-        Wallet toWallet = walletRepository.findById(receiver.getUserId())
+        Wallet toWallet = walletRepository.findByUserId(receiver.getUserId())
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
 
         // Deadlock 방지를 위해 ID 크기 순으로 Advisory Lock을 획득
