@@ -43,32 +43,16 @@
         </button>
       </section>
 
-      <!-- 환율 조회 카드 -->
       <section class="card">
         <h2 class="text-lg font-bold mb-4">환율 조회</h2>
 
-        <div class="flex flex-col gap-3">
-          <select v-model="baseCurrency" class="select-box">
-            <option value="USD">USD</option>
-            <option value="KRW">KRW</option>
-            <option value="JPY">JPY</option>
-          </select>
+        <p class="text-sm text-gray-500 mb-3">
+          다양한 국가의 환율 정보를 조회해보세요.
+        </p>
 
-          <select v-model="targetCurrency" class="select-box">
-            <option value="USD">USD</option>
-            <option value="KRW">KRW</option>
-            <option value="JPY">JPY</option>
-          </select>
-
-          <button @click="fetchRate" class="btn-main">
-            환율 조회
-          </button>
-
-          <div v-if="loading" class="text-center text-gray-400 mt-2">불러오는 중...</div>
-          <div v-else-if="rate" class="text-center text-lg font-bold mt-2">
-            {{ baseCurrency }} → {{ targetCurrency }} : {{ rate }}
-          </div>
-        </div>
+        <button @click="goToExchange" class="btn-main">
+          환율 조회 하러 가기
+        </button>
       </section>
       <!-- 환율 정보 카드 (3개 나라 박스 형태) -->
       <section class="card">
@@ -97,6 +81,18 @@
           </div>
         </div>
       </section>
+
+      <section class="card">
+        <h2 class="text-lg font-bold mb-4">환전하기</h2>
+
+        <p class="text-sm text-gray-500 mb-3">
+          보유한 금액을 다른 통화로 환전할 수 있습니다.
+        </p>
+
+        <button @click="goToExchangeTransfer" class="btn-main">
+          환전하러 가기
+        </button>
+      </section>
     </div>
 </template>
 
@@ -104,6 +100,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '@/api/axios'
+import currencyNameMap from '@/assets/currency-name.json'
 import { fetchExchangeRateByCountry } from '@/api/exchange'
 
 const router = useRouter()
@@ -115,6 +112,11 @@ const loading = ref(false)
 
 const walletList = ref([])
 const loadingWallet = ref(true)
+
+const exchangeList = ref([]) // KRW 기준 3개 나라
+const loadingExchange = ref(true)
+
+const currencyList = ref([]) // 전체 통화 목록 162개
 
 // 내 지갑 조회
 const fetchWallet = async () => {
@@ -142,14 +144,11 @@ const fetchRate = async () => {
 }
 
 // 환율 조회 (KRW 기준 3개 나라)
-const exchangeList = ref([])
-const loadingExchange = ref(true)
-
 const fetchExchangeKRW = async () => {
   loadingExchange.value = true
   try {
     const res = await axios.get('http://localhost:8080/api/exchange-rate/KRW')
-    const rates = res.data.conversion_rates  // ✅ 중요!
+    const rates = res.data.conversion_rates
 
     exchangeList.value = [
       { country: '일본', flag: '🇯🇵', rate: rates.JPY },
@@ -163,13 +162,32 @@ const fetchExchangeKRW = async () => {
   }
 }
 
+// 통화 목록 조회 (162개)
+const fetchCurrencyList = async () => {
+  try {
+    const res = await axios.get('http://localhost:8080/api/exchange-rate/KRW')
+    currencyList.value = Object.keys(res.data.conversion_rates)
+  } catch (e) {
+    console.error('통화 목록 불러오기 실패', e)
+  }
+}
+
 const goToTransfer = () => {
   router.push('/transfer')
+}
+
+const goToExchange = () => {
+  router.push('/exchange')
+}
+
+const goToExchangeTransfer = () => {
+  router.push('/exchange-transfer')
 }
 
 onMounted(() => {
   fetchWallet()
   fetchExchangeKRW()
+  fetchCurrencyList()
 })
 </script>
 
