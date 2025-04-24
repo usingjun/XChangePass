@@ -3,7 +3,9 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import './assets/tailwind.css'
 import App from './App.vue'
+import './api/index.js'
 import router from './router'
 
 import { useAuthStore } from '@/stores/auth'

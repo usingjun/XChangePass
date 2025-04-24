@@ -7,10 +7,18 @@ import HomeView from '@/views/HomeView.vue'
 import DepositView from '@/views/DepositView.vue'
 import WithdrawView from '@/views/WithdrawView.vue'
 import TransferView from '@/views/TransferView.vue'
+import MyPageView from "@/views/MyPageView.vue";
+import MyInfoView from "@/views/MyInfoView.vue";
+import CardManager from "@/views/CardManager.vue";
+import CardTransactions from "@/views/CardTransactions.vue";
 
 const routes = [
     { path: '/', name: 'Home', component: HomeView, meta: { requiresAuth: true } },
     { path: '/user-login', name: 'Login', component: LoginView },
+    { path: '/my-page', name: "MyPage", component: MyPageView},
+    { path: '/my-info', name: "MyInfo", component: MyInfoView},
+    { path: '/card', name: "CardManager", component: CardManager},
+    { path: '/cardTransaction', name: "CardTransaction", component: CardTransactions},
     { path: '/register', name: 'Register', component: RegisterView },
     {path: '/deposit', name: 'DepositView', component: DepositView, meta: { requiresAuth: true } },
     {path: '/withdraw', name: 'WithdrawView', component: WithdrawView, meta: { requiresAuth: true } },
