@@ -192,28 +192,34 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 메인 레이아웃 */
-
 /* 공통 카드 스타일 */
-.card {
-  background-color: white;
-  padding: 2rem;
-  border-radius: 1rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-/* 환영 카드 */
+.card,
 .welcome-card {
-  @apply card;
+  background-color: #ffffff;
+  padding: 1.5rem;               /* Tailwind의 p-6 과 유사 */
+  border-radius: 1rem;           /* rounded-xl */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* shadow-md */
 }
 
 /* 버튼 공통 */
 .btn-main {
-  @apply bg-blue-500 text-white w-full py-2 rounded-lg hover:bg-blue-600;
+  background-color: #3b82f6;     /* bg-blue-500 */
+  color: #ffffff;
+  width: 100%;
+  padding: 0.5rem 0;             /* py-2 */
+  border-radius: 0.5rem;         /* rounded-lg */
+  transition: background-color .2s;
+}
+.btn-main:hover {
+  background-color: #2563eb;     /* hover:bg-blue-600 */
 }
 
 /* 셀렉트 박스 */
 .select-box {
-  @apply border p-2 rounded w-full;
+  border: 1px solid #d1d5db;     /* border */
+  padding: 0.5rem;               /* p-2 */
+  border-radius: 0.25rem;        /* rounded */
+  width: 100%;
 }
 </style>
+
