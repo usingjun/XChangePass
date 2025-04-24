@@ -144,19 +144,3 @@ function onEditMemo() {
   console.log('메모 편집 열기')
 }
 </script>
-
-<style scoped>
-/* Tailwind를 쓰지 않는 환경이라면 아래 스타일을 살려주세요 */
-.modal-backdrop {
-  position: fixed; top: 0; right: 0; bottom: 0; left: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex; align-items: start; justify-content: center;
-  padding: 1rem; z-index: 50;
-}
-.modal-container {
-  background: #fff;
-  width: 100%; max-width: 20rem;
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-</style>
