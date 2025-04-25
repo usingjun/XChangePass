@@ -211,9 +211,9 @@ ___
 
 ## ✨ 팀 소개
 
-|                             BE                             |                             BE                             |                            BE                             |
-|:----------------------------------------------------------:|:----------------------------------------------------------:|:---------------------------------------------------------:|
-| ![](https://avatars.githubusercontent.com/u/176664628?v=4) | ![](https://avatars.githubusercontent.com/u/134962465?v=4) | ![](https://avatars.githubusercontent.com/u/97494494?v=4) |
-|                        Team Leader                         |                         Developer                          |                         Developer                         |
-|             [강시영](https://github.com/Si-rauis)             |           [이시현](https://github.com/CryingPerson)           |            [이용준](https://github.com/usingjun)             |
-|                             .                              |                             .                              |                             .                             |
+|                             BE                             |                             BE                             |                             BE                             |
+|:----------------------------------------------------------:|:----------------------------------------------------------:|:----------------------------------------------------------:|
+| ![](https://avatars.githubusercontent.com/u/176664628?v=4) | ![](https://avatars.githubusercontent.com/u/134962465?v=4) | ![](https://avatars.githubusercontent.com/u/97494494?v=4)  |
+|                        Team Leader                         |                         Developer                          |                         Developer                          |
+|             [강시영](https://github.com/Si-rauis)             |           [이시현](https://github.com/CryingPerson)           |             [이용준](https://github.com/usingjun)             |
+|        카드 관리 / 유저 CRUD / <br/> 금융 정보 암호화 / Jira 연동         |                  실시간 환율 정보/<br/>동시성 제어 환전                  | 거래 시스템(송금, 충전, 출금) / 시큐리티  구성(로그인)<br/>/지갑 거래내역(장애 복구, 알림) |
