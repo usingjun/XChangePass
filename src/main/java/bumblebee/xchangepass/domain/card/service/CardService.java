@@ -105,6 +105,8 @@ public class CardService {
                     .build();
 
             cardRepository.save(mobileCard);
+
+            existUser.getWallet().getCards().add(mobileCard);
         }catch (CommonException e) {
             throw e;
         }catch (Exception e) {
