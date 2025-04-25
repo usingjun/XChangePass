@@ -196,29 +196,15 @@ ___
 
 <details><summary>ERD</summary>
 
-![ERD](https://cdn.discordapp.com/attachments/1305460123199733782/1319622097110040637/PNG.png?ex=6766a159&is=67654fd9&hm=b7f6f4ea5989f57f5b77fac96e03c9eb9b2c469635707ac33bd30a5bf696c0f2&)
+![ERD](/docs/Copy_of_XCP_1.png)
 </details>
-
-<details><summary>API 명세서
-</summary>
-
-- [API 명세서](https://woolly-gibbon-9ce.notion.site/API-169829f77c368146856bca2c7056fb49?pvs=4)
-</details>
-
-
-<details><summary>요구사항 명세서
-</summary>
-
-- [요구사항 명세서](https://docs.google.com/spreadsheets/d/1okDecrOy3IyNDzQJUQo8r5FMesHM5_8YqJADU3KgN8g/edit?gid=0#gid=0)
-</details>
-
 
 <details><summary>컨벤션
 </summary>
 
-- [팀 규칙](https://woolly-gibbon-9ce.notion.site/169829f77c36810cbaa6e5b2e0851a2d?pvs=4)
-- [공통 커밋 컨벤션](https://woolly-gibbon-9ce.notion.site/Git-Commit-Message-Convention-169829f77c3681edb626c2eedf8ec703?pvs=4)
-- [벡엔드 코드 컨벤션](https://woolly-gibbon-9ce.notion.site/169829f77c36814d82adc37af5825b45?pvs=4)
+- [팀 규칙](https://silky-toothbrush-191.notion.site/ee1575c5d056473f83d9f56f40edaa47)
+- [공통 커밋 컨벤션](https://silky-toothbrush-191.notion.site/3903032f148543b685d3de474249d31f)
+- [벡엔드 코드 컨벤션](https://silky-toothbrush-191.notion.site/70565c77e3b34b38bb8d2d56ca7a6a54)
 </details>
 
 <br>
