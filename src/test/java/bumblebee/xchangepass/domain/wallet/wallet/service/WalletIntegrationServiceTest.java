@@ -103,7 +103,7 @@ class WalletIntegrationServiceTest {
 
     @BeforeEach
     void setup() throws InterruptedException {
-        Thread.sleep(300);
+        Thread.sleep(500);
         walletTransactionRepository.deleteAll();
         walletBalanceRepository.deleteAll();
         walletRepository.deleteAll();

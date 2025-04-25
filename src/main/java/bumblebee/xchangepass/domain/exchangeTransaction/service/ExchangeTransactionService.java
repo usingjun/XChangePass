@@ -19,6 +19,7 @@ import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -41,7 +42,7 @@ public class ExchangeTransactionService {
     private final WalletBalanceRepository balanceRepository;
 
 
-    @Transactional
+
     public ExchangeResponseDTO createTransaction(ExchangeRequestDTO request, Long userId) {
 
         Map<String, Double> conversionRatess = exchangeRateService.getExchangeRateAll(request.fromCurrency())
