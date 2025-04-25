@@ -10,24 +10,24 @@
           XChangePass 서비스를 자유롭게 이용하실 수 있습니다.
         </p>
         <hr />
-        <div class="flex justify-center gap-3 mt-3">
-          <button class="btn btn-primary" @click="goToTransfer">송금하기</button>
-          <button class="btn btn-outline-secondary">거래 내역</button>
-        </div>
       </section>
 
       <!-- 내 지갑 카드 -->
       <section class="card">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-lg font-bold flex items-center gap-1">
-            내 지갑
-            <span class="text-gray-400 text-sm">ⓘ</span>
+            내 지갑 <span class="text-gray-400 text-sm">ⓘ</span>
           </h2>
           <button class="text-gray-400 text-sm">이용내역 ></button>
+
+          <div class="button-wrapper mt-3">
+            <button class="btn-action btn-transfer" @click="goToTransfer">송금하기</button>
+            <button class="btn-action btn-withdraw" @click="goToWithdraw">출금</button>
+            <button class="btn-action btn-deposit" @click="goToDeposit">충전</button>
+          </div>
         </div>
 
         <div v-if="loadingWallet" class="text-center text-gray-400">지갑 정보를 불러오는 중...</div>
-
         <div v-else class="space-y-3">
           <div v-for="item in walletList" :key="item.country" class="flex justify-between items-center">
             <div class="flex items-center gap-2">
@@ -37,11 +37,8 @@
             <span class="font-semibold">{{ item.amount }}</span>
           </div>
         </div>
-
-        <button @click="goToTransfer" class="btn-main mt-6">
-          충전하기
-        </button>
       </section>
+
 
       <section class="card">
         <h2 class="text-lg font-bold mb-4">환율 조회</h2>
@@ -113,7 +110,7 @@ const loading = ref(false)
 const walletList = ref([])
 const loadingWallet = ref(true)
 
-const exchangeList = ref([]) // KRW 기준 3개 나라
+const exchangeList = ref([])
 const loadingExchange = ref(true)
 
 const currencyList = ref([]) // 전체 통화 목록 162개
@@ -172,10 +169,6 @@ const fetchCurrencyList = async () => {
   }
 }
 
-const goToTransfer = () => {
-  router.push('/transfer')
-}
-
 const goToExchange = () => {
   router.push('/exchange')
 }
@@ -183,6 +176,10 @@ const goToExchange = () => {
 const goToExchangeTransfer = () => {
   router.push('/exchange-transfer')
 }
+
+const goToTransfer = () => router.push('/transfer')
+const goToWithdraw = () => router.push('/withdraw')
+const goToDeposit = () => router.push('/deposit')
 
 onMounted(() => {
   fetchWallet()
@@ -201,17 +198,38 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* shadow-md */
 }
 
-/* 버튼 공통 */
 .btn-main {
-  background-color: #3b82f6;     /* bg-blue-500 */
-  color: #ffffff;
+  background-color: #2563eb;
+  color: white;
+  padding: 0.5rem 1rem;
   width: 100%;
-  padding: 0.5rem 0;             /* py-2 */
-  border-radius: 0.5rem;         /* rounded-lg */
-  transition: background-color .2s;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
 }
+
 .btn-main:hover {
-  background-color: #2563eb;     /* hover:bg-blue-600 */
+  background-color: #1e40af;
+}
+
+/* ✅ 버튼 정렬을 위한 래퍼 */
+.button-wrapper {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+/* ✅ 공통 버튼 스타일 */
+.btn-action {
+  padding: 0.6rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  color: white;
+  font-size: 1rem;
+  min-width: 120px;
+  transition: background-color 0.2s;
+  border: none;
 }
 
 /* 셀렉트 박스 */
@@ -220,6 +238,27 @@ onMounted(() => {
   padding: 0.5rem;               /* p-2 */
   border-radius: 0.25rem;        /* rounded */
   width: 100%;
+}
+
+.btn-transfer {
+  background-color: #3b82f6;
+}
+.btn-transfer:hover {
+  background-color: #2563eb;
+}
+
+.btn-withdraw {
+  background-color: #6b7280;
+}
+.btn-withdraw:hover {
+  background-color: #4b5563;
+}
+
+.btn-deposit {
+  background-color: #10b981;
+}
+.btn-deposit:hover {
+  background-color: #059669;
 }
 </style>
 
