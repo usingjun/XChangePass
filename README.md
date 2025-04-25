@@ -1,5 +1,5 @@
 # 📚 실시간 환율 [XCP] 📚
-![플로우 차트](docs/XCP_Logo.webp)
+<img src="docs/XCP.png" alt="플로우 차트" width="50%">
 
 ## ✨ 프로젝트 개요
 XChangePass 백엔드 서비스는 **실전 금융 트러블슈팅 경험**을 쌓기 위해  
