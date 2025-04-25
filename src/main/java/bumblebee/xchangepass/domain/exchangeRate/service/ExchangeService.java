@@ -101,7 +101,7 @@ public class ExchangeService {
     public void fetchAndSaveExchangeRate(String baseCurrency) {
         ExchangeRateResponse response = fetchExchangeRates(baseCurrency);
         saveRatesToTempDB(baseCurrency, response);
-        evictExchangeRateCache(baseCurrency);
+//        evictExchangeRateCache(baseCurrency);
     }
 
     public void evictExchangeRateCache(String baseCurrency) {
@@ -109,7 +109,7 @@ public class ExchangeService {
             Cache cache = cacheManager.getCache("exchangeRates");
             if (cache != null) {
                 cache.evict("all::" + baseCurrency);
-                List<String> currencies = List.of("USD","KRW");
+                List<String> currencies = Country.create();
                 List<CompletableFuture<Void>> futures = new ArrayList<>();
 
                 for (String targetCurrency : currencies) {
@@ -153,7 +153,7 @@ public class ExchangeService {
                 lockManager.releaseLock();
             }
         } else {
-            int retry = 50;
+            int retry = 100;
             for (int i = 0; i < retry; i++) {
                 try {
                     Thread.sleep(200);
