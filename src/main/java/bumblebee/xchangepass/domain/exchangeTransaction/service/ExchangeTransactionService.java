@@ -45,11 +45,11 @@ public class ExchangeTransactionService {
 
     public ExchangeResponseDTO createTransaction(ExchangeRequestDTO request, Long userId) {
 
-        Map<String, Double> conversionRatess = exchangeRateService.getExchangeRateAll(request.fromCurrency())
+        Map<String, Double> conversionRates = exchangeRateService.getExchangeRateAll(request.fromCurrency())
                 .conversionRates();
 
 
-        Double exchangeRate = conversionRatess.get(request.toCurrency());
+        Double exchangeRate = conversionRates.get(request.toCurrency());
 
         if (exchangeRate == null) {
             throw ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException();

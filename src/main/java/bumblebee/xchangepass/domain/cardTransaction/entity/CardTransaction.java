@@ -18,7 +18,7 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Getter
 @NoArgsConstructor(access = PROTECTED)
-@Table(name = "card_trainsaction")
+@Table(name = "card_transaction")
 @EntityListeners(AuditingEntityListener.class)
 public class CardTransaction {
 
