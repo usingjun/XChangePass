@@ -2,6 +2,7 @@ package bumblebee.xchangepass.domain.wallet.transaction.entity;
 
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
+import bumblebee.xchangepass.global.converter.CurrencyConverter;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -13,7 +14,10 @@ import java.time.LocalDateTime;
 import java.util.Currency;
 
 @Entity
-@Table(name = "wallet_transaction")
+@Table(name = "wallet_transaction",
+indexes = {
+        @Index(name = "idx_wallet_user_time_id", columnList = "sender, updated_at, wallet_transaction_id DESC")
+})
 @Getter
 @NoArgsConstructor()
 @EntityListeners(AuditingEntityListener.class)
@@ -24,18 +28,20 @@ public class WalletTransaction {
     private Long walletTransactionId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "my_wallet_id", nullable = false)
-    private Wallet myWallet;
+    @JoinColumn(name = "sender", nullable = false)
+    private User sender;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "counter_wallet_id")
-    private Wallet counterWallet;
+    @JoinColumn(name = "receiver")
+    private User receiver;
 
     @Column(nullable = false)
     private BigDecimal amount;
 
+    @Convert(converter = CurrencyConverter.class)
     private Currency fromCurrency;
 
+    @Convert(converter = CurrencyConverter.class)
     @Column(nullable = false)
     private Currency toCurrency;
 
@@ -51,9 +57,9 @@ public class WalletTransaction {
     @Column(nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
 
-    public WalletTransaction(Wallet myWallet, Wallet counterWallet, BigDecimal amount, Currency fromCurrency, Currency toCurrency, WalletTransactionType transactionType) {
-        this.myWallet = myWallet;
-        this.counterWallet = counterWallet;
+    public WalletTransaction(User sender, User receiver, BigDecimal amount, Currency fromCurrency, Currency toCurrency, WalletTransactionType transactionType) {
+        this.sender = sender;
+        this.receiver = receiver;
         this.amount = amount;
         this.fromCurrency = fromCurrency;
         this.toCurrency = toCurrency;
@@ -61,7 +67,21 @@ public class WalletTransaction {
         this.status = WalletTransactionStatus.PENDING;
     }
 
+    public WalletTransaction(User sender, User receiver, BigDecimal amount, Currency fromCurrency, Currency toCurrency, WalletTransactionType transactionType, WalletTransactionStatus status) {
+        this.sender = sender;
+        this.receiver = receiver;
+        this.amount = amount;
+        this.fromCurrency = fromCurrency;
+        this.toCurrency = toCurrency;
+        this.transactionType = transactionType;
+        this.status = status;
+    }
+
     public void updateStatus(WalletTransactionStatus newStatus) {
         this.status = newStatus;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }
