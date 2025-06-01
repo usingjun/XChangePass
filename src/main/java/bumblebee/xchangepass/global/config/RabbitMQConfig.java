@@ -31,10 +31,9 @@ public class RabbitMQConfig {
     @Bean
     public Queue retryQueue() {
         Map<String, Object> args = new HashMap<>();
-        args.put("x-dead-letter-exchange", "");
+        args.put("x-dead-letter-exchange", DLX_NAME);
         args.put("x-dead-letter-routing-key", WALLET_TRANSACTION);
         args.put("x-message-ttl", 5000);
-        args.put("x-max-length", 1000);
 
         return new Queue(RETRY_QUEUE, true, false, false, args);
     }
