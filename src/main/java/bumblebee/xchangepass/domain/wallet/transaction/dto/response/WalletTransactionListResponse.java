@@ -1,9 +1,9 @@
 package bumblebee.xchangepass.domain.wallet.transaction.dto.response;
 
+import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionStatus;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
-import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
@@ -42,7 +42,7 @@ public record WalletTransactionListResponse(
 
 ) {
     public static WalletTransactionListResponse fromEntity(WalletTransaction transaction) {
-        Wallet counterWallet = transaction.getCounterWallet();
+        User receiver = transaction.getReceiver();
 
         return new WalletTransactionListResponse(
                 transaction.getWalletTransactionId(),
@@ -52,8 +52,8 @@ public record WalletTransactionListResponse(
                 transaction.getTransactionType(),
                 transaction.getStatus(),
                 transaction.getUpdatedAt(),
-                counterWallet != null ? counterWallet.getWalletId() : null,
-                counterWallet != null ? counterWallet.getUser().getUserName().getValue() : null
+                receiver != null ? receiver.getUserId() : null,
+                receiver != null ? receiver.getUserName().getValue() : null
 
         );
     }

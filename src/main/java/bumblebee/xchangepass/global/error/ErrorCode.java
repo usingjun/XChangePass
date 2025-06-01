@@ -21,7 +21,8 @@ public enum ErrorCode {
     /*Wallet*/
     WALLET_NOT_FOUND(HttpStatus.BAD_REQUEST, "W001", "지갑을 찾을 수 없습니다."),
     WALLET_ALREADY_EXIST(HttpStatus.BAD_REQUEST,"W002","이미 지갑이 존재합니다."),
-    INVALID_WALLET_PASSWORD(HttpStatus.UNAUTHORIZED, "WALLET001", "지갑 비밀번호가 일치하지 않습니다."),
+    RECEIVER_NOT_FOUND(HttpStatus.BAD_REQUEST,"W003","받는 사람이 존재하지 않습니다."),
+    INVALID_WALLET_PASSWORD(HttpStatus.UNAUTHORIZED, "W004", "지갑 비밀번호가 일치하지 않습니다."),
 
     /*Balance*/
     BALANCE_NOT_FOUND(HttpStatus.BAD_REQUEST, "B001", "해당 화폐 잔액이 존재하지 않습니다."),

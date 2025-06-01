@@ -2,6 +2,7 @@ package bumblebee.xchangepass.domain.cardTransaction.entity;
 
 import bumblebee.xchangepass.domain.card.entity.Card;
 import bumblebee.xchangepass.domain.user.entity.User;
+import bumblebee.xchangepass.global.converter.CurrencyConverter;
 import jakarta.persistence.*;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,7 +19,10 @@ import static lombok.AccessLevel.PROTECTED;
 @Entity
 @Getter
 @NoArgsConstructor(access = PROTECTED)
-@Table(name = "card_transaction")
+@Table(name = "card_transaction",
+indexes = {
+        @Index(name = "idx_card_user_time_id", columnList = "user_id, transaction_time, transaction_id DESC")
+})
 @EntityListeners(AuditingEntityListener.class)
 public class CardTransaction {
 
@@ -37,6 +41,7 @@ public class CardTransaction {
     @Column(name = "approved_amount", nullable = false)
     private BigDecimal approvedAmount;
 
+    @Convert(converter = CurrencyConverter.class)
     @Column(name = "approved_currency", nullable = false, length = 3)
     private Currency approvedCurrency;
 

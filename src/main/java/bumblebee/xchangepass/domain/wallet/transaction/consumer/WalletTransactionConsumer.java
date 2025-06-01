@@ -1,5 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.transaction.consumer;
 
+import bumblebee.xchangepass.domain.user.entity.User;
+import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionStatus;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
@@ -23,22 +25,25 @@ import java.util.Currency;
 public class WalletTransactionConsumer {
 
     private final WalletTransactionRepository transactionRepository;
-    private final WalletRepository walletRepository;
+    private final UserRepository userRepository;
 
     @RabbitListener(queues = "wallet-transaction-queue")
     @Transactional
+    public void failOnPurpose(WalletTransactionMessage message) {
+        throw new AmqpRejectAndDontRequeueException("실패 테스트");
+    }
     public void processTransaction(WalletTransactionMessage message) {
         try {
-            Wallet myWallet = walletRepository.findById(message.myWalletId())
-                    .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+            User sender = userRepository.findByUserId(message.senderId())
+                    .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
-            Wallet counterWallet = (message.counterWalletId() != null)
-                    ? walletRepository.findById(message.counterWalletId()).orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException)
+            User receiver = (WalletTransactionType.valueOf(message.transactionType()) == WalletTransactionType.TRANSFER)
+                    ? userRepository.findByUserId(message.receiverId()).orElseThrow(ErrorCode.USER_NOT_FOUND::commonException)
                     : null;
 
             WalletTransaction transaction = new WalletTransaction(
-                    myWallet,
-                    counterWallet,
+                    sender,
+                    receiver,
                     message.amount(),
                     message.fromCurrency() != null ? Currency.getInstance(message.fromCurrency()) : null,
                     Currency.getInstance(message.toCurrency()),
@@ -46,12 +51,9 @@ public class WalletTransactionConsumer {
             );
 
             transaction.updateStatus(WalletTransactionStatus.SUCCESS);
-
             transactionRepository.save(transaction);
         } catch (Exception e) {
             log.error("❌ 트랜잭션 처리 중 예외 발생. DLQ로 보냅니다. message={}", message, e);
-
-            // 📌 이 예외를 던지면 RabbitMQ는 재시도 없이 DLQ로 메시지를 넘깁니다
             throw new AmqpRejectAndDontRequeueException("트랜잭션 처리 실패", e);
         }
     }

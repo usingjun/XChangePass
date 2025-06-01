@@ -18,14 +18,14 @@ public class WalletTransactionRepositoryCustomImpl implements WalletTransactionR
     private final JPAQueryFactory queryFactory;
 
     @Override
-    public Page<WalletTransaction> search(Long walletId, WalletTransactionSearchCondition cond, Pageable pageable) {
+    public Page<WalletTransaction> search(Long userId, WalletTransactionSearchCondition cond, Pageable pageable) {
         QWalletTransaction tx = QWalletTransaction.walletTransaction;
 
         BooleanBuilder builder = new BooleanBuilder();
-        if (walletId != null) {
+        if (userId != null) {
             builder.and(
-                    tx.myWallet.walletId.eq(walletId)
-                            .or(tx.counterWallet.walletId.eq(walletId))
+                    tx.sender.userId.eq(userId)
+                            .or(tx.receiver.userId.eq(userId))
             );
         }
         if (cond.transactionType() != null) {

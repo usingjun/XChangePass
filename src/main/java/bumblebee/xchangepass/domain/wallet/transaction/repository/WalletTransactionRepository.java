@@ -13,9 +13,9 @@ import java.util.List;
 public interface WalletTransactionRepository extends JpaRepository<WalletTransaction, Long>, WalletTransactionRepositoryCustom {
     @Query("""
                 select t from WalletTransaction t
-                where t.myWallet.walletId=:walletId or t.counterWallet.walletId=:walletId
+                where t.sender.userId=:userId or t.receiver.userId=:userId
                 order by t.updatedAt DESC
             """)
-    List<WalletTransaction> getWalletTransaction(@Param("walletId") Long walletId);
+    List<WalletTransaction> getWalletTransaction(@Param("userId") Long userId);
 
 }

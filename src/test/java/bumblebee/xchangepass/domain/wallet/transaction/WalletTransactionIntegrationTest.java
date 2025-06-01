@@ -90,6 +90,8 @@ public class WalletTransactionIntegrationTest {
 
     private Wallet testWallet1;
     private Wallet testWallet2;
+    private User user1;
+    private User user2;
     Currency krw = Currency.getInstance("KRW");
 
     @BeforeEach
@@ -101,8 +103,8 @@ public class WalletTransactionIntegrationTest {
 
 
     void setup() {
-        User user1 = userRepository.findByUserEmail("Test1@gmail.com").orElseThrow();
-        User user2 = userRepository.findByUserEmail("Test2@gmail.com").orElseThrow();
+        user1 = userRepository.findByUserEmail("Test1@gmail.com").orElseThrow();
+        user2 = userRepository.findByUserEmail("Test2@gmail.com").orElseThrow();
 
         testWallet1 = walletRepository.findByUserId(user1.getUserId())
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
@@ -189,16 +191,16 @@ public class WalletTransactionIntegrationTest {
 
         assertEquals(1, senderTransaction.stream()
                 .filter(tx -> tx.getTransactionType() == WalletTransactionType.TRANSFER &&
-                              tx.getMyWallet().getWalletId().equals(testWallet1.getWalletId()) &&
-                              tx.getCounterWallet() != null &&
-                              tx.getCounterWallet().getWalletId().equals(testWallet2.getWalletId()))
+                              tx.getSender().getUserId().equals(user1.getUserId()) &&
+                              tx.getReceiver() != null &&
+                              tx.getReceiver().getUserId().equals(user2.getUserId()))
                 .count(), "보내는 쪽 트랜잭션이 정확하지 않습니다");
 
         assertEquals(1, receiverTransaction.stream()
                 .filter(tx -> tx.getTransactionType() == WalletTransactionType.TRANSFER &&
-                              tx.getMyWallet().getWalletId().equals(testWallet1.getWalletId()) &&
-                              tx.getCounterWallet() != null &&
-                              tx.getCounterWallet().getWalletId().equals(testWallet2.getWalletId()))
+                              tx.getSender().getUserId().equals(user1.getUserId()) &&
+                              tx.getReceiver() != null &&
+                              tx.getReceiver().getUserId().equals(user2.getUserId()))
                 .count(), "받는 쪽 트랜잭션이 정확하지 않습니다");
     }
 

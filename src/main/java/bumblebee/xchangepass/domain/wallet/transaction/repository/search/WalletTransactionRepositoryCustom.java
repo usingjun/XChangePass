@@ -6,5 +6,5 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface WalletTransactionRepositoryCustom {
-    Page<WalletTransaction> search(Long walletId, WalletTransactionSearchCondition condition, Pageable pageable);
+    Page<WalletTransaction> search(Long userId, WalletTransactionSearchCondition condition, Pageable pageable);
 }
