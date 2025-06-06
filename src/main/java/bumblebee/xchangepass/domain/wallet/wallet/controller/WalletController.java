@@ -41,22 +41,22 @@ public class WalletController {
     private final WalletServiceImpl walletService;
     private final WalletFacadeService walletFacadeService;
 
-    @Operation(summary = "거래내역 조회", description = "거래내역을 조회합니다.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "400", description = "거래내역 조회 실패",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(value = "{\n  \"code\": \"W001\"," +
-                                                              "\n  \"message\": \"지갑을 찾을 수 없습니다.\"}"))
-            )
-    })
-    @GetMapping("/transaction")
-    @ResponseStatus(HttpStatus.OK)
-    public List<WalletTransactionListResponse> transaction(@AuthenticationPrincipal CustomUserDetails user,
-                                                           @ModelAttribute WalletTransactionSearchCondition condition,
-                                                           Pageable pageable) {
-        return transactionService.getTransaction(user.getUserId(), condition, pageable);
-    }
+//    @Operation(summary = "거래내역 조회", description = "거래내역을 조회합니다.")
+//    @ApiResponses(value = {
+//            @ApiResponse(responseCode = "400", description = "거래내역 조회 실패",
+//                    content = @Content(mediaType = "application/json",
+//                            schema = @Schema(implementation = ErrorResponse.class),
+//                            examples = @ExampleObject(value = "{\n  \"code\": \"W001\"," +
+//                                                              "\n  \"message\": \"지갑을 찾을 수 없습니다.\"}"))
+//            )
+//    })
+//    @GetMapping("/transaction")
+//    @ResponseStatus(HttpStatus.OK)
+//    public List<WalletTransactionListResponse> transaction(@AuthenticationPrincipal CustomUserDetails user,
+//                                                           @ModelAttribute WalletTransactionSearchCondition condition,
+//                                                           Pageable pageable) {
+//        return transactionService.getTransaction(user.getUserId(), condition, pageable);
+//    }
 
     @Operation(summary = "잔액 충전", description = "잔액을 충전합니다.")
     @ApiResponses(value = {

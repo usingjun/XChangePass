@@ -26,27 +26,27 @@ public class CardTransactionController {
 
     private final CardTransactionService cardTransactionService;
 
-    @Operation(summary = "거래내역 무한 스크롤 조회", description = "사용자의 카드 거래내역을 최신순으로 조회합니다.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "조회 성공", content = @Content(mediaType = "application/json")),
-            @ApiResponse(responseCode = "400", description = "조회 실패", content = @Content(mediaType = "application/json",
-                    examples = @ExampleObject(value = "{\n  \"code\": \"T001\",\n  \"message\": \"거래내역을 찾을 수 없습니다.\"\n}")))
-    })
-    @ResponseStatus(HttpStatus.OK)
-    @GetMapping
-    public CursorResponse<CardTransactionSummaryResponse> getTransactions(
-            @AuthenticationPrincipal CustomUserDetails user,
-            @RequestParam(required = false) Long lastTransactionId,
-            @RequestParam(defaultValue = "10") int size) {
-
-        List<CardTransactionSummaryResponse> transactions =
-                cardTransactionService.getUserTransactions(user.getUserId(), lastTransactionId, size);
-
-        Long nextCursor = transactions.isEmpty() ? null :
-                transactions.get(transactions.size() - 1).transactionId();
-
-        return CursorResponse.of(transactions, nextCursor);
-    }
+//    @Operation(summary = "거래내역 무한 스크롤 조회", description = "사용자의 카드 거래내역을 최신순으로 조회합니다.")
+//    @ApiResponses(value = {
+//            @ApiResponse(responseCode = "200", description = "조회 성공", content = @Content(mediaType = "application/json")),
+//            @ApiResponse(responseCode = "400", description = "조회 실패", content = @Content(mediaType = "application/json",
+//                    examples = @ExampleObject(value = "{\n  \"code\": \"T001\",\n  \"message\": \"거래내역을 찾을 수 없습니다.\"\n}")))
+//    })
+//    @ResponseStatus(HttpStatus.OK)
+//    @GetMapping
+//    public CursorResponse<CardTransactionSummaryResponse> getTransactions(
+//            @AuthenticationPrincipal CustomUserDetails user,
+//            @RequestParam(required = false) Long lastTransactionId,
+//            @RequestParam(defaultValue = "10") int size) {
+//
+//        List<CardTransactionSummaryResponse> transactions =
+//                cardTransactionService.getUserTransactions(user.getUserId(), lastTransactionId, size);
+//
+//        Long nextCursor = transactions.isEmpty() ? null :
+//                transactions.get(transactions.size() - 1).transactionId();
+//
+//        return CursorResponse.of(transactions, nextCursor);
+//    }
 
     @Operation(summary = "거래내역 상세 조회", description = "사용자의 특정 거래내역을 상세 조회합니다.")
     @ApiResponses(value = {

@@ -1,21 +1,12 @@
-package bumblebee.xchangepass.domain.wallet.transaction.dto.request;
+package bumblebee.xchangepass.domain.exchangeTransaction.repository.search;
 
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionStatus;
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDateTime;
 
-@Schema(description = "거래내역 조회 요청 객체")
-public record WalletTransactionSearchCondition(
-
-        @Schema(description = "카드 거래 종류", example = "TRANSFER")
-        WalletTransactionType walletTransactionType,
-
-        @Schema(description = "카드 거래 진행 상황", example = "SUCCESS")
-        WalletTransactionStatus walletTransactionStatus,
-
+@Schema(description = "환전 거래내역 조회 요청 객체")
+public record ExchangeTransactionSearchCondition(
         @Schema(description = "조회 시작 일자", example = "2025-03-26T00:00:00")
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
         LocalDateTime startDate,
@@ -28,4 +19,5 @@ public record WalletTransactionSearchCondition(
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
         LocalDateTime cursor
 ) {
+
 }

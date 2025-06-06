@@ -1,6 +1,5 @@
 package bumblebee.xchangepass.domain.cardTransaction.entity;
 
-import bumblebee.xchangepass.domain.card.entity.Card;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.global.converter.CurrencyConverter;
 import jakarta.persistence.*;
@@ -59,7 +58,7 @@ public class CardTransaction {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "transaction_type", nullable = false, length = 20)
-    private TransactionType transactionType;
+    private CardTransactionType cardTransactionType;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -74,7 +73,7 @@ public class CardTransaction {
                            LocalDateTime transactionTime,
                            String approvalNumber,
                            BigDecimal balanceAfter,
-                           TransactionType transactionType) {
+                           CardTransactionType cardTransactionType) {
         this.user = user;
         this.merchantName = merchantName;
         this.approvedAmount = approvedAmount;
@@ -83,6 +82,6 @@ public class CardTransaction {
         this.transactionTime = transactionTime;
         this.approvalNumber = approvalNumber;
         this.balanceAfter = balanceAfter;
-        this.transactionType = transactionType;
+        this.cardTransactionType = cardTransactionType;
     }
 }

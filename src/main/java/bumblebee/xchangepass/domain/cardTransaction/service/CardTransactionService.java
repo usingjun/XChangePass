@@ -9,9 +9,6 @@ import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,7 +39,7 @@ public class CardTransactionService {
                 .transactionTime(event.transactionTime())
                 .approvalNumber(event.approvalNumber())
                 .balanceAfter(event.balanceAfter())
-                .transactionType(event.transactionType())
+                .cardTransactionType(event.cardTransactionType())
                 .build();
 
         transactionRepository.save(transaction);
@@ -53,17 +50,17 @@ public class CardTransactionService {
     /**
      * ✅ 거래 내역 무한 스크롤 조회 (커서 기반 최신순)
      */
-    public List<CardTransactionSummaryResponse> getUserTransactions(Long userId, Long lastTransactionId, int size) {
-
-        List<CardTransactionSummaryResponse> transactions =
-                transactionRepository.getUserTransactions(userId, lastTransactionId, size);
-
-        if (transactions.isEmpty()) {
-            throw ErrorCode.CARD_TRANSACTION_NOT_FOUND.commonException();
-        }
-
-        return transactions;
-    }
+//    public List<CardTransactionSummaryResponse> getUserTransactions(Long userId, Long lastTransactionId, int size) {
+//
+//        List<CardTransactionSummaryResponse> transactions =
+//                transactionRepository.getUserTransactions(userId, lastTransactionId, size);
+//
+//        if (transactions.isEmpty()) {
+//            throw ErrorCode.CARD_TRANSACTION_NOT_FOUND.commonException();
+//        }
+//
+//        return transactions;
+//    }
 
 
     /**

@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.transaction;
+package bumblebee.xchangepass.domain.transaction.rdbmsV.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

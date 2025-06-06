@@ -2,8 +2,6 @@ package bumblebee.xchangepass.domain.wallet.transaction.service;
 
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.wallet.transaction.dto.WalletTransactionMessage;
-import bumblebee.xchangepass.domain.wallet.transaction.dto.request.WalletTransactionSearchCondition;
-import bumblebee.xchangepass.domain.wallet.transaction.dto.response.WalletTransactionListResponse;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionStatus;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
@@ -14,13 +12,11 @@ import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Currency;
-import java.util.List;
 
 @Slf4j
 @Service
@@ -61,11 +57,11 @@ public class WalletTransactionService {
 
     }
 
-    @Transactional
-    public List<WalletTransactionListResponse> getTransaction(Long userId, WalletTransactionSearchCondition cond, Pageable pageable) {
-        return transactionRepository.search(userId, cond, pageable)
-                .stream().map(WalletTransactionListResponse::fromEntity)
-                .toList();
-    }
+//    @Transactional
+//    public List<WalletTransactionListResponse> getTransaction(Long userId, Tr cond, Pageable pageable) {
+//        return transactionRepository.search(userId, cond, pageable)
+//                .stream().map(WalletTransactionListResponse::fromEntity)
+//                .toList();
+//    }
 
 }

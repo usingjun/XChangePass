@@ -18,7 +18,7 @@ import static lombok.AccessLevel.PROTECTED;
 @Getter
 @Table(name = "exchange_transaction",
 indexes = {
-        @Index(name = "idx_exchange_user_time_id", columnList = "user_id, exchange_date, exchange_transaction_idㅋ DESC")
+        @Index(name = "idx_exchange_user_time_id", columnList = "user_id, exchange_date, exchange_transaction_id DESC")
 })
 @NoArgsConstructor(access = PROTECTED)
 @EntityListeners(AuditingEntityListener.class)

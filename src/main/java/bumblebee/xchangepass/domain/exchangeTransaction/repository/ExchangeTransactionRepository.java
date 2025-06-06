@@ -9,7 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
-public interface ExchangeTransactionRepository extends JpaRepository<ExchangeTransaction, Long> {
+public interface ExchangeTransactionRepository extends JpaRepository<ExchangeTransaction, Long>, ExchangeTransactionRepositoryCustom {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from ExchangeTransaction t where t.exchangeTransactionId = :id")

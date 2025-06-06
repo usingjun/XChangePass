@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.card.dto.request;
 
 import bumblebee.xchangepass.domain.card.entity.CardType;
-import bumblebee.xchangepass.domain.cardTransaction.entity.TransactionType;
+import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransactionType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 
@@ -53,6 +53,6 @@ public record PaymentRequest(
 
         @Schema(description = "거래 유형", example = "PAYMENT")
         @NotNull(message = "거래 유형은 필수 입력 값입니다.")
-        TransactionType transactionType
+        CardTransactionType cardTransactionType
 
 ) {}

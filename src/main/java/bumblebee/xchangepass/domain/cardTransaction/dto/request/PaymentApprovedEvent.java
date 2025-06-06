@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.cardTransaction.dto.request;
 
 import bumblebee.xchangepass.domain.card.dto.request.PaymentRequest;
-import bumblebee.xchangepass.domain.cardTransaction.entity.TransactionType;
+import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransactionType;
 import bumblebee.xchangepass.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -50,7 +50,7 @@ public record PaymentApprovedEvent(
 
         @Schema(description = "거래 유형", example = "PAYMENT")
         @NotNull(message = "거래 유형은 필수입니다.")
-        TransactionType transactionType
+        CardTransactionType cardTransactionType
 
 ) {
         public static PaymentApprovedEvent of(User user, PaymentRequest request, BigDecimal krwAmount, BigDecimal afterBalance, String approvalNumber) {
@@ -63,7 +63,7 @@ public record PaymentApprovedEvent(
                         .transactionTime(LocalDateTime.now())
                         .approvalNumber(approvalNumber)
                         .balanceAfter(afterBalance)
-                        .transactionType(request.transactionType())
+                        .cardTransactionType(request.cardTransactionType())
                         .build();
         }
 }

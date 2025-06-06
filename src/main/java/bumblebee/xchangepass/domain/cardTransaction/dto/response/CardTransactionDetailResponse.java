@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.cardTransaction.dto.response;
 
 import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransaction;
-import bumblebee.xchangepass.domain.cardTransaction.entity.TransactionType;
+import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransactionType;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -35,7 +35,7 @@ public record CardTransactionDetailResponse(
         BigDecimal balanceAfter,
 
         @Schema(description = "거래 유형", example = "PAYMENT")
-        TransactionType transactionType
+        CardTransactionType cardTransactionType
 
 ) {
     public static CardTransactionDetailResponse from(CardTransaction tx) {
@@ -47,7 +47,7 @@ public record CardTransactionDetailResponse(
                 tx.getApprovalNumber(),
                 tx.getTransactionTime(),
                 tx.getBalanceAfter(),
-                tx.getTransactionType()
+                tx.getCardTransactionType()
         );
     }
 }

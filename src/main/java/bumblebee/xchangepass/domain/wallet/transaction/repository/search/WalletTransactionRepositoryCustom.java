@@ -1,10 +1,10 @@
 package bumblebee.xchangepass.domain.wallet.transaction.repository.search;
 
-import bumblebee.xchangepass.domain.wallet.transaction.dto.request.WalletTransactionSearchCondition;
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionSearchCondition;
+
+import java.util.List;
 
 public interface WalletTransactionRepositoryCustom {
-    Page<WalletTransaction> search(Long userId, WalletTransactionSearchCondition condition, Pageable pageable);
+    List<TransactionResponse> search(Long userId, TransactionSearchCondition condition, int size);
 }

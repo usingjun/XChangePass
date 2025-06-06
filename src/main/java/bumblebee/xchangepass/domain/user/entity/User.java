@@ -3,6 +3,7 @@ package bumblebee.xchangepass.domain.user.entity;
 import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransaction;
 import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.ExchangeTransaction;
 import bumblebee.xchangepass.domain.user.entity.value.*;
+import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import jakarta.persistence.*;
 import lombok.Builder;
@@ -73,6 +74,12 @@ public class User {
 
     @OneToMany(mappedBy = "user", orphanRemoval = true, cascade = CascadeType.ALL)
     private List<CardTransaction> cardTransactions;
+
+    @OneToMany(mappedBy = "sender", orphanRemoval = true, cascade = CascadeType.ALL)
+    private List<WalletTransaction> sentWalletTransactions;
+
+    @OneToMany(mappedBy = "receiver", orphanRemoval = true, cascade = CascadeType.ALL)
+    private List<WalletTransaction> receivedWalletTransactions;
 
     @CreatedDate
     @Column(name = "user_join_date")
