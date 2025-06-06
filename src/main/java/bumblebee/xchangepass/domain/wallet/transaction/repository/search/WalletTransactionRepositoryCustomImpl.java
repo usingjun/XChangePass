@@ -2,7 +2,7 @@ package bumblebee.xchangepass.domain.wallet.transaction.repository.search;
 
 import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionResponse;
 import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionSearchCondition;
-import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionType;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import bumblebee.xchangepass.domain.user.entity.QUser;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.QWalletTransaction;
 import com.querydsl.core.BooleanBuilder;

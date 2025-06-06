@@ -9,7 +9,8 @@ import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.TransactionStatu
 import bumblebee.xchangepass.domain.exchangeTransaction.repository.ExchangeTransactionRepository;
 import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionResponse;
 import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionSearchCondition;
-import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionType;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.service.TransactionService;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
@@ -22,8 +23,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;

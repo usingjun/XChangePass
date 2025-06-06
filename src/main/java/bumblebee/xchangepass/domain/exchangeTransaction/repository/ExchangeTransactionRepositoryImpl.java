@@ -3,7 +3,7 @@ package bumblebee.xchangepass.domain.exchangeTransaction.repository;
 import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.QExchangeTransaction;
 import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionResponse;
 import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionSearchCondition;
-import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionType;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;

@@ -2,7 +2,7 @@ package bumblebee.xchangepass.domain.transaction.rdbmsV.repository;
 
 import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionResponse;
 import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionSearchCondition;
-import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionType;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import bumblebee.xchangepass.global.util.TransactionResponseMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;

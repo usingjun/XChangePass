@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.transaction;
+package bumblebee.xchangepass.domain.transaction.rdbmsV.service;
 
 import bumblebee.xchangepass.domain.cardTransaction.repository.CardTransactionRepository;
 import bumblebee.xchangepass.domain.exchangeTransaction.repository.ExchangeTransactionRepository;
