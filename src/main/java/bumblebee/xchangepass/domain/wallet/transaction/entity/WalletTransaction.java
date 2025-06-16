@@ -1,7 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.transaction.entity;
 
 import bumblebee.xchangepass.domain.user.entity.User;
-import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.global.converter.CurrencyConverter;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -39,10 +38,10 @@ public class WalletTransaction {
     private BigDecimal amount;
 
     @Convert(converter = CurrencyConverter.class)
+    @Column(nullable = false)
     private Currency fromCurrency;
 
     @Convert(converter = CurrencyConverter.class)
-    @Column(nullable = false)
     private Currency toCurrency;
 
     @Enumerated(EnumType.STRING)

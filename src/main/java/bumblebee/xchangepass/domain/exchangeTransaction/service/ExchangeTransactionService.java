@@ -7,6 +7,8 @@ import bumblebee.xchangepass.domain.exchangeTransaction.dto.response.ExchangeRes
 import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.ExchangeTransaction;
 import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.TransactionStatus;
 import bumblebee.xchangepass.domain.exchangeTransaction.repository.ExchangeTransactionRepository;
+import bumblebee.xchangepass.domain.transaction.mongoV.service.TransactionMongoService;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
@@ -16,17 +18,14 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
-import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Currency;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -40,7 +39,7 @@ public class ExchangeTransactionService {
     private final WalletBalanceService walletBalanceService;
     private final WalletService walletService;
     private final WalletBalanceRepository balanceRepository;
-
+    private final TransactionMongoService transactionService;
 
 
     public ExchangeResponseDTO createTransaction(ExchangeRequestDTO request, Long userId) {
@@ -68,6 +67,19 @@ public class ExchangeTransactionService {
         User user = userRepository.findByUserId(userId)
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
+        Map<String, Object> metadata = Map.of(
+                "beforeAmount", request.amount(),
+                "afterAmount", amount,
+                "rate", exchangeRate
+        );
+
+        transactionService.saveTransaction(user.getUserId(),
+                TransactionType.EXCHANGE,
+                Currency.getInstance(request.fromCurrency()),
+                Currency.getInstance(request.toCurrency()),
+                 metadata);
+
+
         ExchangeTransaction transaction = ExchangeTransaction.builder()
                 .user(user)
                 .fromCurrency(request.fromCurrency())
@@ -93,7 +105,7 @@ public class ExchangeTransactionService {
             throw ErrorCode.TRANSACTION_ALREADY_COMPLETED.commonException();
         }
 
-        if(!Objects.equals(transaction.getUser().getUserId(), userId)){
+        if (!Objects.equals(transaction.getUser().getUserId(), userId)) {
             throw ErrorCode.UNAUTHORIZED_TRANSACTION_ACCESS.commonException();
         }
 
@@ -131,6 +143,7 @@ public class ExchangeTransactionService {
 
         return ExchangeResponseDTO.toEntity(transaction);
     }
+
     private WalletBalance getOrCreateBalance(Wallet wallet, String currencyCode) {
         Currency currency = Currency.getInstance(currencyCode);
         if (!walletBalanceService.checkBalance(wallet.getWalletId(), currency)) {

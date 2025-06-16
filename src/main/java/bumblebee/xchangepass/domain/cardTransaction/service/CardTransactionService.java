@@ -2,9 +2,10 @@ package bumblebee.xchangepass.domain.cardTransaction.service;
 
 import bumblebee.xchangepass.domain.cardTransaction.dto.request.PaymentApprovedEvent;
 import bumblebee.xchangepass.domain.cardTransaction.dto.response.CardTransactionDetailResponse;
-import bumblebee.xchangepass.domain.cardTransaction.dto.response.CardTransactionSummaryResponse;
 import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransaction;
 import bumblebee.xchangepass.domain.cardTransaction.repository.CardTransactionRepository;
+import bumblebee.xchangepass.domain.transaction.mongoV.service.TransactionMongoService;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +14,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import java.util.Currency;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +23,7 @@ import java.util.List;
 public class CardTransactionService {
 
     private final CardTransactionRepository transactionRepository;
+    private final TransactionMongoService transactionService;
 
     /**
      * ✅ 결제 승인 이벤트 수신 시 거래내역 생성
@@ -30,6 +33,16 @@ public class CardTransactionService {
     @Transactional
     @EventListener(PaymentApprovedEvent.class)
     public void handlePaymentApprovedEvent(PaymentApprovedEvent event) {
+
+        Map<String, Object> metadata = Map.of(
+                "merchant", event.merchantName(),
+                "currencyAmount", event.approvedAmount(),
+                "balanceAfter", event.balanceAfter(),
+                "cardType", event.cardTransactionType()
+        );
+
+        transactionService.saveTransaction(event.user().getUserId(), TransactionType.CARD, Currency.getInstance("KRW"), event.approvedCurrency(), metadata);
+
         CardTransaction transaction = CardTransaction.builder()
                 .user(event.user())
                 .merchantName(event.merchantName())

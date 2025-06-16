@@ -1,5 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.transaction.service;
 
+import bumblebee.xchangepass.domain.transaction.mongoV.service.TransactionMongoService;
+import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.wallet.transaction.dto.WalletTransactionMessage;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Currency;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -24,6 +27,7 @@ import java.util.Currency;
 public class WalletTransactionService {
 
     private final WalletTransactionRepository transactionRepository;
+    private final TransactionMongoService transactionService;
     private final WalletRepository walletRepository;
     private final RabbitTemplate rabbitTemplate;
 
@@ -41,7 +45,14 @@ public class WalletTransactionService {
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException).getUser()
                 : null;
 
+        Map<String, Object> metadata = Map.of(
+                "receiver", receiver == null ? null : receiver.getUserId(),
+                "amount", amount,
+                "walletType", transactionType.name()
+        );
+
         try {
+            transactionService.saveTransaction(sender.getUserId(), TransactionType.WALLET, fromCurrency,toCurrency, metadata);
             transactionRepository.save(new WalletTransaction(sender, receiver, amount, fromCurrency, toCurrency, transactionType, WalletTransactionStatus.SUCCESS));
         } catch (Exception e) {
             log.warn("거래 저장 실패. 재시도 큐로 전송합니다: {}", e.getMessage());
@@ -49,7 +60,7 @@ public class WalletTransactionService {
                     sender.getUserId(),
                     receiver == null ? null : receiver.getUserId(),
                     amount,
-                    fromCurrency != null ? fromCurrency.getCurrencyCode() : null,
+                    fromCurrency.getCurrencyCode(),
                     toCurrency.getCurrencyCode(),
                     transactionType.name()
             ));
