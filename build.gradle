@@ -53,6 +53,8 @@ dependencies {
     // 데이터베이스
     runtimeOnly 'com.h2database:h2'                                                 // 인메모리 데이터베이스a H2 (테스트 및 개발 환경용)
     runtimeOnly 'org.postgresql:postgresql:42.5.2'                                  // PostgreSQL 데이터베이스 드라이버 (운영 환경에서 사용)
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+    
 
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'        // Spring Data Redis 라이브러리
