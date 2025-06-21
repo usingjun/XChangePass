@@ -1,5 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.transaction.service;
 
+import bumblebee.xchangepass.domain.transaction.mongoV.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.mongoV.mapper.TransactionMetadataMapper;
 import bumblebee.xchangepass.domain.transaction.mongoV.service.TransactionMongoService;
 import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -14,10 +16,12 @@ import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Currency;
 import java.util.Map;
 
@@ -26,10 +30,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class WalletTransactionService {
 
+    private static final String REDIS_KEY_PREFIX = "transactions:insert:";
     private final WalletTransactionRepository transactionRepository;
     private final TransactionMongoService transactionService;
     private final WalletRepository walletRepository;
     private final RabbitTemplate rabbitTemplate;
+    private final RedisTemplate<String, TransactionResponse> redisTemplate;
 
     @Transactional
     public void saveTransaction(Long myWalletId, Long counterWalletId, BigDecimal amount, Currency fromCurrency, Currency toCurrency, WalletTransactionType transactionType) {
@@ -52,7 +58,19 @@ public class WalletTransactionService {
         );
 
         try {
-            transactionService.saveTransaction(sender.getUserId(), TransactionType.WALLET, fromCurrency,toCurrency, metadata);
+            TransactionResponse response = new TransactionResponse(
+                    sender.getUserId(),
+                    TransactionType.WALLET,
+                    fromCurrency,
+                    toCurrency,
+                    LocalDateTime.now(),
+                    TransactionMetadataMapper.mapToDto(TransactionType.WALLET, metadata)
+            );
+
+            String redisKey = REDIS_KEY_PREFIX + sender.getUserId();
+            redisTemplate.opsForList().rightPush(redisKey, response);
+
+            transactionService.saveTransaction(sender.getUserId(), TransactionType.WALLET, fromCurrency, toCurrency, metadata);
             transactionRepository.save(new WalletTransaction(sender, receiver, amount, fromCurrency, toCurrency, transactionType, WalletTransactionStatus.SUCCESS));
         } catch (Exception e) {
             log.warn("거래 저장 실패. 재시도 큐로 전송합니다: {}", e.getMessage());

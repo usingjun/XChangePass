@@ -4,12 +4,15 @@ import bumblebee.xchangepass.domain.cardTransaction.dto.request.PaymentApprovedE
 import bumblebee.xchangepass.domain.cardTransaction.dto.response.CardTransactionDetailResponse;
 import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransaction;
 import bumblebee.xchangepass.domain.cardTransaction.repository.CardTransactionRepository;
+import bumblebee.xchangepass.domain.transaction.mongoV.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.mongoV.mapper.TransactionMetadataMapper;
 import bumblebee.xchangepass.domain.transaction.mongoV.service.TransactionMongoService;
 import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,8 +25,10 @@ import java.util.Map;
 @Slf4j
 public class CardTransactionService {
 
+    private static final String REDIS_KEY_PREFIX = "transactions:insert:";
     private final CardTransactionRepository transactionRepository;
     private final TransactionMongoService transactionService;
+    private final RedisTemplate<String, TransactionResponse> redisTemplate;
 
     /**
      * ✅ 결제 승인 이벤트 수신 시 거래내역 생성
@@ -40,6 +45,18 @@ public class CardTransactionService {
                 "balanceAfter", event.balanceAfter(),
                 "cardType", event.cardTransactionType()
         );
+
+        TransactionResponse response = new TransactionResponse(
+                event.user().getUserId(),
+                TransactionType.CARD,
+                Currency.getInstance("KRW"),
+                event.approvedCurrency(),
+                event.transactionTime(),
+                TransactionMetadataMapper.mapToDto(TransactionType.CARD, metadata)
+        );
+
+        String redisKey = REDIS_KEY_PREFIX + event.user().getUserId();
+        redisTemplate.opsForList().rightPush(redisKey, response);
 
         transactionService.saveTransaction(event.user().getUserId(), TransactionType.CARD, Currency.getInstance("KRW"), event.approvedCurrency(), metadata);
 

@@ -24,8 +24,21 @@ public class TransactionMongoService {
     //mongoDB
     public void saveTransaction(Long userId, TransactionType type, Currency beforeCurrency, Currency afterCurrency,  Map<String, Object> metadata) {
         TransactionDocument tx = new TransactionDocument(userId, type, beforeCurrency, afterCurrency, LocalDateTime.now(), metadata);
-
         mongoTemplate.save(tx);
+    }
+
+    public void bulkSave(List<TransactionResponse> responseList) {
+        List<TransactionDocument> documents = responseList.stream()
+                .map(response -> new TransactionDocument(
+                        response.userId(),
+                        response.transactionType(),
+                        response.beforeCurrency(),
+                        response.afterCurrency(),
+                        response.transactionTime(),
+                        response.data().toMap()
+                )).toList();
+
+        mongoTemplate.insertAll(documents);
     }
 
     public List<TransactionResponse> getTransactionByMongo(Long userId, TransactionSearchCondition cond, int size) {

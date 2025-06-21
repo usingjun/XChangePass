@@ -7,6 +7,8 @@ import bumblebee.xchangepass.domain.exchangeTransaction.dto.response.ExchangeRes
 import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.ExchangeTransaction;
 import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.TransactionStatus;
 import bumblebee.xchangepass.domain.exchangeTransaction.repository.ExchangeTransactionRepository;
+import bumblebee.xchangepass.domain.transaction.mongoV.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.mongoV.mapper.TransactionMetadataMapper;
 import bumblebee.xchangepass.domain.transaction.mongoV.service.TransactionMongoService;
 import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -19,6 +21,7 @@ import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,8 +41,10 @@ public class ExchangeTransactionService {
     private final UserRepository userRepository;
     private final WalletBalanceService walletBalanceService;
     private final WalletService walletService;
-    private final WalletBalanceRepository balanceRepository;
     private final TransactionMongoService transactionService;
+    private final RedisTemplate<String, TransactionResponse> redisTemplate;
+
+    private static final String REDIS_KEY_PREFIX = "transactions:insert:";
 
 
     public ExchangeResponseDTO createTransaction(ExchangeRequestDTO request, Long userId) {
@@ -72,6 +77,19 @@ public class ExchangeTransactionService {
                 "afterAmount", amount,
                 "rate", exchangeRate
         );
+
+        TransactionResponse response = new TransactionResponse(
+                user.getUserId(),
+                TransactionType.WALLET,
+                Currency.getInstance(request.fromCurrency()),
+                Currency.getInstance(request.toCurrency()),
+                LocalDateTime.now(),
+                TransactionMetadataMapper.mapToDto(TransactionType.EXCHANGE, metadata)
+        );
+
+        String redisKey = REDIS_KEY_PREFIX + user.getUserId();
+        redisTemplate.opsForList().rightPush(redisKey, response);
+
 
         transactionService.saveTransaction(user.getUserId(),
                 TransactionType.EXCHANGE,
