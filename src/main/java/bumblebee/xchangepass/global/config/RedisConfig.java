@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.global.config;
 
 import bumblebee.xchangepass.domain.card.dto.response.DetailedCardInfoResponse;
+import bumblebee.xchangepass.domain.transaction.mongoV.dto.response.TransactionResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.context.annotation.Bean;
@@ -43,15 +44,13 @@ public class RedisConfig {
         return template;
     }
 
-//    @Bean(name = "exchangeRedisTemplate")
-//    public RedisTemplate<String, ExchangeRateResponse> cardInfoRedisTemplate2(RedisConnectionFactory connectionFactory) {
-//        RedisTemplate<String, ExchangeRateResponse> template = new RedisTemplate<>();
-//        template.setConnectionFactory(connectionFactory);
-//
-//        template.setKeySerializer(new StringRedisSerializer());
-//        template.setValueSerializer(new JdkSerializationRedisSerializer());
-//
-//        return template;
-//    }
+    @Bean(name = "transactionRedisTemplate")
+    public RedisTemplate<String, TransactionResponse> transactionRedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, TransactionResponse> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
+        return template;
+    }
 
 }
