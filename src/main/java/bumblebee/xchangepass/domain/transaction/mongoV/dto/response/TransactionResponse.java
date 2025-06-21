@@ -8,10 +8,10 @@ import java.util.Currency;
 
 public record TransactionResponse(
         Long userId,
-        LocalDateTime transactionTime,
         TransactionType transactionType,
         Currency beforeCurrency,
         Currency afterCurrency,
+        LocalDateTime transactionTime,
         TransactionDataDto data
 ) {
 }
