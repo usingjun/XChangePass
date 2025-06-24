@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.wallet.service;
+package bumblebee.xchangepass.domain.wallet.wallet;
 
 import bumblebee.xchangepass.config.TestUserInitializer;
 import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
