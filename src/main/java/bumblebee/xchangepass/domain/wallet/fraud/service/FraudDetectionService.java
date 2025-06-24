@@ -1,6 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.fraud.service;
 
-import bumblebee.xchangepass.domain.wallet.transaction.consumer.SlackNotifier;
+import bumblebee.xchangepass.domain.transaction.consumer.SlackNotifier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
