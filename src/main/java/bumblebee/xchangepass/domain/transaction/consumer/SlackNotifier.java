@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.transaction.consumer;
+package bumblebee.xchangepass.domain.transaction.consumer;
 
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
 import lombok.RequiredArgsConstructor;

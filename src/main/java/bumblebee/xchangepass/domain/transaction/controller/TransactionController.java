@@ -1,8 +1,8 @@
-package bumblebee.xchangepass.domain.transaction.mongoV.controller;
+package bumblebee.xchangepass.domain.transaction.controller;
 
-import bumblebee.xchangepass.domain.transaction.mongoV.dto.response.TransactionResponse;
-import bumblebee.xchangepass.domain.transaction.mongoV.service.TransactionMongoService;
-import bumblebee.xchangepass.domain.transaction.rdbmsV.dto.TransactionSearchCondition;
+import bumblebee.xchangepass.domain.transaction.dto.cond.TransactionSearchCondition;
+import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.service.TransactionService;
 import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -23,9 +23,10 @@ import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
-public class TransactionMongoController {
+public class TransactionController {
 
-    private final TransactionMongoService transactionService;
+    private final TransactionService transactionService;
+
 
     @Operation(summary = "거래내역 조회", description = "거래내역을 조회합니다.")
     @ApiResponses(value = {
@@ -43,4 +44,5 @@ public class TransactionMongoController {
                                                  int size) {
         return transactionService.getTransactionByMongo(user.getUserId(), condition, size);
     }
+
 }

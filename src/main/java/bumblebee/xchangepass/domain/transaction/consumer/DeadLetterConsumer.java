@@ -1,11 +1,10 @@
-package bumblebee.xchangepass.domain.wallet.transaction.consumer;
+package bumblebee.xchangepass.domain.transaction.consumer;
 
-import bumblebee.xchangepass.domain.wallet.transaction.dto.WalletTransactionMessage;
+import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
@@ -21,11 +20,10 @@ import static bumblebee.xchangepass.global.common.Constants.DLQ_NAME;
 @RequiredArgsConstructor
 public class DeadLetterConsumer {
 
-    private final RabbitTemplate rabbitTemplate;
     private final SlackNotifier slackNotifier;
 
     @RabbitListener(queues = DLQ_NAME)
-    public void handleDeadLetter(WalletTransactionMessage message,
+    public void handleDeadLetter(TransactionResponse message,
                                  @Header(AmqpHeaders.DELIVERY_TAG) long tag,
                                  @Header("x-death") List<Map<String, Object>> xDeathHeader,
                                  Channel channel) throws IOException {

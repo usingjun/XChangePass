@@ -1,9 +1,11 @@
 package bumblebee.xchangepass.global.config;
 
 import bumblebee.xchangepass.domain.card.dto.response.DetailedCardInfoResponse;
-import bumblebee.xchangepass.domain.transaction.mongoV.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -49,7 +51,18 @@ public class RedisConfig {
         RedisTemplate<String, TransactionResponse> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
         template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
+
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.findAndRegisterModules();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        mapper.activateDefaultTyping(
+                LaissezFaireSubTypeValidator.instance,
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                JsonTypeInfo.As.PROPERTY
+        );
+
+        template.setValueSerializer(new GenericJackson2JsonRedisSerializer(mapper));
         return template;
     }
 

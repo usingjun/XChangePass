@@ -1,6 +1,5 @@
-package bumblebee.xchangepass.domain.transaction.mongoV.entity;
+package bumblebee.xchangepass.domain.transaction.entity;
 
-import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
 import jakarta.persistence.Id;
 import lombok.Getter;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
@@ -19,9 +18,7 @@ import java.util.Map;
 public class TransactionDocument {
     @Id
     private String transactionId;
-
     private Long userId;
-    private TransactionType type;
     private Currency beforeCurrency;
     private Currency afterCurrency;
     private LocalDateTime transactionTime;
@@ -31,9 +28,8 @@ public class TransactionDocument {
     protected TransactionDocument() {
     }
 
-    public TransactionDocument(Long userId, TransactionType type, Currency beforeCurrency, Currency afterCurrency, LocalDateTime transactionTime, Map<String, Object> metadata) {
+    public TransactionDocument(Long userId, Currency beforeCurrency, Currency afterCurrency, LocalDateTime transactionTime, Map<String, Object> metadata) {
         this.userId = userId;
-        this.type = type;
         this.beforeCurrency = beforeCurrency;
         this.afterCurrency = afterCurrency;
         this.transactionTime = transactionTime;

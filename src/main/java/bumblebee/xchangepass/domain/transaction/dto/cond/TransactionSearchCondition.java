@@ -1,7 +1,7 @@
-package bumblebee.xchangepass.domain.transaction.rdbmsV.dto;
+package bumblebee.xchangepass.domain.transaction.dto.cond;
 
 import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransactionType;
-import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
+import bumblebee.xchangepass.domain.transaction.entity.TransactionType;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.format.annotation.DateTimeFormat;

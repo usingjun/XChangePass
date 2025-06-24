@@ -1,17 +1,17 @@
-package bumblebee.xchangepass.domain.transaction.mongoV.service;
+package bumblebee.xchangepass.domain.transaction.service;
 
-import bumblebee.xchangepass.domain.transaction.mongoV.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 
+@Slf4j
 @Service
 public class RedisTransactionQueueService {
 
     private final RedisTemplate<String, TransactionResponse> responseRedisTemplate;
-    private static final String REDIS_KEY_NUM = "transaction:insert";
-
 
     public RedisTransactionQueueService(
             @Qualifier("transactionRedisTemplate")
@@ -20,8 +20,8 @@ public class RedisTransactionQueueService {
     }
 
 
-    public void enqueue(TransactionResponse dto) {
-        responseRedisTemplate.opsForList().rightPush(REDIS_KEY_NUM, dto);
+    public void enqueue(String redisKey, TransactionResponse dto) {
+        responseRedisTemplate.opsForList().rightPush(redisKey, dto);
     }
 
 }

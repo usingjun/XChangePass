@@ -8,7 +8,7 @@ public class Constants {
     public static final int REDIS_PORT = 6379;
 
     //RabbitMQ 큐 이름
-    public static final String WALLET_TRANSACTION = "wallet-transaction-queue";
+    public static final String TRANSACTION_MAIN_QUEUE = "transaction-queue";
     public static final String DLQ_NAME = "wallet-transaction-dlx-queue";
     public static final String DLX_NAME = "wallet-transaction-dlx";
     public static final String DLQ_ROUTING_KEY = "wallet-transaction-dlx-key";

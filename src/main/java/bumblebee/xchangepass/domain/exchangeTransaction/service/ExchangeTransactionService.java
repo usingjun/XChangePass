@@ -3,25 +3,21 @@ package bumblebee.xchangepass.domain.exchangeTransaction.service;
 
 import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.exchangeTransaction.dto.request.ExchangeRequestDTO;
-import bumblebee.xchangepass.domain.exchangeTransaction.dto.response.ExchangeResponseDTO;
-import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.ExchangeTransaction;
-import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.TransactionStatus;
-import bumblebee.xchangepass.domain.exchangeTransaction.repository.ExchangeTransactionRepository;
-import bumblebee.xchangepass.domain.transaction.mongoV.dto.response.TransactionResponse;
-import bumblebee.xchangepass.domain.transaction.mongoV.mapper.TransactionMetadataMapper;
-import bumblebee.xchangepass.domain.transaction.mongoV.service.TransactionMongoService;
-import bumblebee.xchangepass.domain.transaction.rdbmsV.entity.TransactionType;
+import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.entity.TransactionDocument;
+import bumblebee.xchangepass.domain.transaction.entity.TransactionType;
+import bumblebee.xchangepass.domain.transaction.mapper.TransactionMetadataMapper;
+import bumblebee.xchangepass.domain.transaction.repository.TransactionRepository;
+import bumblebee.xchangepass.domain.transaction.service.RedisTransactionQueueService;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
-import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.service.WalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,24 +26,22 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Currency;
 import java.util.Map;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
 public class ExchangeTransactionService {
 
-    private final ExchangeTransactionRepository repository;
+    private final TransactionRepository transactionRepository;
     private final ExchangeService exchangeRateService;
     private final UserRepository userRepository;
     private final WalletBalanceService walletBalanceService;
     private final WalletService walletService;
-    private final TransactionMongoService transactionService;
-    private final RedisTemplate<String, TransactionResponse> redisTemplate;
+    private final RedisTransactionQueueService redisTransactionQueueService;
 
     private static final String REDIS_KEY_PREFIX = "transactions:insert:";
 
 
-    public ExchangeResponseDTO createTransaction(ExchangeRequestDTO request, Long userId) {
+    public void createTransaction(ExchangeRequestDTO request, Long userId) {
 
         Map<String, Double> conversionRates = exchangeRateService.getExchangeRateAll(request.fromCurrency())
                 .conversionRates();
@@ -75,65 +69,34 @@ public class ExchangeTransactionService {
         Map<String, Object> metadata = Map.of(
                 "beforeAmount", request.amount(),
                 "afterAmount", amount,
-                "rate", exchangeRate
+                "rate", exchangeRate,
+                "transactionType", TransactionType.EXCHANGE
         );
 
         TransactionResponse response = new TransactionResponse(
                 user.getUserId(),
-                TransactionType.WALLET,
                 Currency.getInstance(request.fromCurrency()),
                 Currency.getInstance(request.toCurrency()),
                 LocalDateTime.now(),
-                TransactionMetadataMapper.mapToDto(TransactionType.EXCHANGE, metadata)
+                TransactionMetadataMapper.mapToDto(metadata)
         );
 
+        // Redis로 임시 저장
         String redisKey = REDIS_KEY_PREFIX + user.getUserId();
-        redisTemplate.opsForList().rightPush(redisKey, response);
-
-
-        transactionService.saveTransaction(user.getUserId(),
-                TransactionType.EXCHANGE,
-                Currency.getInstance(request.fromCurrency()),
-                Currency.getInstance(request.toCurrency()),
-                 metadata);
-
-
-        ExchangeTransaction transaction = ExchangeTransaction.builder()
-                .user(user)
-                .fromCurrency(request.fromCurrency())
-                .toCurrency(request.toCurrency())
-                .exchangeRate(BigDecimal.valueOf(exchangeRate))
-                .amount(amount)
-                .receivedAmount(receivedAmount)
-                .status(TransactionStatus.PENDING)
-                .build();
-
-        ExchangeTransaction savedTransaction = repository.save(transaction);
-
-
-        return ExchangeResponseDTO.toEntity(savedTransaction);
+        redisTransactionQueueService.enqueue(redisKey, response);
     }
 
     @Transactional
-    public ExchangeResponseDTO executeTransaction(Long transactionId, Long userId) {
-        ExchangeTransaction transaction = repository.findByIdForUpdate(transactionId)
-                .orElseThrow(ErrorCode.TRANSACTION_HISTORY_NOT_FOUND::commonException);
-
-        if (!TransactionStatus.PENDING.equals(transaction.getStatus())) {
-            throw ErrorCode.TRANSACTION_ALREADY_COMPLETED.commonException();
-        }
-
-        if (!Objects.equals(transaction.getUser().getUserId(), userId)) {
-            throw ErrorCode.UNAUTHORIZED_TRANSACTION_ACCESS.commonException();
-        }
-
+    public void executeTransaction(Long transactionId, Long userId) {
         User user = userRepository.findByUserId(userId)
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
-        String fromCurrency = transaction.getFromCurrency();
-        String toCurrency = transaction.getToCurrency();
-        BigDecimal amount = transaction.getAmount();
-        BigDecimal receivedAmount = transaction.getReceivedAmount();
+        TransactionDocument transaction = transactionRepository.findByTransactionId(transactionId.toString());
+
+        String fromCurrency = transaction.getBeforeCurrency().getCurrencyCode();
+        String toCurrency = transaction.getAfterCurrency().getCurrencyCode();
+        BigDecimal amount = (BigDecimal) transaction.getMetadata().get("amount");
+        BigDecimal receivedAmount = (BigDecimal) transaction.getMetadata().get("afterAmount");
 
         Wallet wallet = user.getWallet();
 
@@ -154,12 +117,6 @@ public class ExchangeTransactionService {
 
         fromBalance.subtractBalance(amount);
         toBalance.addBalance(receivedAmount);
-
-
-        transaction.changeStatus(TransactionStatus.COMPLETED);
-
-
-        return ExchangeResponseDTO.toEntity(transaction);
     }
 
     private WalletBalance getOrCreateBalance(Wallet wallet, String currencyCode) {
