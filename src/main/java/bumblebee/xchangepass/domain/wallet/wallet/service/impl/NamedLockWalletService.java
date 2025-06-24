@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock;
+package bumblebee.xchangepass.domain.wallet.wallet.service.impl;
 
 import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.user.entity.User;

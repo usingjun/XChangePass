@@ -1,4 +1,4 @@
-package bumblebee.xchangepass.domain.wallet.wallet.service;
+package bumblebee.xchangepass.domain.wallet.wallet;
 
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -7,14 +7,13 @@ import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudRuleEvaluator;
-import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
-import bumblebee.xchangepass.domain.wallet.wallet.service.impl.lock.NamedLockWalletService;
+import bumblebee.xchangepass.domain.wallet.wallet.service.impl.NamedLockWalletService;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.exception.CommonException;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,8 +65,6 @@ class WalletNamedLockServiceTest {
     private WalletBalanceRepository walletBalanceRepository;
     @Autowired
     private WalletBalanceService balanceService;
-    @Autowired
-    private WalletTransactionRepository walletTransactionRepository;
 
     @MockBean
     private FraudRuleEvaluator fraudRuleEvaluator;
@@ -111,7 +108,6 @@ class WalletNamedLockServiceTest {
     @BeforeEach
     void setup() throws InterruptedException {
         Thread.sleep(300);
-        walletTransactionRepository.deleteAll();
         walletBalanceRepository.deleteAll();
         walletRepository.deleteAll();
         userRepository.deleteAll(); // 기존 데이터 삭제
