@@ -43,8 +43,8 @@ public class ExchangeTransactionController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/create")
-    public ExchangeResponseDTO createTransaction(@RequestBody ExchangeRequestDTO request, @AuthenticationPrincipal CustomUserDetails user) {
-        return exchangeService.createTransaction(request, user.getUserId());
+    public void createTransaction(@RequestBody ExchangeRequestDTO request, @AuthenticationPrincipal CustomUserDetails user) {
+        exchangeService.createTransaction(request, user.getUserId());
     }
 
 
@@ -66,7 +66,7 @@ public class ExchangeTransactionController {
     })
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/execute")
-    public ExchangeResponseDTO executeTransaction(@RequestParam Long transactionId, @AuthenticationPrincipal CustomUserDetails user) {
-        return exchangeService.executeTransaction(transactionId, user.getUserId());
+    public void executeTransaction(@RequestParam Long transactionId, @AuthenticationPrincipal CustomUserDetails user) {
+        exchangeService.executeTransaction(transactionId, user.getUserId());
     }
 }

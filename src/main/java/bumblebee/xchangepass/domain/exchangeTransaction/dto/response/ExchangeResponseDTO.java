@@ -1,7 +1,6 @@
 package bumblebee.xchangepass.domain.exchangeTransaction.dto.response;
 
 
-import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.ExchangeTransaction;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
@@ -34,15 +33,4 @@ public record ExchangeResponseDTO (
         @Schema(description = "거래 생성 시간", example = "2024-03-16T10:15:30")
         LocalDateTime createdAt
 ){
-    public static ExchangeResponseDTO toEntity(ExchangeTransaction exchangeTransaction){
-        return ExchangeResponseDTO.builder()
-                .transactionId(exchangeTransaction.getExchangeTransactionId())
-                .fromCurrency(exchangeTransaction.getFromCurrency())
-                .toCurrency(exchangeTransaction.getToCurrency())
-                .exchangeRate(exchangeTransaction.getExchangeRate())
-                .amount(exchangeTransaction.getAmount())
-                .receivedAmount(exchangeTransaction.getReceivedAmount())
-                .status(exchangeTransaction.getStatus().name())
-                .build();
-    }
 }

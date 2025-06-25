@@ -46,6 +46,17 @@ services:
       retries: 5
       start_period: 10s
 
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    networks:
+      - monitoring
+    volumes:
+      - mongo_data:/data/db
+
   # 🔹 InfluxDB (K6 성능 테스트 데이터 저장)
   influxdb:
     image: influxdb:1.8
@@ -107,7 +118,6 @@ services:
       - ./k6-scripts:/k6-scripts    # K6 스크립트가 있는 디렉토리
     environment:
       - K6_OUT=influxdb=http://influxdb:8086/k6
-    command: ["run", "/k6-scripts/test.js"]
 
   # 🔹 Spring Boot 애플리케이션
   app:
@@ -117,6 +127,7 @@ services:
     restart: always
     depends_on:
       - postgres  # DB가 먼저 실행되도록 설정
+      - mongodb
       - redis
     networks:
       - monitoring
@@ -127,7 +138,9 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
       - DB_HOST=influxdb
+      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/xchangepass
 
 volumes:
   postgres_data:
   redis-data:
+  mongo_data:

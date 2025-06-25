@@ -1,29 +1,27 @@
 package bumblebee.xchangepass.domain.cardTransaction.service;
 
 import bumblebee.xchangepass.domain.cardTransaction.dto.request.PaymentApprovedEvent;
-import bumblebee.xchangepass.domain.cardTransaction.dto.response.CardTransactionDetailResponse;
-import bumblebee.xchangepass.domain.cardTransaction.dto.response.CardTransactionSummaryResponse;
-import bumblebee.xchangepass.domain.cardTransaction.entity.CardTransaction;
-import bumblebee.xchangepass.domain.cardTransaction.repository.CardTransactionRepository;
-import bumblebee.xchangepass.global.error.ErrorCode;
+import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.entity.TransactionType;
+import bumblebee.xchangepass.domain.transaction.mapper.TransactionMetadataMapper;
+import bumblebee.xchangepass.domain.transaction.service.RedisTransactionQueueService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import java.util.Currency;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CardTransactionService {
 
-    private final CardTransactionRepository transactionRepository;
+    private static final String REDIS_KEY_PREFIX = "transactions:insert:";
+    private final RedisTransactionQueueService redisTransactionQueueService;
 
     /**
      * ✅ 결제 승인 이벤트 수신 시 거래내역 생성
@@ -33,52 +31,28 @@ public class CardTransactionService {
     @Transactional
     @EventListener(PaymentApprovedEvent.class)
     public void handlePaymentApprovedEvent(PaymentApprovedEvent event) {
-        CardTransaction transaction = CardTransaction.builder()
-                .user(event.user())
-                .merchantName(event.merchantName())
-                .approvedAmount(event.approvedAmount())
-                .approvedCurrency(event.approvedCurrency())
-                .krwAmount(event.krwAmount())
-                .transactionTime(event.transactionTime())
-                .approvalNumber(event.approvalNumber())
-                .balanceAfter(event.balanceAfter())
-                .transactionType(event.transactionType())
-                .build();
 
-        transactionRepository.save(transaction);
+        Map<String, Object> metadata = Map.of(
+                "merchant", event.merchantName(),
+                "currencyAmount", event.approvedAmount(),
+                "balanceAfter", event.balanceAfter(),
+                "transactionType", TransactionType.CARD,
+                "cardType", event.cardTransactionType()
+        );
+
+        TransactionResponse response = new TransactionResponse(
+                event.user().getUserId(),
+                Currency.getInstance("KRW"),
+                event.approvedCurrency(),
+                event.transactionTime(),
+                TransactionMetadataMapper.mapToDto(metadata)
+        );
+
+        // Redis로 임시 저장
+        String redisKey = REDIS_KEY_PREFIX + event.user().getUserId();
+        redisTransactionQueueService.enqueue(redisKey, response);
 
         log.info("💾 거래내역 저장 완료 - 승인번호: {}", event.approvalNumber());
-    }
-
-    /**
-     * ✅ 거래 내역 무한 스크롤 조회 (커서 기반 최신순)
-     */
-    public List<CardTransactionSummaryResponse> getUserTransactions(Long userId, Long lastTransactionId, int size) {
-
-        List<CardTransactionSummaryResponse> transactions =
-                transactionRepository.getUserTransactions(userId, lastTransactionId, size);
-
-        if (transactions.isEmpty()) {
-            throw ErrorCode.CARD_TRANSACTION_NOT_FOUND.commonException();
-        }
-
-        return transactions;
-    }
-
-
-    /**
-     * ✅ 개별 거래 내역 상세 조회
-     */
-    @Transactional(readOnly = true)
-    public CardTransactionDetailResponse getTransactionDetail(Long loginUserId, Long transactionId) {
-        CardTransaction transaction = transactionRepository.findById(transactionId)
-                .orElseThrow(ErrorCode.CARD_TRANSACTION_NOT_FOUND::commonException);
-
-        if (!transaction.getUser().getUserId().equals(loginUserId)) {
-            throw ErrorCode.USER_FORBIDDEN.commonException();
-        }
-
-        return CardTransactionDetailResponse.from(transaction);
     }
 
 }

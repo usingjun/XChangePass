@@ -17,12 +17,4 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Query("SELECT w FROM Wallet w WHERE w.user.userId = :userId")
     Optional<Wallet> findByUserId(@Param("userId") Long userId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Transactional(readOnly = false)
-    @Query("SELECT w FROM Wallet w WHERE w.user.userId = :userId")
-    Optional<Wallet> findByUserIdWithLock(@Param("userId") Long userId);
-
-    @Query("SELECT COUNT(w) > 0 FROM Wallet w WHERE w.user.userId = :userId")
-    boolean existsByUserId(@Param("userId") Long userId);
-
 }

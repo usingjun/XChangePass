@@ -1,50 +1,65 @@
 package bumblebee.xchangepass.domain.wallet.transaction.service;
 
-import bumblebee.xchangepass.domain.wallet.transaction.dto.request.WalletTransactionSearchCondition;
-import bumblebee.xchangepass.domain.wallet.transaction.dto.response.WalletTransactionListResponse;
+import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.entity.TransactionType;
+import bumblebee.xchangepass.domain.transaction.mapper.TransactionMetadataMapper;
+import bumblebee.xchangepass.domain.transaction.service.RedisTransactionQueueService;
+import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
-import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
-import bumblebee.xchangepass.domain.wallet.transaction.producer.WalletTransactionProducer;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Currency;
-import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WalletTransactionService {
 
-    private final WalletTransactionRepository transactionRepository;
+    private static final String REDIS_KEY_PREFIX = "transactions:insert:";
     private final WalletRepository walletRepository;
-    private final WalletTransactionProducer transactionProducer;
+    private final RedisTransactionQueueService redisTransactionQueueService;
 
     @Transactional
     public void saveTransaction(Long myWalletId, Long counterWalletId, BigDecimal amount, Currency fromCurrency, Currency toCurrency, WalletTransactionType transactionType) {
+        Wallet myWallet = walletRepository.findById(myWalletId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+        User sender = myWallet.getUser();
 
-        transactionProducer.sendAsyncTransaction(
-                myWalletId,
-                counterWalletId,
-                amount,
+        if (transactionType == WalletTransactionType.TRANSFER && counterWalletId == null)
+            throw ErrorCode.RECEIVER_NOT_FOUND.commonException();
+
+        User receiver = (counterWalletId != null)
+                ? walletRepository.findById(counterWalletId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException).getUser()
+                : null;
+
+        Map<String, Object> metadata = Map.of(
+                "receiver", receiver == null ? null : receiver.getUserId(),
+                "amount", amount,
+                "transactionType", TransactionType.WALLET,
+                "walletType", transactionType.name()
+        );
+
+        TransactionResponse response = new TransactionResponse(
+                sender.getUserId(),
                 fromCurrency,
                 toCurrency,
-                transactionType
+                LocalDateTime.now(),
+                TransactionMetadataMapper.mapToDto(metadata)
         );
-    }
 
-    @Transactional
-    public List<WalletTransactionListResponse> getTransaction(Long userId, WalletTransactionSearchCondition cond, Pageable pageable) {
-        Wallet wallet = walletRepository.findByUserIdWithLock(userId)
-                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
-        return transactionRepository.search(wallet.getWalletId(), cond, pageable)
-                .stream().map(WalletTransactionListResponse::fromEntity)
-                .toList();
+        String redisKey = REDIS_KEY_PREFIX + sender.getUserId();
+        redisTransactionQueueService.enqueue(redisKey, response);
+
     }
 
 }

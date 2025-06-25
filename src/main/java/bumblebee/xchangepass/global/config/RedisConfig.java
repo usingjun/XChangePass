@@ -1,8 +1,11 @@
 package bumblebee.xchangepass.global.config;
 
 import bumblebee.xchangepass.domain.card.dto.response.DetailedCardInfoResponse;
+import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -43,15 +46,24 @@ public class RedisConfig {
         return template;
     }
 
-//    @Bean(name = "exchangeRedisTemplate")
-//    public RedisTemplate<String, ExchangeRateResponse> cardInfoRedisTemplate2(RedisConnectionFactory connectionFactory) {
-//        RedisTemplate<String, ExchangeRateResponse> template = new RedisTemplate<>();
-//        template.setConnectionFactory(connectionFactory);
-//
-//        template.setKeySerializer(new StringRedisSerializer());
-//        template.setValueSerializer(new JdkSerializationRedisSerializer());
-//
-//        return template;
-//    }
+    @Bean(name = "transactionRedisTemplate")
+    public RedisTemplate<String, TransactionResponse> transactionRedisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, TransactionResponse> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+        template.setKeySerializer(new StringRedisSerializer());
+
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.findAndRegisterModules();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        mapper.activateDefaultTyping(
+                LaissezFaireSubTypeValidator.instance,
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                JsonTypeInfo.As.PROPERTY
+        );
+
+        template.setValueSerializer(new GenericJackson2JsonRedisSerializer(mapper));
+        return template;
+    }
 
 }

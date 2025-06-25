@@ -1,6 +1,5 @@
 package bumblebee.xchangepass.global.config;
 
-import org.aspectj.apache.bcel.generic.RET;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
@@ -25,16 +24,15 @@ public class RabbitMQConfig {
         Map<String, Object> args = new HashMap<>();
         args.put("x-dead-letter-exchange", "");
         args.put("x-dead-letter-routing-key", RETRY_QUEUE);
-        return new Queue(WALLET_TRANSACTION, true, false, false, args);
+        return new Queue(TRANSACTION_MAIN_QUEUE, true, false, false, args);
     }
 
     @Bean
     public Queue retryQueue() {
         Map<String, Object> args = new HashMap<>();
-        args.put("x-dead-letter-exchange", "");
-        args.put("x-dead-letter-routing-key", WALLET_TRANSACTION);
+        args.put("x-dead-letter-exchange", DLX_NAME);
+        args.put("x-dead-letter-routing-key", TRANSACTION_MAIN_QUEUE);
         args.put("x-message-ttl", 5000);
-        args.put("x-max-length", 1000);
 
         return new Queue(RETRY_QUEUE, true, false, false, args);
     }

@@ -1,8 +1,5 @@
 package bumblebee.xchangepass.domain.wallet.wallet.controller;
 
-import bumblebee.xchangepass.domain.wallet.transaction.dto.request.WalletTransactionSearchCondition;
-import bumblebee.xchangepass.domain.wallet.transaction.dto.response.WalletTransactionListResponse;
-import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.WalletPasswordRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.WalletPasswordResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
@@ -21,7 +18,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.ErrorResponse;
@@ -37,26 +33,8 @@ import java.util.List;
 public class WalletController {
 
     private final WalletServiceFactory walletServiceFactory;
-    private final WalletTransactionService transactionService;
     private final WalletServiceImpl walletService;
     private final WalletFacadeService walletFacadeService;
-
-    @Operation(summary = "거래내역 조회", description = "거래내역을 조회합니다.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "400", description = "거래내역 조회 실패",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(value = "{\n  \"code\": \"W001\"," +
-                                                              "\n  \"message\": \"지갑을 찾을 수 없습니다.\"}"))
-            )
-    })
-    @GetMapping("/transaction")
-    @ResponseStatus(HttpStatus.OK)
-    public List<WalletTransactionListResponse> transaction(@AuthenticationPrincipal CustomUserDetails user,
-                                                           @ModelAttribute WalletTransactionSearchCondition condition,
-                                                           Pageable pageable) {
-        return transactionService.getTransaction(user.getUserId(), condition, pageable);
-    }
 
     @Operation(summary = "잔액 충전", description = "잔액을 충전합니다.")
     @ApiResponses(value = {
