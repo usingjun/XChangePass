@@ -13,9 +13,11 @@ public class FraudDetectionService {
     private final SlackNotifier slackNotifier;
 
     public void detect(FraudDetectEvent event) {
+        String key = "fraud:" + event.type() + ":user:" + event.userId();
+
         redisFraudStorage.store(event.userId(), event.amount());
 
-        boolean isFraud = ruleEvaluator.isSuspicious(event.userId(), event.amount());
+        boolean isFraud = ruleEvaluator.isSuspicious(key, event.amount());
 
         if (isFraud) {
             String reason = ruleEvaluator.getLastDetectedReason();
@@ -23,7 +25,8 @@ public class FraudDetectionService {
                     event.userId(),
                     event.amount(),
                     event.timestamp(),
-                    reason
+                    reason,
+                    event.type()
             ));
         }
     }

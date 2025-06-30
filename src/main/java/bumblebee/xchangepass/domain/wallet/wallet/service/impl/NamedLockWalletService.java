@@ -134,7 +134,8 @@ public class NamedLockWalletService implements WalletService {
                     senderId,
                     transferAmount,
                     LocalDateTime.now(),
-                    null
+                    null,
+                    "Wallet"
             ));
 
             balanceService.transferBalance(fromBalance, toBalance, transferAmount);

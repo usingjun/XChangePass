@@ -47,10 +47,10 @@ class FraudRuleEvaluatorTest {
 
     @Test
     void test_Lua_script_detects_no_fraud_on_single_transaction() {
-        Long userId = 1001L;
+        String key = "fraud:" + "Wallet"+ ":user:" + 1001;
         BigDecimal amount = new BigDecimal("10000");
 
-        boolean suspicious = fraudRuleEvaluator.isSuspicious(userId, amount);
+        boolean suspicious = fraudRuleEvaluator.isSuspicious(key, amount);
         System.out.println("🚨 감지 결과: " + suspicious);
 
         assertThat(suspicious).isFalse();
@@ -58,7 +58,7 @@ class FraudRuleEvaluatorTest {
 
     @Test
     void test_Lua_script_detects_high_frequency_transactions() {
-        Long userId = 1002L;
+        String key = "fraud:" + "Wallet"+ ":user:" + 1002;
         BigDecimal amount = new BigDecimal("20000");
 
         Boolean suspicious = false;
@@ -66,7 +66,7 @@ class FraudRuleEvaluatorTest {
         // 10건 연속 트랜잭션으로 빈도 룰 유도
         for (int i = 0; i < 10; i++) {
             if(suspicious) break;
-            suspicious = fraudRuleEvaluator.isSuspicious(userId, amount);
+            suspicious = fraudRuleEvaluator.isSuspicious(key, amount);
         }
 
         assertThat(suspicious).isTrue();
@@ -74,13 +74,13 @@ class FraudRuleEvaluatorTest {
 
     @Test
     void test_performance_of_lua_rule() {
-        Long userId = 1003L;
+        String key = "fraud:" + "Wallet"+ ":user:" + 1003;
         BigDecimal amount = new BigDecimal("5000");
 
         long start = System.currentTimeMillis();
 
         for (int i = 0; i < 1000; i++) {
-            fraudRuleEvaluator.isSuspicious(userId, amount);
+            fraudRuleEvaluator.isSuspicious(key, amount);
         }
 
         long end = System.currentTimeMillis();
@@ -92,14 +92,14 @@ class FraudRuleEvaluatorTest {
 
     @Test
     void benchmarkLuaPerformance() {
-        Long userId = 1L;
+        String key = "fraud:" + "Wallet"+ ":user:" + 1;
         BigDecimal amount = BigDecimal.valueOf(10000);
 
         // 성능 측정 시작
         long start = System.currentTimeMillis();
 
         for (int i = 0; i < 1000; i++) {
-            fraudRuleEvaluator.isSuspicious(userId, amount);
+            fraudRuleEvaluator.isSuspicious(key, amount);
         }
 
         long end = System.currentTimeMillis();
