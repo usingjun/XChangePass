@@ -7,5 +7,6 @@ public record FraudDetectEvent(
         Long userId,
         BigDecimal amount,
         LocalDateTime timestamp,
-        String detail
+        String detail,
+        String type
 ) {}

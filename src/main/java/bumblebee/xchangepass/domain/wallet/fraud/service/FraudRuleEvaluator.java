@@ -19,7 +19,7 @@ public class FraudRuleEvaluator {
 
     private String lastDetectedReason;
 
-    public Boolean isSuspicious(Long userId, BigDecimal amount) {
+    public Boolean isSuspicious(String redisKey, BigDecimal amount) {
         this.lastDetectedReason = null;
 
         Long nowEpoch = System.currentTimeMillis() / 1000;
@@ -31,7 +31,7 @@ public class FraudRuleEvaluator {
 
         String result = redisTemplate.execute(
                 script,
-                List.of("fraud:user:" + userId),
+                List.of(redisKey),
                 amount.toString(),
                 String.valueOf(nowEpoch),
                 "500000",         // 누적 한도

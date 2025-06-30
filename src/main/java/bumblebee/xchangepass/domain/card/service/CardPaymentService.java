@@ -12,6 +12,8 @@ import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.security.crypto.AESEncryption;
@@ -25,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.crypto.SecretKey;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.Currency;
 import java.util.UUID;
 
@@ -34,6 +37,7 @@ public class CardPaymentService {
 
     private final UserRepository userRepository;
     private final WalletBalanceService walletBalanceService;
+    private final FraudDetectionService fraudDetectionService;
     private final ExchangeService exchangeService;
     private final RSAEncryption rsaEncryption;
     private final PasswordEncoder passwordEncoder;
@@ -62,6 +66,15 @@ public class CardPaymentService {
         if (balance.getBalance().compareTo(request.amount()) < 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
+
+        fraudDetectionService.detect(new FraudDetectEvent(
+                user.getUserId(),
+                request.amount(),
+                LocalDateTime.now(),
+                null,
+                "Card"
+        ));
+
 
         walletBalanceService.withdrawBalance(balance, request.amount());
         BigDecimal krwAmount = calculateKrw(request.amount(), request.currency());
