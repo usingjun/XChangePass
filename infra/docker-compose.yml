@@ -121,7 +121,7 @@ services:
 
   # 🔹 Spring Boot 애플리케이션
   app:
-    build: .
+    build: ..
     image: xchangepass-app # 🔥 Spring Boot Docker 이미지명 (직접 빌드해야 함)
     container_name: spring-app
     restart: always
