@@ -15,19 +15,24 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.test.context.support.WithUserDetails;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
-import java.util.List;
 
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -39,10 +44,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @ActiveProfiles("test")
+@Testcontainers
 @AutoConfigureMockMvc
 @Import(TestUserInitializer.class)
 class CardControllerTest {
-
+    @Container
+    static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
+            .withDatabaseName("xcp_test")
+            .withUsername("testuser")
+            .withPassword("testpass");
+    @Container
+    static GenericContainer<?> redisContainer = new GenericContainer<>("redis:7.2")
+            .withExposedPorts(6379);
     @Autowired
     private MockMvc mockMvc;
 
@@ -52,18 +65,20 @@ class CardControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @TestConfiguration
-    static class MockSecurityConfig {
-        @Bean
-        public UserDetailsService customUserDetailsService() {
-            // username("1") 요청이 들어오면 CustomUserDetails를 반환하도록
-            return username -> new CustomUserDetails(
-                    1L,
-                    username,
-                    "",
-                    "ROLE_USER"
-            );
-        }
+    @MockBean(name = "cardInfoRedisTemplate")
+    private RedisTemplate<String, DetailedCardInfoResponse> redisTemplate;
+
+    @DynamicPropertySource
+    static void overrideDataSourceProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
+        registry.add("spring.datasource.username", postgresContainer::getUsername);
+        registry.add("spring.datasource.password", postgresContainer::getPassword);
+    }
+
+    @DynamicPropertySource
+    static void overrideRedisProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.redis.host", redisContainer::getHost);
+        registry.add("spring.redis.port", () -> redisContainer.getMappedPort(6379));
     }
 
     @Test
@@ -144,7 +159,21 @@ class CardControllerTest {
     }
 
     @TestConfiguration
-    static class MockServiceConfig  {
+    static class MockSecurityConfig {
+        @Bean
+        public UserDetailsService customUserDetailsService() {
+            // username("1") 요청이 들어오면 CustomUserDetails를 반환하도록
+            return username -> new CustomUserDetails(
+                    1L,
+                    username,
+                    "",
+                    "ROLE_USER"
+            );
+        }
+    }
+
+    @TestConfiguration
+    static class MockServiceConfig {
         @Bean
         public CardService cardService() {
             return Mockito.mock(CardService.class);

@@ -24,7 +24,7 @@ public class TransactionMetadataMapper {
                     castToCardType(meta.get("cardType"))
             );
             case WALLET -> new WalletTransactionDto(
-                    (Long) meta.get("receiver"),
+                    meta.get("receiver") == null ? null : ((Number) meta.get("receiver")).longValue(),
                     castToBigDecimal(meta.get("amount")),
                     castToTransactionType(meta.get("type")),
                     castToWalletType(meta.get("walletType"))

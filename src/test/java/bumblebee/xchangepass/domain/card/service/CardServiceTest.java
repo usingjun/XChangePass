@@ -21,7 +21,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.crypto.SecretKey;
 import java.util.List;
@@ -31,33 +37,51 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @ActiveProfiles("test")
+@Testcontainers
 @Import(TestUserInitializer.class)
 public class CardServiceTest extends RedisTestBase {
 
+    @Container
+    static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
+            .withDatabaseName("xcp_test")
+            .withUsername("testuser")
+            .withPassword("testpass");
+    @Container
+    static GenericContainer<?> redisContainer = new GenericContainer<>("redis:7.2")
+            .withExposedPorts(6379);
     @Autowired
     private CardService cardService;
-
     @Autowired
     private CardCacheService cardCacheService;
-
     @Autowired
     private RSAEncryption rsaEncryption;
-
     @Autowired
     private UserRepository userRepository;
-
     @Autowired
     private CardRepository cardRepository;
+
+    @DynamicPropertySource
+    static void overrideDataSourceProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
+        registry.add("spring.datasource.username", postgresContainer::getUsername);
+        registry.add("spring.datasource.password", postgresContainer::getPassword);
+    }
+
+    @DynamicPropertySource
+    static void overrideRedisProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.redis.host", redisContainer::getHost);
+        registry.add("spring.redis.port", () -> redisContainer.getMappedPort(6379));
+    }
 
     @Test
     @Transactional
     @DisplayName("실물 카드 발급 여부")
-    void verifyPhysicalCardIssuance(){
+    void verifyPhysicalCardIssuance() {
         Long userId = 1L;
 
         try {
             cardService.generatePhysicalCard(userId);
-        }catch (Exception e){
+        } catch (Exception e) {
             System.out.println(e.getMessage());
         }
 
@@ -118,17 +142,16 @@ public class CardServiceTest extends RedisTestBase {
         List<BasicCardInfoResponse> cardInfo = cardService.getBasicCardInfo(userId);
 
         Long physicalCardIds = cardInfo.stream()
-                                       .filter(c -> c.cardType().equals(CardType.PHYSICAL))
-                                       .map(BasicCardInfoResponse::cardId)
-                                       .findFirst()
-                                       .orElseThrow(ErrorCode.CARD_NOT_FOUND::commonException);
-
+                .filter(c -> c.cardType().equals(CardType.PHYSICAL))
+                .map(BasicCardInfoResponse::cardId)
+                .findFirst()
+                .orElseThrow(ErrorCode.CARD_NOT_FOUND::commonException);
 
 
         var request = ChangeCardStatusRequest.builder()
-                                             .cardType(CardType.PHYSICAL)
-                                             .status(CardStatus.INACTIVE)
-                                             .build();
+                .cardType(CardType.PHYSICAL)
+                .status(CardStatus.INACTIVE)
+                .build();
 
         cardService.changeCardStatus(userId, request);
 

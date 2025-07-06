@@ -2,10 +2,12 @@ package bumblebee.xchangepass.domain.wallet.fraud;
 
 import bumblebee.xchangepass.config.TestUserInitializer;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudRuleEvaluator;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -26,6 +28,9 @@ class FraudRuleEvaluatorTest {
     @Autowired
     private FraudRuleEvaluator fraudRuleEvaluator;
 
+    @Autowired
+    private RedisTemplate<String, String> redisTemplate;
+
     @Container
     static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
             .withDatabaseName("xcp_test")
@@ -45,6 +50,12 @@ class FraudRuleEvaluatorTest {
         registry.add("spring.datasource.password", postgresContainer::getPassword);
     }
 
+    @BeforeEach
+    void clearRedis() {
+        redisTemplate.delete("fraud:Wallet:user:1002");
+    }
+
+
     @Test
     void test_Lua_script_detects_no_fraud_on_single_transaction() {
         String key = "fraud:" + "Wallet"+ ":user:" + 1001;
@@ -57,7 +68,7 @@ class FraudRuleEvaluatorTest {
     }
 
     @Test
-    void test_Lua_script_detects_high_frequency_transactions() {
+    void test_Lua_script_detects_high_frequency_transactions() throws InterruptedException {
         String key = "fraud:" + "Wallet"+ ":user:" + 1002;
         BigDecimal amount = new BigDecimal("20000");
 
@@ -65,8 +76,8 @@ class FraudRuleEvaluatorTest {
 
         // 10건 연속 트랜잭션으로 빈도 룰 유도
         for (int i = 0; i < 10; i++) {
-            if(suspicious) break;
             suspicious = fraudRuleEvaluator.isSuspicious(key, amount);
+            Thread.sleep(10);
         }
 
         assertThat(suspicious).isTrue();

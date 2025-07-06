@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -42,12 +43,13 @@ public class WalletTransactionService {
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException).getUser()
                 : null;
 
-        Map<String, Object> metadata = Map.of(
-                "receiver", receiver == null ? null : receiver.getUserId(),
-                "amount", amount,
-                "transactionType", TransactionType.WALLET,
-                "walletType", transactionType.name()
-        );
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("amount", amount);
+        metadata.put("type", TransactionType.WALLET);
+        metadata.put("walletType", transactionType.name());
+        if (receiver != null) {
+            metadata.put("receiver", receiver.getUserId());
+        }
 
         TransactionResponse response = new TransactionResponse(
                 sender.getUserId(),
