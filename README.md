@@ -209,14 +209,15 @@ ___
 ## 👀 프로젝트 화면
 
 ---
+<details>
 
-- 메인기능
-    
-    ![스크린샷 2025-06-11 오후 4.30.42.png](attachment:da84bc40-0129-4b91-a426-9f1345bcc3a1:098e2cef-0d95-41cb-a028-61927f6107ea.png)
-    
-    ![스크린샷 2025-06-11 오후 4.30.52.png](attachment:7b2972bd-41d9-49e0-a0c7-c71715db6cf5:5e6fa80d-ae13-471c-8a09-92e5fdf6d8c6.png)
-    
-    ![스크린샷 2025-06-11 오후 4.30.58.png](attachment:fb11dcd9-0055-4f48-b846-b49754bc7d9d:830a0c28-5d68-46a8-942d-90e8c6ad10e0.png)
+  <summary> 메인 화면 ▶️</summary>
+
+<img width="2000" height="1131" alt="스크린샷 2025-06-11 오후 4 30 42" src="https://github.com/user-attachments/assets/90733bdb-387f-43ac-acc1-3d9bf385c7f3" />
+<img width="2000" height="1133" alt="스크린샷 2025-06-11 오후 4 30 52" src="https://github.com/user-attachments/assets/35bcbfed-ae11-4455-899e-90189c97ffa7" />
+<img width="2000" height="1130" alt="스크린샷 2025-06-11 오후 4 30 58" src="https://github.com/user-attachments/assets/a384358f-cb64-4929-8156-dda67231668e" />
+
+  </details>
     
 - 인증기능
     
