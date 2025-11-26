@@ -211,29 +211,37 @@ ___
 ---
 <details>
 
-  <summary> 메인 화면 ▶️</summary>
+  <summary> 메인 화면 </summary>
 
 <img width="2000" height="1131" alt="스크린샷 2025-06-11 오후 4 30 42" src="https://github.com/user-attachments/assets/90733bdb-387f-43ac-acc1-3d9bf385c7f3" />
 <img width="2000" height="1133" alt="스크린샷 2025-06-11 오후 4 30 52" src="https://github.com/user-attachments/assets/35bcbfed-ae11-4455-899e-90189c97ffa7" />
 <img width="2000" height="1130" alt="스크린샷 2025-06-11 오후 4 30 58" src="https://github.com/user-attachments/assets/a384358f-cb64-4929-8156-dda67231668e" />
 
   </details>
-    
-- 인증기능
-    
-    ![스크린샷 2025-06-11 오후 4.31.52.png](attachment:d9463ab0-4fcd-4ebc-a0cf-76f8abf6861a:c0874757-aebf-433c-9ee4-1379a0f7f623.png)
-    
-- 거래기능
-    
-    ![스크린샷 2025-06-11 오후 4.31.09.png](attachment:c92e26b0-db00-4d3e-bd03-0f952b36535b:ba3eb639-b271-4b9b-9ab1-bdc87ccb56bc.png)
-    
-- 카드기능
-    
-    ![스크린샷 2025-06-11 오후 4.31.44.png](attachment:93195ac9-efe5-4886-9732-3a8828ef96ba:ae88d1d8-8c23-45c8-adbe-d1dc817d5ce0.png)
-    
-- 환전기능
-    
-    ![스크린샷 2025-06-11 오후 4.31.17.png](attachment:623b9cbe-784b-449f-9c06-62961862d0b0:2cd5de43-bc23-427c-beff-8d04661c2823.png)
+
+  <details>
+
+  <summary> 거래 화면 </summary>
+<img width="2000" height="1134" alt="스크린샷 2025-06-11 오후 4 31 09" src="https://github.com/user-attachments/assets/5f40c5a4-d11b-4107-91db-6930376f99c9" />
+
+  </details>
+
+  <details>
+
+  <summary> 카드 화면 </summary>
+
+<img width="2000" height="1133" alt="스크린샷 2025-06-11 오후 4 31 44" src="https://github.com/user-attachments/assets/c202e793-f742-4547-847b-14b55242967c" />
+
+  </details>
+
+  <details>
+
+  <summary> 환전 화면 </summary>
+
+<img width="2000" height="1128" alt="스크린샷 2025-06-11 오후 4 31 17" src="https://github.com/user-attachments/assets/8d9801d5-2519-4b63-8ea2-42e939b6ed1e" />
+
+  </details>
+
 
 ## ✨ 개발 문서
 
