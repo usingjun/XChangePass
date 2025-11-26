@@ -206,6 +206,33 @@ ___
 <img src="https://img.shields.io/badge/grafana-%23F46800.svg?style=for-the-badge&logo=grafana&logoColor=white">
 <img src="https://img.shields.io/badge/K6-%237D64FF.svg?style=for-the-badge&logo=k6&logoColor=white">
 
+## 👀 프로젝트 화면
+
+---
+
+- 메인기능
+    
+    ![스크린샷 2025-06-11 오후 4.30.42.png](attachment:da84bc40-0129-4b91-a426-9f1345bcc3a1:098e2cef-0d95-41cb-a028-61927f6107ea.png)
+    
+    ![스크린샷 2025-06-11 오후 4.30.52.png](attachment:7b2972bd-41d9-49e0-a0c7-c71715db6cf5:5e6fa80d-ae13-471c-8a09-92e5fdf6d8c6.png)
+    
+    ![스크린샷 2025-06-11 오후 4.30.58.png](attachment:fb11dcd9-0055-4f48-b846-b49754bc7d9d:830a0c28-5d68-46a8-942d-90e8c6ad10e0.png)
+    
+- 인증기능
+    
+    ![스크린샷 2025-06-11 오후 4.31.52.png](attachment:d9463ab0-4fcd-4ebc-a0cf-76f8abf6861a:c0874757-aebf-433c-9ee4-1379a0f7f623.png)
+    
+- 거래기능
+    
+    ![스크린샷 2025-06-11 오후 4.31.09.png](attachment:c92e26b0-db00-4d3e-bd03-0f952b36535b:ba3eb639-b271-4b9b-9ab1-bdc87ccb56bc.png)
+    
+- 카드기능
+    
+    ![스크린샷 2025-06-11 오후 4.31.44.png](attachment:93195ac9-efe5-4886-9732-3a8828ef96ba:ae88d1d8-8c23-45c8-adbe-d1dc817d5ce0.png)
+    
+- 환전기능
+    
+    ![스크린샷 2025-06-11 오후 4.31.17.png](attachment:623b9cbe-784b-449f-9c06-62961862d0b0:2cd5de43-bc23-427c-beff-8d04661c2823.png)
 
 ## ✨ 개발 문서
 
