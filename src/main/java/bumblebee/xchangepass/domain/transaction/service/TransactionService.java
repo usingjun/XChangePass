@@ -5,6 +5,7 @@ import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse
 import bumblebee.xchangepass.domain.transaction.entity.TransactionDocument;
 import bumblebee.xchangepass.domain.transaction.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.mongodb.core.BulkOperations;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Service;
 
@@ -33,7 +34,13 @@ public class TransactionService {
                         response.getData().toMap()
                 )).toList();
 
-        mongoTemplate.insertAll(documents);
+        // 2. [핵심 변경] BulkOperations 생성 (BulkMode.UNORDERED 설정)
+        // UNORDERED: 순서 상관없이 병렬로 넣음. 중간에 실패해도 나머지는 계속 넣음.
+        BulkOperations bulkOps = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, TransactionDocument.class);
+
+        // 3. 데이터 추가 및 실행
+        bulkOps.insert(documents);
+        bulkOps.execute();
     }
 
     public List<TransactionResponse> getTransactionByMongo(Long userId, TransactionSearchCondition cond, int size) {
