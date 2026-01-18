@@ -66,7 +66,7 @@ end
 
 -- 기록 추가
 if addFlag == "true" then
-    local value = tostring(currentAmount) .. "|" .. tostring(now)
+    local value = tostring(currentAmount) .. "|" .. tostring(now) .. "|" .. tostring(math.random())
     redis.call("ZADD", key, now, value)
     redis.call("EXPIRE", key, 7200)
 end

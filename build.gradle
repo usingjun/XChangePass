@@ -33,6 +33,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-batch'             // Spring Batch 의존성
     implementation 'org.springframework.boot:spring-boot-starter-actuator'          // Spring 모니터링
     implementation 'org.springframework.boot:spring-boot-starter-aop'               // Spring AOP
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'          // Spring actuator
 
     // Spring Security (인증 및 인가 관련 보안 기능)
     implementation 'org.springframework.boot:spring-boot-starter-security'          // Spring Security 기본 설정 및 기능 제공
@@ -56,7 +57,7 @@ dependencies {
     runtimeOnly 'com.h2database:h2'                                                 // 인메모리 데이터베이스a H2 (테스트 및 개발 환경용)
     runtimeOnly 'org.postgresql:postgresql:42.5.2'                                  // PostgreSQL 데이터베이스 드라이버 (운영 환경에서 사용)
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
-    
+
 
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'        // Spring Data Redis 라이브러리
@@ -77,6 +78,14 @@ dependencies {
     testImplementation 'org.springframework.amqp:spring-rabbit-test'
     testImplementation 'org.testcontainers:rabbitmq'
 
+    // Prometheus
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // loki
+    implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
+    implementation 'com.github.loki4j:loki-logback-appender:1.4.0'
+
+
     // 기타
     compileOnly 'org.projectlombok:lombok'                                          // Lombok (Getter, Setter, Constructor 자동 생성)
     annotationProcessor 'org.projectlombok:lombok'                                  // Lombok 사용을 위한 어노테이션 프로세서
@@ -85,6 +94,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind'                    // JSON 파싱을 위한 의존성
     implementation 'com.google.code.gson:gson:2.10.1'                               // JSON 데이터를 다룰 수 있는 클래스
     implementation 'io.netty:netty-resolver-dns-native-macos:4.1.68.Final:osx-aarch_64'      // MacOS에서 DNS 관련 네이티브 라이브러리
+
 }
 
 tasks.named('test') {
