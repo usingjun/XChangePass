@@ -127,50 +127,58 @@ XChangePass 백엔드 서비스는 **실전 금융 트러블슈팅 경험**을 �
 
 ---
 
-## 👀 프로젝트 화면
-
-<details>
-<summary><b>🏠 메인 화면</b></summary>
-<img src="https://github.com/user-attachments/assets/90733bdb-387f-43ac-acc1-3d9bf385c7f3" width="100%" />
-<img src="https://github.com/user-attachments/assets/35bcbfed-ae11-4455-899e-90189c97ffa7" width="100%" />
-<img src="https://github.com/user-attachments/assets/a384358f-cb64-4929-8156-dda67231668e" width="100%" />
-</details>
-
-<details>
-<summary><b>💸 거래 화면</b></summary>
-<img src="https://github.com/user-attachments/assets/5f40c5a4-d11b-4107-91db-6930376f99c9" width="100%" />
-</details>
-
-<details>
-<summary><b>💳 카드 화면</b></summary>
-<img src="https://github.com/user-attachments/assets/c202e793-f742-4547-847b-14b55242967c" width="100%" />
-</details>
-
-<details>
-<summary><b>💱 환전 화면</b></summary>
-<img src="https://github.com/user-attachments/assets/8d9801d5-2519-4b63-8ea2-42e939b6ed1e" width="100%" />
-</details>
+## 👀 프로젝트 화면
 
 ---
+<details>
+
+  <summary> 메인 화면 </summary>
+
+<img width="2000" height="1131" alt="스크린샷 2025-06-11 오후 4 30 42" src="https://github.com/user-attachments/assets/90733bdb-387f-43ac-acc1-3d9bf385c7f3" />
+<img width="2000" height="1133" alt="스크린샷 2025-06-11 오후 4 30 52" src="https://github.com/user-attachments/assets/35bcbfed-ae11-4455-899e-90189c97ffa7" />
+<img width="2000" height="1130" alt="스크린샷 2025-06-11 오후 4 30 58" src="https://github.com/user-attachments/assets/a384358f-cb64-4929-8156-dda67231668e" />
+
+  </details>
+
+  <details>
+
+  <summary> 거래 화면 </summary>
+<img width="2000" height="1134" alt="스크린샷 2025-06-11 오후 4 31 09" src="https://github.com/user-attachments/assets/5f40c5a4-d11b-4107-91db-6930376f99c9" />
+
+  </details>
+
+  <details>
+
+  <summary> 카드 화면 </summary>
+
+<img width="2000" height="1133" alt="스크린샷 2025-06-11 오후 4 31 44" src="https://github.com/user-attachments/assets/c202e793-f742-4547-847b-14b55242967c" />
+
+  </details>
+
+  <details>
+
+  <summary> 환전 화면 </summary>
+
+<img width="2000" height="1128" alt="스크린샷 2025-06-11 오후 4 31 17" src="https://github.com/user-attachments/assets/8d9801d5-2519-4b63-8ea2-42e939b6ed1e" />
+
+  </details>
+
 
 ## ✨ 개발 문서
 
-<details>
-<summary><b>📁 ERD (Entity Relationship Diagram)</b></summary>
+<details><summary>ERD</summary>
 
-
-
-
+![ERD](/docs/Copy_of_XCP_1.png)
 </details>
 
-<details>
-<summary><b>📜 컨벤션 (Conventions)</b></summary>
+<details><summary>컨벤션
+</summary>
 
-* [팀 규칙](https://silky-toothbrush-191.notion.site/ee1575c5d056473f83d9f56f40edaa47)
-* [공통 커밋 컨벤션](https://silky-toothbrush-191.notion.site/3903032f148543b685d3de474249d31f)
-* [백엔드 코드 컨벤션](https://silky-toothbrush-191.notion.site/70565c77e3b34b38bb8d2d56ca7a6a54)
-
+- [팀 규칙](https://silky-toothbrush-191.notion.site/ee1575c5d056473f83d9f56f40edaa47)
+- [공통 커밋 컨벤션](https://silky-toothbrush-191.notion.site/3903032f148543b685d3de474249d31f)
+- [벡엔드 코드 컨벤션](https://silky-toothbrush-191.notion.site/70565c77e3b34b38bb8d2d56ca7a6a54)
 </details>
+
 
 ---
 
