@@ -1,6 +1,8 @@
 package bumblebee.xchangepass.domain.wallet.fraud;
 
 import bumblebee.xchangepass.config.TestUserInitializer;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudEvaluationResult;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudReason;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudRuleEvaluator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,71 +54,83 @@ class FraudRuleEvaluatorTest {
 
     @BeforeEach
     void clearRedis() {
-        redisTemplate.delete("fraud:Wallet:user:1002");
+        redisTemplate.delete(redisTemplate.keys("fraud:test:*"));
     }
 
 
     @Test
-    void test_Lua_script_detects_no_fraud_on_single_transaction() {
-        String key = "fraud:" + "Wallet"+ ":user:" + 1001;
+    void singleTransactionIsClear() {
+        String key = "fraud:test:single";
         BigDecimal amount = new BigDecimal("10000");
 
-        boolean suspicious = fraudRuleEvaluator.isSuspicious(key, amount);
-        System.out.println("🚨 감지 결과: " + suspicious);
+        FraudEvaluationResult result = fraudRuleEvaluator.evaluate(key, amount);
 
-        assertThat(suspicious).isFalse();
+        assertThat(result.suspicious()).isFalse();
+        assertThat(result.reasons()).containsExactly(FraudReason.CLEAR);
     }
 
     @Test
-    void test_Lua_script_detects_high_frequency_transactions() throws InterruptedException {
-        String key = "fraud:" + "Wallet"+ ":user:" + 1002;
-        BigDecimal amount = new BigDecimal("20000");
+    void detectsHighFrequencyTransactions() {
+        String key = "fraud:test:frequency";
 
-        Boolean suspicious = false;
+        FraudEvaluationResult result = FraudEvaluationResult.clear();
 
-        // 10건 연속 트랜잭션으로 빈도 룰 유도
-        for (int i = 0; i < 10; i++) {
-            suspicious = fraudRuleEvaluator.isSuspicious(key, amount);
-            Thread.sleep(10);
+        for (int i = 0; i < 6; i++) {
+            result = fraudRuleEvaluator.evaluate(key, BigDecimal.valueOf(1000 + i));
         }
 
-        assertThat(suspicious).isTrue();
+        assertThat(result.suspicious()).isTrue();
+        assertThat(result.reasons()).contains(FraudReason.FREQUENCY_EXCEEDED);
     }
 
     @Test
-    void test_performance_of_lua_rule() {
-        String key = "fraud:" + "Wallet"+ ":user:" + 1003;
-        BigDecimal amount = new BigDecimal("5000");
+    void detectsRepeatedAmount() {
+        String key = "fraud:test:repeated";
+        BigDecimal amount = new BigDecimal("10000");
 
-        long start = System.currentTimeMillis();
+        fraudRuleEvaluator.evaluate(key, amount);
+        fraudRuleEvaluator.evaluate(key, amount);
+        fraudRuleEvaluator.evaluate(key, amount);
+        FraudEvaluationResult result = fraudRuleEvaluator.evaluate(key, amount);
 
-        for (int i = 0; i < 1000; i++) {
-            fraudRuleEvaluator.isSuspicious(key, amount);
-        }
-
-        long end = System.currentTimeMillis();
-        long duration = end - start;
-
-        System.out.println("🔥 1000회 실행 시간: " + duration + "ms");
-        assertThat(duration).isLessThan(3000); // 3초 내면 성능 OK
+        assertThat(result.suspicious()).isTrue();
+        assertThat(result.reasons()).contains(FraudReason.REPEATED_AMOUNT);
     }
 
     @Test
-    void benchmarkLuaPerformance() {
-        String key = "fraud:" + "Wallet"+ ":user:" + 1;
-        BigDecimal amount = BigDecimal.valueOf(10000);
+    void detectsAccumulatedAmountLimit() {
+        String key = "fraud:test:amount";
 
-        // 성능 측정 시작
-        long start = System.currentTimeMillis();
+        fraudRuleEvaluator.evaluate(key, new BigDecimal("400000"));
+        FraudEvaluationResult result = fraudRuleEvaluator.evaluate(key, new BigDecimal("100001"));
 
-        for (int i = 0; i < 1000; i++) {
-            fraudRuleEvaluator.isSuspicious(key, amount);
-        }
+        assertThat(result.suspicious()).isTrue();
+        assertThat(result.reasons()).contains(FraudReason.TOTAL_AMOUNT_EXCEEDED);
+    }
 
-        long end = System.currentTimeMillis();
-        long elapsed = end - start;
+    @Test
+    void suspiciousTransactionsAreAlsoRecorded() {
+        String key = "fraud:test:record-suspicious";
 
-        System.out.println("🔥 Lua 이상 거래 탐지 1000회 실행 시간: " + elapsed + "ms");
+        fraudRuleEvaluator.evaluate(key, new BigDecimal("600000"));
+
+        assertThat(redisTemplate.opsForZSet().size(key)).isEqualTo(1);
+    }
+
+    @Test
+    void returnsAllMatchedReasonsAndCombinedRiskScore() {
+        String key = "fraud:test:multiple-reasons";
+        BigDecimal amount = new BigDecimal("200000");
+
+        fraudRuleEvaluator.evaluate(key, amount);
+        fraudRuleEvaluator.evaluate(key, amount);
+        fraudRuleEvaluator.evaluate(key, amount);
+        FraudEvaluationResult result = fraudRuleEvaluator.evaluate(key, amount);
+
+        assertThat(result.reasons()).contains(
+                FraudReason.TOTAL_AMOUNT_EXCEEDED,
+                FraudReason.REPEATED_AMOUNT
+        );
+        assertThat(result.riskScore()).isGreaterThan(0);
     }
 }
-

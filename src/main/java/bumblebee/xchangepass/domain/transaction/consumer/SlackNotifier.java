@@ -90,4 +90,27 @@ public class SlackNotifier {
             log.error("Slack 전송 실패", e);
         }
     }
+
+    public void notifyFraudDetectionUnavailable(FraudDetectEvent event) {
+        Map<String, Object> payload = Map.of(
+                "text", "이상 거래 탐지 시스템 장애",
+                "blocks", List.of(
+                        Map.of(
+                                "type", "section",
+                                "text", Map.of(
+                                        "type", "mrkdwn",
+                                        "text", "*Redis 이상 거래 검증 실패로 거래를 차단했습니다.*\n"
+                                                + "사용자 ID: " + event.userId()
+                                                + "\n거래 유형: " + event.type()
+                                )
+                        )
+                )
+        );
+
+        try {
+            restTemplate.postForEntity(webhookUrl, payload, String.class);
+        } catch (Exception e) {
+            log.error("Slack 전송 실패", e);
+        }
+    }
 }

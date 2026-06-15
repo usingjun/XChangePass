@@ -8,5 +8,5 @@ public record FraudDetectEvent(
         BigDecimal amount,
         LocalDateTime timestamp,
         String detail,
-        String type
+        FraudTransactionType type
 ) {}

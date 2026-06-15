@@ -6,14 +6,14 @@ import bumblebee.xchangepass.domain.card.dto.request.PaymentRequest;
 import bumblebee.xchangepass.domain.card.dto.response.PaymentResponse;
 import bumblebee.xchangepass.domain.card.entity.CardStatus;
 import bumblebee.xchangepass.domain.cardTransaction.dto.request.PaymentApprovedEvent;
-import bumblebee.xchangepass.domain.exchangeRate.dto.response.ExchangeRateResponse;
-import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudAmountNormalizer;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudTransactionType;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.global.error.ErrorCode;
 import bumblebee.xchangepass.global.security.crypto.AESEncryption;
@@ -26,9 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.crypto.SecretKey;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.Currency;
 import java.util.UUID;
 
 @Service
@@ -37,8 +35,8 @@ public class CardPaymentService {
 
     private final UserRepository userRepository;
     private final WalletBalanceService walletBalanceService;
+    private final FraudAmountNormalizer fraudAmountNormalizer;
     private final FraudDetectionService fraudDetectionService;
-    private final ExchangeService exchangeService;
     private final RSAEncryption rsaEncryption;
     private final PasswordEncoder passwordEncoder;
     private final EventPublisher eventPublisher;
@@ -61,24 +59,23 @@ public class CardPaymentService {
             throw ErrorCode.INVALID_WALLET_PASSWORD.commonException();
         }
 
+        BigDecimal krwAmount = fraudAmountNormalizer.normalize(request.amount(), request.currency());
+
+        fraudDetectionService.verify(new FraudDetectEvent(
+                user.getUserId(),
+                krwAmount,
+                LocalDateTime.now(),
+                null,
+                FraudTransactionType.CARD
+        ));
+
         WalletBalance balance = walletBalanceService.findBalanceWithLock(wallet.getWalletId(), request.currency());
 
         if (balance.getBalance().compareTo(request.amount()) < 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
 
-        fraudDetectionService.detect(new FraudDetectEvent(
-                user.getUserId(),
-                request.amount(),
-                LocalDateTime.now(),
-                null,
-                "Card"
-        ));
-
-
         walletBalanceService.withdrawBalance(balance, request.amount());
-        BigDecimal krwAmount = calculateKrw(request.amount(), request.currency());
-
         PaymentApprovedEvent event = PaymentApprovedEvent.of(
                 user,
                 request,
@@ -90,22 +87,6 @@ public class CardPaymentService {
         eventPublisher.publishEvent(event);
 
         return PaymentResponse.fromEvent(event);
-    }
-
-    /**
-     * ✅ 환율 계산 (기준 통화 → KRW)
-     */
-    private BigDecimal calculateKrw(BigDecimal amount, Currency currency) {
-        ExchangeRateResponse response = exchangeService.getExchangeRateForCountry(currency.getCurrencyCode(), "KRW");
-
-        Double rate = response.conversionRates().get("KRW");
-
-        if (rate == null) {
-            throw ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException();
-        }
-
-        BigDecimal rateDecimal = BigDecimal.valueOf(rate);
-        return amount.multiply(rateDecimal).setScale(2, RoundingMode.HALF_UP);
     }
 
     /**

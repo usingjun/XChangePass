@@ -6,6 +6,7 @@ import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudAmountNormalizer;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
@@ -37,6 +38,7 @@ class WalletServiceImplTest {
                 balanceService,
                 mock(BCryptPasswordEncoder.class),
                 advisoryLock,
+                mock(FraudAmountNormalizer.class),
                 fraudDetectionService,
                 mock(ExchangeService.class),
                 userService

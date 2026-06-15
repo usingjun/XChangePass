@@ -49,6 +49,8 @@ public enum ErrorCode {
     TRANSACTION_HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "T002", "존재 하지 않는 환전 내역입니다."),
     TRANSACTION_USERID_NOT_FOUND(HttpStatus.NOT_FOUND, "T004", "회원 아이디 필수"),
     UNAUTHORIZED_TRANSACTION_ACCESS(HttpStatus.UNAUTHORIZED, "T005", "당신의 환전 ID가 아닙니다."),
+    SUSPICIOUS_TRANSACTION(HttpStatus.FORBIDDEN, "T006", "이상 거래가 감지되어 거래가 차단되었습니다."),
+    FRAUD_DETECTION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "T007", "거래 안전성 검증이 지연되고 있습니다. 잠시 후 다시 시도해주세요."),
 
     /*Card*/
     MOBILE_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C001","모바일 카드 발급에 실패했습니다."),

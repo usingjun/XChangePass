@@ -7,7 +7,9 @@ import bumblebee.xchangepass.domain.user.service.UserService;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudAmountNormalizer;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
+import bumblebee.xchangepass.domain.wallet.fraud.service.FraudTransactionType;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.WalletPasswordResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
@@ -37,6 +39,7 @@ public class WalletServiceImpl implements WalletService {
     private final WalletBalanceService balanceService;
     private final BCryptPasswordEncoder bCryptPasswordEncoder;
     private final TransactionAdvisoryLock advisoryLock;
+    private final FraudAmountNormalizer fraudAmountNormalizer;
     private final FraudDetectionService fraudDetectionService;
     private final ExchangeService exchangeService;
     private final UserService userService;
@@ -101,6 +104,13 @@ public class WalletServiceImpl implements WalletService {
         Wallet fromWallet = findWalletByUserId(senderId);
         Wallet toWallet = findWalletByUserId(receiver.getUserId());
 
+        BigDecimal normalizedAmount = fraudAmountNormalizer.normalize(
+                request.transferAmount(), request.fromCurrency()
+        );
+        fraudDetectionService.verify(new FraudDetectEvent(
+                senderId, normalizedAmount, LocalDateTime.now(), null, FraudTransactionType.WALLET
+        ));
+
         acquireInOrder(fromWallet.getWalletId(), toWallet.getWalletId());
 
         WalletBalance fromBalance = balanceService.findBalance(fromWallet.getWalletId(), request.fromCurrency());
@@ -111,9 +121,6 @@ public class WalletServiceImpl implements WalletService {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
 
-        fraudDetectionService.detect(new FraudDetectEvent(
-                senderId, transferAmount, LocalDateTime.now(), null, "Wallet"
-        ));
         balanceService.transferBalance(fromBalance, toBalance, transferAmount);
     }
 
@@ -146,5 +153,4 @@ public class WalletServiceImpl implements WalletService {
             advisoryLock.acquire(largerId);
         }
     }
-
 }

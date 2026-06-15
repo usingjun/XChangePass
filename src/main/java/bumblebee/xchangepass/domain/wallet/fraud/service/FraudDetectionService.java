@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.fraud.service;
 
-import bumblebee.xchangepass.domain.transaction.consumer.SlackNotifier;
+import bumblebee.xchangepass.global.error.ErrorCode;
+import bumblebee.xchangepass.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -8,26 +9,31 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class FraudDetectionService {
 
-    private final RedisFraudStorageService redisFraudStorage;
     private final FraudRuleEvaluator ruleEvaluator;
-    private final SlackNotifier slackNotifier;
+    private final FraudAlertService alertService;
 
-    public void detect(FraudDetectEvent event) {
-        String key = "fraud:" + event.type() + ":user:" + event.userId();
+    public void verify(FraudDetectEvent event) {
+        String key = "fraud:" + event.type().name() + ":user:" + event.userId();
 
-        redisFraudStorage.store(event.userId(), event.amount());
+        FraudEvaluationResult result;
+        try {
+            result = ruleEvaluator.evaluate(key, event.amount());
+        } catch (CommonException e) {
+            if (e.getErrorCode() == ErrorCode.FRAUD_DETECTION_UNAVAILABLE) {
+                alertService.notifyDetectionUnavailable(event);
+            }
+            throw e;
+        }
 
-        boolean isFraud = ruleEvaluator.isSuspicious(key, event.amount());
-
-        if (isFraud) {
-            String reason = ruleEvaluator.getLastDetectedReason();
-            slackNotifier.notifyFraud(new FraudDetectEvent(
+        if (result.suspicious()) {
+            alertService.notifySuspiciousTransaction(new FraudDetectEvent(
                     event.userId(),
                     event.amount(),
                     event.timestamp(),
-                    reason,
+                    result.description(),
                     event.type()
             ));
+            throw ErrorCode.SUSPICIOUS_TRANSACTION.commonException();
         }
     }
 }
