@@ -10,8 +10,6 @@ import java.util.List;
 
 public interface WalletService {
 
-    String getType();
-
     void charge(Long userId, WalletInOutRequest request);
 
     BigDecimal withdrawal(Long userId, WalletInOutRequest request);

@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class ScheduledTransferExecutor {
 
-    private final WalletService walletService; // 바로 구현체 주입 (NamedLockWalletService)
+    private final WalletService walletService;
 
     public void execute(ScheduledTransfer scheduled) {
         WalletTransferRequest request = new WalletTransferRequest(

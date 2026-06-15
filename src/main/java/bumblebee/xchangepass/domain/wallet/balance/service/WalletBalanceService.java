@@ -97,6 +97,7 @@ public class WalletBalanceService {
      * @param balance
      * @param amount
      */
+    @Transactional
     public void chargeBalance(WalletBalance balance, BigDecimal amount) {
         balance.addBalance(amount);
         balanceRepository.save(balance);
@@ -109,6 +110,7 @@ public class WalletBalanceService {
      * @param balance
      * @param amount
      */
+    @Transactional
     public void withdrawBalance(WalletBalance balance, BigDecimal amount) {
         if (amount.compareTo(balance.getBalance()) > 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
@@ -126,6 +128,7 @@ public class WalletBalanceService {
      * @param toBalance
      * @param amount
      */
+    @Transactional
     public void transferBalance(WalletBalance fromBalance, WalletBalance toBalance, BigDecimal amount) {
         fromBalance.subtractBalance(amount);
         toBalance.addBalance(amount);

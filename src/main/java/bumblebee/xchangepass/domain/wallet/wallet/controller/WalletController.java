@@ -5,7 +5,6 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.WalletPasswordResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
-import bumblebee.xchangepass.domain.wallet.wallet.service.WalletServiceFactory;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletFacadeService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
 import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
@@ -32,7 +31,6 @@ import java.util.List;
 @Tag(name = "Wallet", description = "Wallet CRUD API")
 public class WalletController {
 
-    private final WalletServiceFactory walletServiceFactory;
     private final WalletServiceImpl walletService;
     private final WalletFacadeService walletFacadeService;
 
@@ -56,7 +54,7 @@ public class WalletController {
     @ResponseStatus(HttpStatus.CREATED)
     public void charge(@RequestBody @Valid WalletInOutRequest request,
                        @AuthenticationPrincipal CustomUserDetails user) {
-        walletServiceFactory.getService("namedLock").charge(user.getUserId(), request);
+        walletService.charge(user.getUserId(), request);
     }
 
     @Operation(summary = "출금", description = "돈을 출금합니다.")
@@ -73,7 +71,7 @@ public class WalletController {
     @ResponseStatus(HttpStatus.OK)
     public BigDecimal withdrawal(@RequestBody @Valid WalletInOutRequest request,
                                  @AuthenticationPrincipal CustomUserDetails user) {
-        return walletServiceFactory.getService("namedLock").withdrawal(user.getUserId(), request);
+        return walletService.withdrawal(user.getUserId(), request);
     }
 
     @Operation(summary = "앱 내 송금", description = "돈을 송금합니다.")
@@ -135,7 +133,7 @@ public class WalletController {
     @GetMapping("/balance")
     @ResponseStatus(HttpStatus.OK)
     public List<WalletBalanceResponse> balance(@AuthenticationPrincipal CustomUserDetails user) {
-        return walletServiceFactory.getService("namedLock").balance(user.getUserId());
+        return walletService.balance(user.getUserId());
     }
 
 
