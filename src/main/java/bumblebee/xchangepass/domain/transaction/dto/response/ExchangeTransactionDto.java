@@ -16,7 +16,7 @@ public record ExchangeTransactionDto(
     @Override
     public Map<String, Object> toMap() {
         return Map.of(
-                "beforeAmount", beforeAmount,
+                "amount", beforeAmount,
                 "afterAmount",afterAmount,
                 "rate", rate,
                 "type", transactionType

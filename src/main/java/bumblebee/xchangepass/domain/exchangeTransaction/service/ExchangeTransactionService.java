@@ -3,12 +3,8 @@ package bumblebee.xchangepass.domain.exchangeTransaction.service;
 
 import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.exchangeTransaction.dto.request.ExchangeRequestDTO;
-import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
-import bumblebee.xchangepass.domain.transaction.entity.TransactionDocument;
-import bumblebee.xchangepass.domain.transaction.entity.TransactionType;
-import bumblebee.xchangepass.domain.transaction.mapper.TransactionMetadataMapper;
-import bumblebee.xchangepass.domain.transaction.repository.TransactionRepository;
-import bumblebee.xchangepass.domain.transaction.service.RedisTransactionQueueService;
+import bumblebee.xchangepass.domain.exchangeTransaction.entitiy.ExchangeTransaction;
+import bumblebee.xchangepass.domain.exchangeTransaction.repository.ExchangeTransactionRepository;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.user.repository.UserRepository;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
@@ -31,17 +27,15 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ExchangeTransactionService {
 
-    private final TransactionRepository transactionRepository;
     private final ExchangeService exchangeRateService;
     private final UserRepository userRepository;
     private final WalletBalanceService walletBalanceService;
     private final WalletService walletService;
-    private final RedisTransactionQueueService redisTransactionQueueService;
-
-    private static final String REDIS_KEY_PREFIX = "transactions:insert:";
+    private final ExchangeTransactionRepository transactionRepository;
 
 
-    public void createTransaction(ExchangeRequestDTO request, Long userId) {
+    @Transactional
+    public Long createTransaction(ExchangeRequestDTO request, Long userId) {
 
         Map<String, Double> conversionRates = exchangeRateService.getExchangeRateAll(request.fromCurrency())
                 .conversionRates();
@@ -66,24 +60,17 @@ public class ExchangeTransactionService {
         User user = userRepository.findByUserId(userId)
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
-        Map<String, Object> metadata = Map.of(
-                "beforeAmount", request.amount(),
-                "afterAmount", amount,
-                "rate", exchangeRate,
-                "transactionType", TransactionType.EXCHANGE
+        ExchangeTransaction transaction = new ExchangeTransaction(
+                user,
+                request.fromCurrency(),
+                request.toCurrency(),
+                amount,
+                receivedAmount,
+                BigDecimal.valueOf(exchangeRate),
+                LocalDateTime.now()
         );
 
-        TransactionResponse response = new TransactionResponse(
-                user.getUserId(),
-                Currency.getInstance(request.fromCurrency()),
-                Currency.getInstance(request.toCurrency()),
-                LocalDateTime.now(),
-                TransactionMetadataMapper.mapToDto(metadata)
-        );
-
-        // Redis로 임시 저장
-        String redisKey = REDIS_KEY_PREFIX + user.getUserId();
-        redisTransactionQueueService.enqueue(redisKey, response);
+        return transactionRepository.save(transaction).getTransactionId();
     }
 
     @Transactional
@@ -91,12 +78,19 @@ public class ExchangeTransactionService {
         User user = userRepository.findByUserId(userId)
                 .orElseThrow(ErrorCode.USER_NOT_FOUND::commonException);
 
-        TransactionDocument transaction = transactionRepository.findByTransactionId(transactionId.toString());
+        ExchangeTransaction transaction = transactionRepository.findByIdForUpdate(transactionId);
+        if (transaction == null) {
+            throw ErrorCode.TRANSACTION_HISTORY_NOT_FOUND.commonException();
+        }
+        if (!transaction.getUser().getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Exchange transaction does not belong to user");
+        }
+        transaction.complete(LocalDateTime.now());
 
-        String fromCurrency = transaction.getBeforeCurrency().getCurrencyCode();
-        String toCurrency = transaction.getAfterCurrency().getCurrencyCode();
-        BigDecimal amount = (BigDecimal) transaction.getMetadata().get("amount");
-        BigDecimal receivedAmount = (BigDecimal) transaction.getMetadata().get("afterAmount");
+        String fromCurrency = transaction.getFromCurrency();
+        String toCurrency = transaction.getToCurrency();
+        BigDecimal amount = transaction.getAmount();
+        BigDecimal receivedAmount = transaction.getReceivedAmount();
 
         Wallet wallet = user.getWallet();
 

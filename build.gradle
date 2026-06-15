@@ -73,11 +73,6 @@ dependencies {
     // AWS
     implementation 'software.amazon.awssdk:kms:2.20.0'                              // AWS KMS 의존성
 
-    // RabbitMQ
-    implementation 'org.springframework.boot:spring-boot-starter-amqp'
-    testImplementation 'org.springframework.amqp:spring-rabbit-test'
-    testImplementation 'org.testcontainers:rabbitmq'
-
     // Prometheus
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
@@ -106,5 +101,4 @@ configurations.all {
         force 'io.lettuce:lettuce-core:6.2.6.RELEASE'                         // 호환 버전 강제 적용
     }
 }
-
 

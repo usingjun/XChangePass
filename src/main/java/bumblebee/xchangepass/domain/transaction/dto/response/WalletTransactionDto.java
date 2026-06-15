@@ -5,6 +5,7 @@ import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionT
 import com.fasterxml.jackson.annotation.JsonTypeName;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.Map;
 
 @JsonTypeName("wallet")
@@ -16,12 +17,12 @@ public record WalletTransactionDto (
 ) implements TransactionDataDto {
     @Override
     public Map<String, Object> toMap() {
-        return Map.of(
-                "receiver",receiver,
-                "amount", amount,
-                "type", transactionType,
-                "walletType", walletType
-        );
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("receiver", receiver);
+        metadata.put("amount", amount);
+        metadata.put("type", transactionType);
+        metadata.put("walletType", walletType);
+        return metadata;
     }
 
 }

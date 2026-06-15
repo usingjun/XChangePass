@@ -28,6 +28,15 @@ public class TransactionDocument {
     protected TransactionDocument() {
     }
 
+    public TransactionDocument(String transactionId, Long userId, Currency beforeCurrency, Currency afterCurrency, LocalDateTime transactionTime, Map<String, Object> metadata) {
+        this.transactionId = transactionId;
+        this.userId = userId;
+        this.beforeCurrency = beforeCurrency;
+        this.afterCurrency = afterCurrency;
+        this.transactionTime = transactionTime;
+        this.metadata = metadata;
+    }
+
     public TransactionDocument(Long userId, Currency beforeCurrency, Currency afterCurrency, LocalDateTime transactionTime, Map<String, Object> metadata) {
         this.userId = userId;
         this.beforeCurrency = beforeCurrency;

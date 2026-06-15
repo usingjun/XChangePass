@@ -2,8 +2,6 @@ package bumblebee.xchangepass.domain.wallet.balance.service;
 
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
-import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
-import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
 import bumblebee.xchangepass.domain.wallet.transaction.service.WalletTransactionService;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
@@ -13,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.Currency;
 import java.util.List;
 
@@ -120,6 +117,16 @@ public class WalletBalanceService {
         balanceRepository.save(balance);
 
         transactionService.saveTransaction(balance.getWallet().getWalletId(), null, amount, null, balance.getCurrency(), WalletTransactionType.WITHDRAWAL);
+    }
+
+    @Transactional
+    public void withdrawBalanceForCardPayment(WalletBalance balance, BigDecimal amount) {
+        if (amount.compareTo(balance.getBalance()) > 0) {
+            throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
+        }
+
+        balance.subtractBalance(amount);
+        balanceRepository.save(balance);
     }
 
     /**

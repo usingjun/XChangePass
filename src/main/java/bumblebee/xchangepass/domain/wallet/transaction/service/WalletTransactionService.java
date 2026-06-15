@@ -1,11 +1,9 @@
 package bumblebee.xchangepass.domain.wallet.transaction.service;
 
-import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
-import bumblebee.xchangepass.domain.transaction.entity.TransactionType;
-import bumblebee.xchangepass.domain.transaction.mapper.TransactionMetadataMapper;
-import bumblebee.xchangepass.domain.transaction.service.RedisTransactionQueueService;
 import bumblebee.xchangepass.domain.user.entity.User;
+import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
 import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
+import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.repository.WalletRepository;
 import bumblebee.xchangepass.global.error.ErrorCode;
@@ -17,17 +15,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
-import java.util.HashMap;
-import java.util.Map;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class WalletTransactionService {
 
-    private static final String REDIS_KEY_PREFIX = "transactions:insert:";
     private final WalletRepository walletRepository;
-    private final RedisTransactionQueueService redisTransactionQueueService;
+    private final WalletTransactionRepository transactionRepository;
 
     @Transactional
     public void saveTransaction(Long myWalletId, Long counterWalletId, BigDecimal amount, Currency fromCurrency, Currency toCurrency, WalletTransactionType transactionType) {
@@ -43,25 +38,18 @@ public class WalletTransactionService {
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException).getUser()
                 : null;
 
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("amount", amount);
-        metadata.put("type", TransactionType.WALLET);
-        metadata.put("walletType", transactionType.name());
-        if (receiver != null) {
-            metadata.put("receiver", receiver.getUserId());
-        }
-
-        TransactionResponse response = new TransactionResponse(
-                sender.getUserId(),
-                fromCurrency,
-                toCurrency,
-                LocalDateTime.now(),
-                TransactionMetadataMapper.mapToDto(metadata)
-        );
-
-        String redisKey = REDIS_KEY_PREFIX + sender.getUserId();
-        redisTransactionQueueService.enqueue(redisKey, response);
-
+        transactionRepository.save(new WalletTransaction(
+                sender,
+                receiver,
+                amount,
+                currencyCode(fromCurrency),
+                currencyCode(toCurrency),
+                transactionType,
+                LocalDateTime.now()
+        ));
     }
 
+    private String currencyCode(Currency currency) {
+        return currency == null ? null : currency.getCurrencyCode();
+    }
 }

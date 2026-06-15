@@ -15,7 +15,6 @@ services:
     depends_on:
       - postgres
       - redis
-      - rabbitmq
       - mongodb
       - influxdb
       - prometheus
@@ -110,25 +109,6 @@ services:
       "--auto-aof-rewrite-percentage", "100",  # AOF 크기가 100% 커지면 리라이트
       "--auto-aof-rewrite-min-size", "64mb"   # AOF 크기가 최소 64MB일 때 리라이트
     ]
-
-  rabbitmq:
-    image: rabbitmq:3.12-management
-    container_name: rabbitmq
-    ports:
-      - "5672:5672"
-      - "15673:15672"
-    environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
-    restart: always
-    networks:
-      - monitoring
-    healthcheck:
-      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-
 
   postgres:
     image: postgres:15
