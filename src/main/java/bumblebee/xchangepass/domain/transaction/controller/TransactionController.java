@@ -42,7 +42,7 @@ public class TransactionController {
     public List<TransactionResponse> transaction(@AuthenticationPrincipal CustomUserDetails user,
                                                  @ModelAttribute TransactionSearchCondition condition,
                                                  int size) {
-        return transactionService.getTransactionByMongo(user.getUserId(), condition, size);
+        return transactionService.getTransactions(user.getUserId(), condition, size);
     }
 
 }

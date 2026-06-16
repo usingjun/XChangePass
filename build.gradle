@@ -50,15 +50,11 @@ dependencies {
     testImplementation "org.testcontainers:testcontainers:1.19.2"                   // Docker 기반 통합 테스트 지원 (Testcontainers 기본 라이브러리)
     testImplementation "org.testcontainers:junit-jupiter:1.19.2"                    // JUnit 5(Testcontainers 연동) 지원
     testImplementation 'org.testcontainers:postgresql:1.19.2'
-    testImplementation "org.testcontainers:mongodb:1.19.2"
 
 
     // 데이터베이스
     runtimeOnly 'com.h2database:h2'                                                 // 인메모리 데이터베이스a H2 (테스트 및 개발 환경용)
     runtimeOnly 'org.postgresql:postgresql:42.5.2'                                  // PostgreSQL 데이터베이스 드라이버 (운영 환경에서 사용)
-    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
-
-
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'        // Spring Data Redis 라이브러리
     testImplementation 'com.redis:testcontainers-redis:2.2.2'                       // Redis용 Testcontainers (테스트 환경에서 Redis 컨테이너 실행)
@@ -101,4 +97,3 @@ configurations.all {
         force 'io.lettuce:lettuce-core:6.2.6.RELEASE'                         // 호환 버전 강제 적용
     }
 }
-

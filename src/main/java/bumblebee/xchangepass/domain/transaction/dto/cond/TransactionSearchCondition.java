@@ -30,6 +30,12 @@ public record TransactionSearchCondition(
 
         @Schema(description = "조회 커서", example = "2025-03-26T00:00:00")
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime cursor
+        LocalDateTime cursor,
+
+        @Schema(description = "커서 거래 종류", example = "WALLET")
+        TransactionType cursorTransactionType,
+
+        @Schema(description = "커서 거래 ID", example = "10")
+        Long cursorTransactionId
 ) {
 }

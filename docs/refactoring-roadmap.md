@@ -109,36 +109,35 @@ fraud:
 - Redis 장애 시 백오프 재시도 후 거래를 차단하고, Circuit Breaker가 추가 Redis 호출을 막는지 검증한다.
 - 의심 거래 및 Redis 장애 시 송신자·수신자 잔액이 변경되지 않는지 검증한다.
 
-## 2. RDB transaction history and MongoDB read model
+## 2. RDB transaction history and Top-N read optimization
 
 ### Core principle
 
 - 카드, 지갑, 환전 RDB 거래내역이 각 도메인의 유일한 정합성 기준(source of truth)이다.
 - 거래 핵심 속성은 JSONB가 아닌 명시적 RDB 컬럼과 타입으로 관리한다.
 - 잔액 변경과 해당 도메인의 RDB 거래내역 저장은 하나의 트랜잭션으로 처리한다.
-- MongoDB는 통합 거래내역 조회 성능을 위한 파생 조회 모델이다.
-- MongoDB 반영 실패는 거래 실패나 거래 원장 유실로 이어지지 않아야 한다.
-- MongoDB 조회 모델은 세 RDB 거래내역으로부터 다시 생성할 수 있어야 한다.
+- 통합 거래내역 조회도 PostgreSQL을 기준으로 처리한다.
+- 각 거래 테이블에서 먼저 최신 N건만 조회하고, 애플리케이션에서 병합하여 최종 N건을 반환한다.
+- 별도 NoSQL 조회 모델 없이 거래 정합성과 조회 성능을 함께 확보한다.
 
 ### Implementation
 
 - 카드, 지갑, 환전 거래를 각각의 RDB 테이블에 명시적 컬럼으로 저장한다.
-- MongoDB 문서 ID를 `거래유형:RDB 거래 ID`로 구성하여 조회 모델 반영을 멱등하게 만든다.
-- 각 거래 테이블에서 MongoDB 반영 상태와 재시도 횟수를 관리한다.
-- 스케줄러가 세 RDB 거래내역을 읽어 하나의 MongoDB 통합 조회 모델로 반영한다.
+- 각 거래 테이블에 사용자 ID, 거래 시각, 거래 ID 기반 복합 인덱스를 적용한다.
+- 카드, 지갑, 환전 Repository에서 사용자별 최신 거래를 각각 제한 조회한다.
+- 서비스 계층에서 세 거래 목록을 거래 시각 기준으로 병합하고 최종 조회 크기만큼 반환한다.
 - RabbitMQ DLQ와 거래내역 저장용 RabbitMQ 흐름을 제거한다.
 - 거래내역 저장 실패는 금융 거래 트랜잭션을 롤백한다.
-- MongoDB 조회 모델 반영 실패는 실제 거래를 롤백하지 않고 지수 백오프로 반복 재시도한다.
-- 거래내역 저장 및 MongoDB 반영 실패에 대한 DLQ·Slack 알림을 제거한다.
+- 거래내역 저장 실패에 대한 DLQ·Slack 알림을 제거한다.
 
 ## Progress
 
 - [x] 1. Transaction-scoped concurrency control
 - [x] 3. Stateless fraud detection and alerting
-- [x] 2. RDB transaction history and MongoDB read model
+- [x] 2. RDB transaction history and Top-N read optimization
 
 ## Verification
 
 - `./gradlew compileJava compileTestJava`
-- `./gradlew test --tests 'bumblebee.xchangepass.domain.transaction.entity.ProjectionStateTest'`
+- `./gradlew test --tests 'bumblebee.xchangepass.domain.transaction.TransactionServiceTest'`
 - 전체 통합 테스트는 Docker/Testcontainers 및 로컬 PostgreSQL 연결이 가능한 환경에서 다시 실행한다.

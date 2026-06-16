@@ -1,6 +1,5 @@
 package bumblebee.xchangepass.domain.cardTransaction.entity;
 
-import bumblebee.xchangepass.domain.transaction.entity.ProjectionState;
 import bumblebee.xchangepass.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -13,8 +12,7 @@ import java.time.LocalDateTime;
 @Table(
         name = "card_transaction",
         indexes = {
-                @Index(name = "idx_card_tx_projection", columnList = "projection_status,next_projection_at"),
-                @Index(name = "idx_card_tx_user_time", columnList = "user_id,transaction_time")
+                @Index(name = "idx_card_tx_user_time", columnList = "user_id,transaction_time DESC,transaction_id DESC")
         }
 )
 public class CardTransaction {
@@ -52,9 +50,6 @@ public class CardTransaction {
     @Column(nullable = false)
     private LocalDateTime transactionTime;
 
-    @Embedded
-    private ProjectionState projection;
-
     protected CardTransaction() {
     }
 
@@ -70,6 +65,5 @@ public class CardTransaction {
         this.approvalNumber = approvalNumber;
         this.transactionType = transactionType;
         this.transactionTime = transactionTime;
-        this.projection = ProjectionState.pending(transactionTime);
     }
 }
