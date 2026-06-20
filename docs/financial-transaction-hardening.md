@@ -37,7 +37,7 @@ XChangePass를 금융권 포트폴리오의 첫 프로젝트로 제시할 수 �
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 지갑 거래 동시성 제어 | Approved | Checked | Approved 2026-06-19 | Completed | Completed 2026-06-20 |
 | 2 | 거래 요청 멱등성 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
-| 3 | 거래내역 통합조회 최적화 | Drafted | Checked | Pending | Blocked by approval | Pending |
+| 3 | 거래내역 통합조회 최적화 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
 | 4 | Redis 이상 거래 장애 대응 | Drafted | Checked | Pending | Blocked by approval | Pending |
 | 5 | 거래 상태 및 실패 추적 | Drafted | Checked | Pending | Blocked by approval | Pending |
 
@@ -660,3 +660,258 @@ Not changed:
 - Step 2는 안전성을 우선해 해당 키를 자동 재실행하지 않는다.
 - 장시간 `REQUESTED`/`PROCESSING` 요청의 판정, lease, 운영 조회와 복구는 Step 5에서 구현한다.
 - 현재 프로젝트는 `ddl-auto=update`를 사용하므로 운영 배포 전 명시적 스키마 마이그레이션이 필요하다.
+
+## 14. Step 3 Implementation Approval Proposal
+
+### 14.1 Current implementation assessment
+
+작업 트리에 다음 조회 최적화 후보 구현이 이미 존재한다. 이 변경은 사용자 작업으로 보존하며,
+승인 후 그대로 채택하지 않고 이 명세와 대조하여 필요한 부분만 보완한다.
+
+- 지갑 송신·수신, 카드, 환전 테이블을 각각 QueryDSL로 조회한다.
+- 각 쿼리는 사용자 조건과 필터를 DB에 적용하고 거래시각·거래 ID 역순으로 제한 조회한다.
+- 엔티티에는 사용자·거래시각·거래 ID 복합 B-tree 인덱스가 선언돼 있다.
+- 서비스는 소스별 결과를 `transactionTime DESC`, `transactionType ASC`, `transactionId DESC`로 병합한다.
+- 거래 유형·가맹점·지갑 방향에 따라 조회할 필요가 없는 테이블을 호출하지 않는다.
+- 100만 건 데이터셋에서 전체 병합·정렬 방식과 소스별 Top-N 방식을 비교한 측정값이 존재한다.
+
+현재 상태로 완료 처리할 수 없는 이유는 다음과 같다.
+
+- API가 결과 목록만 반환하므로 클라이언트가 다음 페이지의 정확한 커서를 알 수 없다.
+- 클라이언트가 시각·소스·거래 ID를 각각 전달해야 하므로 내부 정렬 규칙이 외부 계약으로 노출된다.
+- 수신 지갑 거래도 송신 금액과 송신 통화를 사용한다. Step 1에서 추가한 `receivedAmount`가 조회에 반영되지 않았다.
+- 동일 시각·서로 다른 소스의 거래를 여러 페이지에 걸쳐 조회하는 PostgreSQL 통합 테스트가 없다.
+- 인덱스는 JPA `@Index`와 `ddl-auto=update`에 의존하며 운영 적용용 명시적 DDL이 없다.
+- 벤치마크 결과는 문서에 있으나 실행 명령, 고정 시드, 원본 결과 파일 연결을 한 번 더 정리해야 한다.
+
+### 14.2 API contract
+
+기존 경로 `GET /v2/transaction`은 유지하되 응답을 목록에서 페이지 응답으로 변경한다.
+
+```json
+{
+  "items": [
+    {
+      "transactionTime": "2026-06-20T12:00:00",
+      "beforeCurrency": "KRW",
+      "afterCurrency": "USD",
+      "data": {}
+    }
+  ],
+  "nextCursor": "opaque-base64url-token",
+  "hasNext": true
+}
+```
+
+- 첫 요청은 `cursor` 없이 호출한다.
+- 다음 요청은 응답의 `nextCursor` 문자열 하나만 그대로 전달한다.
+- 기존 `cursor`, `cursorTransactionType`, `cursorTransactionId` 공개 파라미터는 제거한다.
+- `size`의 기본값은 50, 최솟값은 1, 최댓값은 100으로 제한한다.
+- 결과가 더 없으면 `nextCursor`는 null이고 `hasNext`는 false다.
+- 잘못되거나 지원하지 않는 버전의 커서는 `400 INVALID_TRANSACTION_CURSOR`로 거절한다.
+
+커서는 URL-safe Base64로 인코딩한 버전 있는 JSON 값으로 구현한다.
+
+```json
+{
+  "v": 1,
+  "time": "2026-06-20T12:00:00",
+  "source": "CARD",
+  "id": 123
+}
+```
+
+Base64는 암호화가 아니다. 커서에는 개인정보를 넣지 않으며, 모든 조회에는 인증 사용자 ID 조건을 다시
+적용하므로 커서 값이 변조돼도 다른 사용자의 거래를 조회할 수 없다.
+
+### 14.3 Fixed global ordering and keyset rule
+
+모든 페이지는 아래 순서를 고정해서 사용한다.
+
+```text
+transactionTime DESC
+sourceType ASC (WALLET -> CARD -> EXCHANGE)
+transactionId DESC
+```
+
+마지막 반환 행의 세 값을 다음 커서에 저장한다. 다음 페이지에서는 다음 규칙을 적용한다.
+
+- 커서 시각보다 오래된 거래는 모든 소스에서 조회한다.
+- 커서와 같은 시각이면 커서 소스보다 뒤에 오는 소스의 거래를 포함한다.
+- 커서와 같은 소스이면 커서 거래 ID보다 작은 거래만 포함한다.
+- 커서 소스보다 앞에 오는 소스의 같은 시각 거래는 이미 반환됐으므로 제외한다.
+
+각 조회 대상은 `size + 1`건까지만 가져온다. 애플리케이션에서 병합한 뒤 `size + 1`번째 결과가 있으면
+`hasNext=true`로 판단하고, 사용자에게는 앞의 `size`건만 반환한다.
+
+### 14.4 Wallet sent/received semantics
+
+지갑 송금 한 건은 송신자와 수신자에게 다음과 같이 다르게 표시한다.
+
+| 조회 사용자 | 방향 | 표시 금액 | 표시 통화 | 상대방 |
+| --- | --- | --- | --- | --- |
+| 송신자 | `SENT` | `amount` | `fromCurrency` | 수신자 |
+| 수신자 | `RECEIVED` | `receivedAmount` | `toCurrency` | 송신자 |
+
+- 같은 통화의 기존 데이터에서 `receivedAmount`가 null이면 `amount`를 대체값으로 사용한다.
+- 금액 범위와 통화 필터도 표시되는 방향 기준 값에 적용한다.
+- 지갑 조회 Projection에 `receivedAmount`와 방향을 포함한다.
+- 응답의 사용자 ID는 원장에 저장된 송신자 ID가 아니라 현재 인증 사용자 기준으로 만든다.
+- 자기 자신에게 송금된 데이터가 존재하더라도 같은 원장 행을 두 번 반환하지 않는다.
+
+### 14.5 Source pruning and database query scope
+
+- `transactionType=WALLET/CARD/EXCHANGE`이면 해당 테이블만 조회한다.
+- `merchantName`이 있으면 카드 테이블만 조회한다.
+- `direction=SENT`이면 지갑 송신 쿼리만, `RECEIVED`이면 지갑 수신 쿼리만 실행한다.
+- 필터가 없으면 지갑 송신·수신, 카드, 환전의 최대 네 목록을 각각 제한 조회한다.
+- 엔티티 전체를 로딩하지 않고 응답 생성에 필요한 컬럼만 DTO Projection으로 조회한다.
+- 애플리케이션 병합 대상은 최대 `4 * (size + 1)`건으로 제한한다.
+
+기본 조회 경로에는 측정상 효과가 확인된 다음 B-tree 인덱스만 유지한다.
+
+- 지갑 송신: `(user_id, transaction_time DESC, transaction_id DESC)`
+- 지갑 수신: `(counterparty_user_id, transaction_time DESC, transaction_id DESC)`
+- 카드: `(user_id, transaction_time DESC, transaction_id DESC)`
+- 환전 완료: `(user_id, completed_at DESC, transaction_id DESC)`
+
+통화·금액·가맹점 인덱스, BRIN, 부분 인덱스는 현재 사용자별 Top-N 측정에서 안정적인 개선이 없으므로
+이번 단계에 추가하지 않는다. 운영 적용 가능한 명시적 인덱스 DDL과 적용·롤백 절차를 문서에 남긴다.
+
+### 14.6 Benchmark contract
+
+- 고정 시드로 지갑·카드·환전 합계 1,000,000건을 생성한다.
+- 특정 사용자에게 충분한 거래가 분포하도록 사용자 수와 소스별 건수를 함께 기록한다.
+- 페이지 크기 50, 소스별 조회 크기 51, 워밍업 50회, 측정 300회를 사용한다.
+- 동일한 PostgreSQL 이미지, 데이터셋, 세션 설정에서 비교한다.
+- 기준은 전체 후보를 `UNION ALL`한 뒤 전역 정렬·제한하는 쿼리다.
+- 개선안은 소스별 인덱스 Top-N 후 병합하는 쿼리다.
+- 평균, p95, 최소·최대, `EXPLAIN (ANALYZE, BUFFERS)`를 원본 결과와 함께 저장한다.
+- 포트폴리오의 개선 배수는 `기준 평균 / 개선 평균`으로 계산하고 비교 조건을 문장에 함께 적는다.
+
+기존 기록의 페이지 크기 50 결과인 평균 `6.843ms -> 0.174ms`는 약 39.3배다. 기존 포트폴리오의
+“약 35배” 표현을 유지하려면 같은 조건으로 다시 실행해 재현 범위를 확인한 뒤 보수적으로 기재한다.
+
+### 14.7 Expected file scope
+
+New:
+
+- 거래내역 페이지 응답 DTO
+- 불투명 커서 값·Codec
+- 잘못된 커서 오류 코드와 Codec 단위 테스트
+- 동일 시각 다중 소스 연속 페이지 PostgreSQL 통합 테스트
+- 운영 인덱스 DDL 및 벤치마크 원본 결과 문서
+
+Changed:
+
+- `TransactionController`: 페이지 응답, 단일 cursor, size 기본값·범위
+- `TransactionSearchCondition`: 내부 커서 구성 필드 제거
+- `TransactionService`: decode, 소스별 `size + 1`, 병합, nextCursor 생성
+- 지갑·카드·환전 Repository: 동적 조건과 복합 Keyset 조건 확정
+- 지갑 Projection/응답: 수취 금액, 방향, 상대방 의미 반영
+- 거래내역 서비스·Repository 테스트와 벤치마크
+
+Not changed:
+
+- 거래 생성과 잔액 변경 트랜잭션
+- Redis Lua Script와 이상 거래 규칙
+- Step 2 멱등성 처리 흐름
+- 측정으로 효과가 확인되지 않은 추가 인덱스
+
+### 14.8 Required tests
+
+- 첫 페이지, 중간 페이지, 마지막 페이지, 빈 결과
+- 잘못된 커서와 지원하지 않는 커서 버전 거절
+- 동일 시각에 지갑·카드·환전 거래가 섞여도 페이지 간 누락·중복 없음
+- 같은 소스·같은 시각·서로 다른 ID의 순서와 페이지 경계
+- 송신 거래는 출금 금액·통화, 수신 거래는 실제 수취 금액·통화로 반환
+- 수신 방향의 금액·통화 필터가 수취 값에 적용됨
+- 거래 유형·가맹점·지갑 방향에 따른 불필요한 Repository 미호출
+- 페이지당 각 Repository 조회량이 `size + 1` 이하
+- 100만 건 동일 데이터셋의 기준·개선 쿼리 재측정
+- 기존 거래 저장, Step 1 정합성, Step 2 멱등성 회귀 테스트
+
+### 14.9 Approval gate
+
+구현 전 다음 변경을 승인받는다.
+
+- `/v2/transaction` 응답을 목록에서 `items/nextCursor/hasNext` 구조로 변경
+- 공개 커서 3개를 불투명 커서 1개로 변경
+- 기본 size 50, 최대 size 100 적용
+- 수신 송금의 금액·통화 의미를 `receivedAmount/toCurrency`로 수정
+- 현재 작업 트리의 조회 최적화 후보를 이 명세에 맞춰 보완
+- 측정상 효과 없는 추가 인덱스는 도입하지 않음
+
+위 API 응답, 커서, 수신 거래 의미, 조회 크기, 인덱스 정책을 2026-06-20 승인받아 구현했다.
+
+## 15. Step 3 Change and Verification Log
+
+### 15.1 Implemented query flow
+
+```text
+Controller
+  -> size 1..100 검증
+  -> 불투명 cursor decode
+  -> 필터로 조회할 거래 소스 결정
+  -> 각 소스에서 size + 1건 제한 조회
+  -> transactionTime/sourceType/transactionId로 전역 정렬
+  -> 동일 원장 행 중복 제거
+  -> size건 반환
+  -> 추가 행이 있으면 마지막 반환 행으로 nextCursor 생성
+```
+
+- `/v2/transaction` 응답을 `items`, `nextCursor`, `hasNext` 구조로 변경했다.
+- 공개했던 시각·소스·ID 커서를 URL-safe Base64 토큰 하나로 변경했다.
+- 커서에 버전을 포함하고 형식 오류, 알 수 없는 소스, 지원하지 않는 버전을 `T012`로 거절한다.
+- 페이지 크기를 기본 50, 최소 1, 최대 100으로 제한하고 잘못된 크기를 `T013`으로 거절한다.
+- 각 Repository는 엔티티 전체가 아니라 필요한 컬럼만 Projection하고 `size + 1`건으로 제한한다.
+- 가맹점, 거래 소스, 지갑 방향 조건으로 불필요한 Repository 호출을 제거한다.
+
+### 15.2 Wallet direction correction
+
+- 송신 조회는 `amount`, `fromCurrency`, 수신자 ID를 사용한다.
+- 수신 조회는 `coalesce(receivedAmount, amount)`, `toCurrency`, 송신자 ID를 사용한다.
+- 수신 금액 범위와 통화 필터도 실제 수취 값에 적용한다.
+- 응답 사용자 ID는 원장에 저장된 송신자가 아니라 현재 인증 사용자를 기준으로 반환한다.
+- 송신·수신 목록에 같은 원장 행이 들어오면 `(sourceType, transactionId)`로 한 번만 반환한다.
+
+### 15.3 Pagination verification
+
+- PASS: 커서 encode/decode 왕복과 평문 내부 값 비노출
+- PASS: 깨진 Base64와 지원하지 않는 커서 버전 거절
+- PASS: 빈 결과, 첫 페이지, 중간 페이지, 마지막 페이지
+- PASS: 각 소스 Repository 조회 크기가 `size + 1`
+- PASS: 동일 시각의 지갑·카드·환전 결과가 페이지 간 누락·중복 없이 이어짐
+- PASS: 같은 소스·같은 시각의 5건이 거래 ID 역순으로 3개 페이지에 이어짐
+- PASS: 수신 송금이 실제 수취 금액과 송신자 상대방 ID로 반환됨
+- PASS: 수신 금액·통화 QueryDSL 필터가 `receivedAmount`, `toCurrency`에 적용됨
+- PASS: 거래 유형·가맹점·방향 기반 소스 제거
+
+### 15.4 Benchmark result
+
+- PostgreSQL 16, 고정 생성 데이터 1,000,000건, 사용자 100명
+- 응답 50건, 소스별 51건, 워밍업 50회, 측정 300회
+- 기준 전체 병합·정렬: 평균 4.607ms, p95 6.242ms
+- 소스별 Top-N: 평균 0.228ms, p95 0.265ms
+- 송신·수신·카드·환전 통합 Top-N: 평균 0.239ms, p95 0.279ms
+- 평균 20.25배, p95 23.55배 개선
+- 재현 명령과 Plan 근거: `docs/benchmarks/transaction-history-step3-2026-06-20.md`
+- 기존 “약 35배” 대신 현재 재현 결과인 “동일 100만 건 기준 평균 약 20배”를 사용한다.
+
+### 15.5 Schema operations
+
+- 적용 SQL: `docs/sql/transaction-history-indexes-up.sql`
+- 롤백 SQL: `docs/sql/transaction-history-indexes-down.sql`
+- `CREATE/DROP INDEX CONCURRENTLY`는 PostgreSQL 트랜잭션 밖에서 한 문장씩 실행한다.
+- 통화·금액·GIN·BRIN 인덱스는 현재 사용자 Top-N 경로에 추가하지 않았다.
+
+### 15.6 Regression result and remaining risks
+
+- PASS: 거래내역 단위, H2 QueryDSL, PostgreSQL 연속 페이지 테스트
+- PASS: Step 1 Advisory Lock, Step 2 멱등성, 기존 Redis 이상 거래 관련 선별 회귀 테스트
+- 전체 테스트 94개 중 이번 범위와 무관한 기존 KMS 의존 카드·로그인 테스트 7개가
+  `AES 키 암호화에 실패했습니다`로 실패했다. 로컬 KMS가 운영되지 않는 현재 환경의 기존 문제다.
+- 커서는 불투명한 전달 값이지만 서명하거나 암호화하지 않는다. 모든 쿼리가 인증 사용자 ID를 다시 적용해
+  다른 사용자의 거래 접근에는 사용할 수 없다.
+- `/v2/transaction` 응답 형태가 변경되므로 이 API를 사용하는 외부 클라이언트는 페이지 응답으로 맞춰야 한다.
+- 프로젝트에 Flyway/Liquibase가 없으므로 운영 인덱스 SQL의 배포 실행은 현재 수동 절차다.

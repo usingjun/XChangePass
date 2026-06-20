@@ -1,7 +1,7 @@
 package bumblebee.xchangepass.domain.transaction.controller;
 
 import bumblebee.xchangepass.domain.transaction.dto.cond.TransactionSearchCondition;
-import bumblebee.xchangepass.domain.transaction.dto.response.TransactionResponse;
+import bumblebee.xchangepass.domain.transaction.dto.response.TransactionPageResponse;
 import bumblebee.xchangepass.domain.transaction.service.TransactionService;
 import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,10 +16,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -39,9 +38,10 @@ public class TransactionController {
     })
     @GetMapping("/v2/transaction")
     @ResponseStatus(HttpStatus.OK)
-    public List<TransactionResponse> transaction(@AuthenticationPrincipal CustomUserDetails user,
-                                                 @ModelAttribute TransactionSearchCondition condition,
-                                                 int size) {
+    public TransactionPageResponse transaction(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @ModelAttribute TransactionSearchCondition condition,
+            @RequestParam(defaultValue = "50") int size) {
         return transactionService.getTransactions(user.getUserId(), condition, size);
     }
 

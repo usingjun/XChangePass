@@ -135,9 +135,82 @@ fraud:
 - [x] 1. Transaction-scoped concurrency control
 - [x] 3. Stateless fraud detection and alerting
 - [x] 2. RDB transaction history and Top-N read optimization
+- [x] PostgreSQL-specific index candidates reviewed with benchmark
+
+## PostgreSQL-specific index candidate review
+
+### Measured workload
+
+- Dataset: 1,000,000 synthetic transaction rows across wallet, card, and exchange benchmark tables.
+- Recent transaction workload: user-scoped union query, Top-N union query, and integrated sent/received/card/exchange Top-N query.
+- Period settlement workload: timestamp range count/sum across all transaction sources.
+- Exchange workload: completed exchange Top-N query with `status = 'COMPLETED'`.
+- Search workload: user-scoped card merchant search with `ILIKE '%keyword%'`.
+- Filtered workload: user-scoped Top-N search with amount range, currency, merchant name, and wallet direction filters.
+
+### Results
+
+| Candidate | Workload | Result | Decision |
+| --- | --- | --- | --- |
+| Top-N rewrite | User recent union | avg 6.978ms -> 0.201ms, p95 8.866ms -> 0.357ms | Keep |
+| Dynamic QueryDSL predicates | Top-N without filters | optional-OR avg 0.205ms -> dynamic avg 0.201ms, p95 0.403ms -> 0.357ms | Small gain; cleaner SQL |
+| Dynamic QueryDSL predicates | Filtered Top-N with amount/currency/merchant/direction | optional-OR avg 2.493ms -> dynamic avg 2.256ms, p95 3.563ms -> 3.394ms | Keep, but not a major latency win |
+| Existing B-tree path | Filtered received wallet direction query | avg 0.142ms, p95 0.170ms | Keep |
+| BRIN on transaction time columns | User recent Top-N | avg 0.201ms -> 0.160ms, p95 0.357ms -> 0.217ms | Not needed for user Top-N; variance-sensitive |
+| BRIN on transaction time columns | Period settlement | avg 29.433ms -> 17.620ms, p95 31.142ms -> 18.950ms | Candidate only for broad period/settlement scans |
+| Partial B-tree on completed exchange rows | Exchange completed Top-N | avg 0.102ms -> 0.086ms, p95 0.164ms -> 0.109ms | Candidate, but requires SQL migration and more stable evidence |
+| GIN trigram on card merchant name | User-scoped merchant search | avg 0.084ms -> 0.097ms, p95 0.102ms -> 0.128ms | Excluded for user-scoped search |
+| GiST | Current transaction schema | No range, geometry, or nearest-neighbor query target | Not applicable |
+
+### Page size 50 verification
+
+The original benchmark was rerun with `PAGE_SIZE=50`, `SOURCE_LIMIT=50`, `RUNS=300`, `WARMUP=50`, and 1,000,000 rows. The Step 3 API implementation now uses `SOURCE_LIMIT=51` so the extra row can determine `hasNext` while returning 50 items. The final Step 3 benchmark must use the updated value.
+
+| Workload | Result | Decision |
+| --- | --- | --- |
+| Baseline union vs Top-N union | avg 6.843ms -> 0.174ms, p95 8.105ms -> 0.223ms | Keep Top-N rewrite |
+| Integrated Top-N sent/received/card/exchange | avg 0.192ms, p95 0.265ms | Keep; exact four-source merge remains close to three-source Top-N |
+| Static optional-OR vs dynamic filtered Top-N | avg 2.499ms -> 2.092ms, p95 3.480ms -> 3.117ms | Keep dynamic predicates, but treat as modest and workload-dependent |
+| Merchant filter source pruning | Combined filtered Top-N -> card-only filtered Top-N | avg 2.092ms -> 1.739ms, p95 3.117ms -> 1.995ms | Keep; this is the main query-shape improvement |
+| Filtered received wallet direction query | avg 0.109ms, p95 0.128ms | Existing B-tree path is enough |
+| Currency candidate indexes | Currency-only Top-N | avg 0.231ms -> 0.247ms, p95 0.262ms -> 0.274ms | Exclude broad currency index set |
+| Currency candidate indexes | Card-only merchant/amount/currency Top-N | avg 1.739ms -> 1.762ms, p95 1.995ms -> 2.162ms | Exclude; card-only query did not improve |
+| Currency candidate indexes | Combined amount/currency/merchant/direction Top-N | avg 2.092ms -> 2.006ms, p95 3.117ms -> 2.380ms | Do not add yet; gain is not stable enough after pruning |
+| Amount candidate indexes | Amount-only Top-N | avg 0.361ms -> 0.407ms, p95 0.382ms -> 0.464ms | Exclude; latency regressed |
+| Amount candidate indexes | Combined amount/currency/merchant/direction Top-N | avg 2.092ms -> 2.813ms, p95 3.117ms -> 3.464ms | Exclude; latency regressed |
+| BRIN on period settlement | avg 28.142ms -> 17.511ms, p95 29.637ms -> 18.273ms | Candidate only for broad period/settlement scans |
+| BRIN on user Top-N | avg 0.174ms -> 0.182ms, p95 0.223ms -> 0.226ms | Excluded for user Top-N |
+| Partial B-tree on completed exchange rows | avg 0.106ms -> 0.089ms, p95 0.168ms -> 0.111ms | Candidate, but defer until SQL migration exists |
+| GIN trigram on user-scoped card merchant search | avg 0.068ms -> 3.944ms, p95 0.083ms -> 5.085ms | Excluded for user-scoped search |
+
+### Decision
+
+- Keep the existing user/time/id B-tree indexes for the transaction history API.
+- Support merchant name, amount range, currency, and wallet direction filters through the transaction search API, but keep the existing user/time/id B-tree path for the default user-scoped search.
+- Prune impossible transaction sources before querying. Merchant name search only queries card transactions; transaction type narrows the source table; wallet direction narrows sent/received wallet queries.
+- Build transaction search predicates dynamically with QueryDSL so unused filter conditions are not emitted as `:param is null or ...` predicates. The measured latency gain is not reliable at page size 50, but the generated SQL is cleaner and enables source pruning as filters grow.
+- Do not add wallet/exchange currency indexes yet. The `from_currency = ? or to_currency = ?` shape did not broadly use those indexes.
+- Do not add amount range indexes yet. PostgreSQL still preferred the existing user/time indexes, and the combined filtered query regressed on average latency.
+- Reconsider BRIN indexes when a dedicated period/settlement API is added. The benchmark shows a meaningful gain for append-ordered timestamp range aggregation.
+- Do not add the partial exchange index yet. The latest measured run regressed, and partial indexes require PostgreSQL-specific DDL.
+- Do not add GIN trigram for the current user-scoped merchant search. PostgreSQL still prefers the existing user/time/id B-tree.
+
+### Step 3 final rerun
+
+The approved Step 3 contract was rerun on PostgreSQL 16 with 1,000,000 rows, 100 users, `PAGE_SIZE=50`, `SOURCE_LIMIT=51`, `WARMUP=50`, and `RUNS=300`.
+
+- Baseline union then global sort: avg 4.607ms, p95 6.242ms.
+- Per-source Top-N then merge: avg 0.228ms, p95 0.265ms.
+- Integrated sent/received/card/exchange Top-N: avg 0.239ms, p95 0.279ms.
+- Improvement: avg 20.25x, p95 23.55x.
+- Full reproduction command, result table, and plan evidence: `docs/benchmarks/transaction-history-step3-2026-06-20.md`.
+- Portfolio wording: use "same one-million-row dataset, about 20x average improvement" for this measured environment.
 
 ## Verification
 
 - `./gradlew compileJava compileTestJava`
 - `./gradlew test --tests 'bumblebee.xchangepass.domain.transaction.TransactionServiceTest'`
-- 전체 통합 테스트는 Docker/Testcontainers 및 로컬 PostgreSQL 연결이 가능한 환경에서 다시 실행한다.
+- `./gradlew test --tests 'bumblebee.xchangepass.domain.transaction.TransactionPaginationIntegrationTest'`
+- `TOTAL_RECORDS=1000000 PAGE_SIZE=50 SOURCE_LIMIT=51 WARMUP=50 RUNS=300 tools/perf/run-transaction-read-benchmark.sh`
+- 운영 인덱스 적용: `docs/sql/transaction-history-indexes-up.sql`
+- 운영 인덱스 롤백: `docs/sql/transaction-history-indexes-down.sql`

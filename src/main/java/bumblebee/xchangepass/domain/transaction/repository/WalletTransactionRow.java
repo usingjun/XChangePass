@@ -14,6 +14,8 @@ public interface WalletTransactionRow {
 
     BigDecimal getAmount();
 
+    BigDecimal getReceivedAmount();
+
     String getFromCurrency();
 
     String getToCurrency();
