@@ -2,6 +2,7 @@ package bumblebee.xchangepass.domain.user.service;
 
 import bumblebee.xchangepass.config.RedisTestBase;
 import bumblebee.xchangepass.config.TestUserInitializer;
+import bumblebee.xchangepass.domain.card.service.CardService;
 import bumblebee.xchangepass.domain.user.dto.request.UserUpdateRequest;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -13,11 +14,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -34,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class UserServiceTest extends RedisTestBase {
 
     @Container
-    static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
+    static PostgreSQLContainer postgresContainer = new PostgreSQLContainer("postgres:16")
             .withDatabaseName("xcp_test")
             .withUsername("testuser")
             .withPassword("testpass");
@@ -44,6 +46,8 @@ public class UserServiceTest extends RedisTestBase {
     private UserRepository userRepository;
     @Autowired
     private UserCleanupScheduler userCleanupScheduler;
+    @MockBean
+    private CardService cardService;
 
     @DynamicPropertySource
     static void overrideDataSourceProperties(DynamicPropertyRegistry registry) {

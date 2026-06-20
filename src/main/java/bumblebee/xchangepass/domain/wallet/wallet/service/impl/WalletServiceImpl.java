@@ -115,13 +115,13 @@ public class WalletServiceImpl implements WalletService {
 
         WalletBalance fromBalance = balanceService.findBalance(fromWallet.getWalletId(), request.fromCurrency());
         WalletBalance toBalance = balanceService.findBalance(toWallet.getWalletId(), request.toCurrency());
-        BigDecimal transferAmount = exchange(request.fromCurrency(), request.toCurrency(), request.transferAmount());
+        BigDecimal receivedAmount = exchange(request.fromCurrency(), request.toCurrency(), request.transferAmount());
 
         if (request.transferAmount().compareTo(fromBalance.getBalance()) > 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
 
-        balanceService.transferBalance(fromBalance, toBalance, transferAmount);
+        balanceService.transferBalance(fromBalance, toBalance, request.transferAmount(), receivedAmount);
     }
 
     @Override

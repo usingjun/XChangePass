@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class WalletServiceImplTest {
@@ -70,6 +71,56 @@ class WalletServiceImplTest {
         var inOrder = inOrder(advisoryLock);
         inOrder.verify(advisoryLock).acquire(10L);
         inOrder.verify(advisoryLock).acquire(20L);
-        verify(balanceService).transferBalance(senderBalance, receiverBalance, BigDecimal.TEN);
+        verify(balanceService).transferBalance(senderBalance, receiverBalance, BigDecimal.TEN, BigDecimal.TEN);
+    }
+
+    @Test
+    void transferDebitsSourceAmountAndCreditsConvertedAmount() {
+        WalletRepository walletRepository = mock(WalletRepository.class);
+        WalletBalanceService balanceService = mock(WalletBalanceService.class);
+        FraudAmountNormalizer normalizer = mock(FraudAmountNormalizer.class);
+        ExchangeService exchangeService = mock(ExchangeService.class);
+        UserService userService = mock(UserService.class);
+        WalletServiceImpl walletService = new WalletServiceImpl(
+                walletRepository,
+                mock(CardService.class),
+                balanceService,
+                mock(BCryptPasswordEncoder.class),
+                mock(TransactionAdvisoryLock.class),
+                normalizer,
+                mock(FraudDetectionService.class),
+                exchangeService,
+                userService
+        );
+
+        User receiver = mock(User.class);
+        Wallet senderWallet = mock(Wallet.class);
+        Wallet receiverWallet = mock(Wallet.class);
+        WalletBalance senderBalance = mock(WalletBalance.class);
+        WalletBalance receiverBalance = mock(WalletBalance.class);
+        Currency krw = Currency.getInstance("KRW");
+        Currency usd = Currency.getInstance("USD");
+        BigDecimal sentAmount = new BigDecimal("10000.00");
+        BigDecimal receivedAmount = new BigDecimal("7.50");
+        WalletTransferRequest request = new WalletTransferRequest(
+                "receiver", "010-0000-0000", sentAmount,
+                krw, usd, null, WalletTransferType.GENERAL
+        );
+
+        when(receiver.getUserId()).thenReturn(2L);
+        when(userService.readUser(request.receiverName(), request.receiverPhoneNumber())).thenReturn(receiver);
+        when(walletRepository.findByUserId(1L)).thenReturn(Optional.of(senderWallet));
+        when(walletRepository.findByUserId(2L)).thenReturn(Optional.of(receiverWallet));
+        when(senderWallet.getWalletId()).thenReturn(10L);
+        when(receiverWallet.getWalletId()).thenReturn(20L);
+        when(balanceService.findBalance(10L, krw)).thenReturn(senderBalance);
+        when(balanceService.findBalance(20L, usd)).thenReturn(receiverBalance);
+        when(senderBalance.getBalance()).thenReturn(new BigDecimal("20000.00"));
+        when(exchangeService.getExchangeMoney(krw, usd, sentAmount)).thenReturn(receivedAmount);
+
+        walletService.transfer(1L, request);
+
+        verify(balanceService).transferBalance(senderBalance, receiverBalance, sentAmount, receivedAmount);
+        assertThat(sentAmount).isNotEqualByComparingTo(receivedAmount);
     }
 }

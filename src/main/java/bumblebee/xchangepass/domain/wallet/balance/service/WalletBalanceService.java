@@ -133,16 +133,29 @@ public class WalletBalanceService {
      * 화폐별 잔액 송금
      * @param fromBalance
      * @param toBalance
-     * @param amount
+     * @param sentAmount amount deducted in the sender's currency
+     * @param receivedAmount amount credited in the receiver's currency
      */
     @Transactional
-    public void transferBalance(WalletBalance fromBalance, WalletBalance toBalance, BigDecimal amount) {
-        fromBalance.subtractBalance(amount);
-        toBalance.addBalance(amount);
+    public void transferBalance(WalletBalance fromBalance, WalletBalance toBalance,
+                                BigDecimal sentAmount, BigDecimal receivedAmount) {
+        if (sentAmount.compareTo(fromBalance.getBalance()) > 0) {
+            throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
+        }
+
+        fromBalance.subtractBalance(sentAmount);
+        toBalance.addBalance(receivedAmount);
         balanceRepository.save(fromBalance);
         balanceRepository.save(toBalance);
 
-        transactionService.saveTransaction(fromBalance.getWallet().getWalletId(), toBalance.getWallet().getWalletId(), amount, fromBalance.getCurrency(), toBalance.getCurrency(), WalletTransactionType.TRANSFER);
+        transactionService.saveTransferTransaction(
+                fromBalance.getWallet().getWalletId(),
+                toBalance.getWallet().getWalletId(),
+                sentAmount,
+                receivedAmount,
+                fromBalance.getCurrency(),
+                toBalance.getCurrency()
+        );
     }
 
 }

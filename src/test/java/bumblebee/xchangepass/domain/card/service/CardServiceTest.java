@@ -25,7 +25,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -42,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class CardServiceTest extends RedisTestBase {
 
     @Container
-    static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
+    static PostgreSQLContainer postgresContainer = new PostgreSQLContainer("postgres:16")
             .withDatabaseName("xcp_test")
             .withUsername("testuser")
             .withPassword("testpass");

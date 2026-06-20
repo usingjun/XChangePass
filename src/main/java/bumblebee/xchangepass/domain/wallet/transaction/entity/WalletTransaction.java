@@ -33,6 +33,9 @@ public class WalletTransaction {
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
 
+    @Column(precision = 19, scale = 4)
+    private BigDecimal receivedAmount;
+
     @Column(length = 3)
     private String fromCurrency;
 
@@ -51,9 +54,16 @@ public class WalletTransaction {
 
     public WalletTransaction(User user, User counterpartyUser, BigDecimal amount, String fromCurrency,
                              String toCurrency, WalletTransactionType transactionType, LocalDateTime transactionTime) {
+        this(user, counterpartyUser, amount, null, fromCurrency, toCurrency, transactionType, transactionTime);
+    }
+
+    public WalletTransaction(User user, User counterpartyUser, BigDecimal amount, BigDecimal receivedAmount,
+                             String fromCurrency, String toCurrency, WalletTransactionType transactionType,
+                             LocalDateTime transactionTime) {
         this.user = user;
         this.counterpartyUser = counterpartyUser;
         this.amount = amount;
+        this.receivedAmount = receivedAmount;
         this.fromCurrency = fromCurrency;
         this.toCurrency = toCurrency;
         this.transactionType = transactionType;

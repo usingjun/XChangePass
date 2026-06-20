@@ -49,6 +49,27 @@ public class WalletTransactionService {
         ));
     }
 
+    @Transactional
+    public void saveTransferTransaction(Long senderWalletId, Long receiverWalletId,
+                                        BigDecimal sentAmount, BigDecimal receivedAmount,
+                                        Currency fromCurrency, Currency toCurrency) {
+        Wallet senderWallet = walletRepository.findById(senderWalletId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+        Wallet receiverWallet = walletRepository.findById(receiverWalletId)
+                .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
+
+        transactionRepository.save(new WalletTransaction(
+                senderWallet.getUser(),
+                receiverWallet.getUser(),
+                sentAmount,
+                receivedAmount,
+                currencyCode(fromCurrency),
+                currencyCode(toCurrency),
+                WalletTransactionType.TRANSFER,
+                LocalDateTime.now()
+        ));
+    }
+
     private String currencyCode(Currency currency) {
         return currency == null ? null : currency.getCurrencyCode();
     }

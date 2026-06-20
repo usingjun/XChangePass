@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.sql.PreparedStatement;
 
-import static bumblebee.xchangepass.global.common.Constants.LOCK_KEY;
+import static bumblebee.xchangepass.global.common.Constants.EXCHANGE_RATE_LOCK_KEY;
 
 @Component
 @RequiredArgsConstructor
@@ -22,7 +22,7 @@ public class ExchangeRateLockManager {
 
     public boolean tryAcquireLock() {
         Query query = entityManager.createNativeQuery("SELECT pg_try_advisory_lock(:lockKey)");
-        query.setParameter("lockKey", LOCK_KEY);
+        query.setParameter("lockKey", EXCHANGE_RATE_LOCK_KEY);
         Boolean result = (Boolean) query.getSingleResult();
         return result != null && result;
     }
@@ -30,7 +30,7 @@ public class ExchangeRateLockManager {
     public void releaseLock() {
         entityManager.unwrap(Session.class).doWork(connection -> {
             try (PreparedStatement stmt = connection.prepareStatement("SELECT pg_advisory_unlock(?)")) {
-                stmt.setLong(1, LOCK_KEY);
+                stmt.setLong(1, EXCHANGE_RATE_LOCK_KEY);
                 stmt.executeQuery();
             }
         });

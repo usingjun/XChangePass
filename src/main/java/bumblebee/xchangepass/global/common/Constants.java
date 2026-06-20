@@ -18,6 +18,6 @@ public class Constants {
     // 외부 API 호출
     public static final String url = "https://v6.exchangerate-api.com/v6/";
 
-    // postgreSQL LOCK_KEY 상수
-    public static final long LOCK_KEY = 987654321L;
+    // Generated wallet IDs use positive keys; system-wide locks reserve the negative key space.
+    public static final long EXCHANGE_RATE_LOCK_KEY = -987654321L;
 }

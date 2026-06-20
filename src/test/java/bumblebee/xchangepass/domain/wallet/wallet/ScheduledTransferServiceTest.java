@@ -23,7 +23,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -56,7 +56,7 @@ public class ScheduledTransferServiceTest {
     Currency krw = Currency.getInstance("KRW");
 
     @Container
-    static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>("postgres:16")
+    static PostgreSQLContainer postgresContainer = new PostgreSQLContainer("postgres:16")
             .withDatabaseName("xcp_test")
             .withUsername("postgres")
             .withPassword("postgres");
