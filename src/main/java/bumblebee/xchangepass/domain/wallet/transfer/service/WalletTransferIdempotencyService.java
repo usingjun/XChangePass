@@ -1,0 +1,61 @@
+package bumblebee.xchangepass.domain.wallet.transfer.service;
+
+import bumblebee.xchangepass.domain.wallet.transfer.dto.WalletTransferResponse;
+import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransfer;
+import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferStatus;
+import bumblebee.xchangepass.domain.wallet.transfer.repository.WalletTransferRepository;
+import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
+import bumblebee.xchangepass.global.error.ErrorCode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class WalletTransferIdempotencyService {
+
+    private final WalletTransferReservationWriter reservationWriter;
+    private final WalletTransferRepository repository;
+    private final WalletTransferRequestHasher requestHasher;
+
+    public WalletTransferReservation reserve(Long senderUserId, UUID idempotencyKey,
+                                             WalletTransferRequest request) {
+        String requestHash = requestHasher.hash(request);
+        try {
+            WalletTransfer created = reservationWriter.create(senderUserId, idempotencyKey, requestHash);
+            return WalletTransferReservation.owner(created.getTransferId());
+        } catch (DataIntegrityViolationException e) {
+            WalletTransfer existing = repository
+                    .findBySenderUserIdAndIdempotencyKey(senderUserId, idempotencyKey)
+                    .orElseThrow(() -> e);
+            return resolveExisting(existing, requestHash);
+        }
+    }
+
+    private WalletTransferReservation resolveExisting(WalletTransfer existing, String requestHash) {
+        if (!existing.getRequestHash().equals(requestHash)) {
+            throw ErrorCode.IDEMPOTENCY_KEY_REUSED.commonException();
+        }
+
+        return switch (existing.getStatus()) {
+            case COMPLETED -> WalletTransferReservation.completed(new WalletTransferResponse(
+                    existing.getTransferId(), WalletTransferStatus.COMPLETED
+            ));
+            case REQUESTED, PROCESSING -> throw ErrorCode.TRANSACTION_IN_PROGRESS.commonException();
+            case FAILED -> throw previousFailure(existing.getFailureCode()).commonException();
+        };
+    }
+
+    private ErrorCode previousFailure(String failureCode) {
+        if (failureCode == null) {
+            return ErrorCode.TRANSACTION_PROCESSING_FAILED;
+        }
+        try {
+            return ErrorCode.valueOf(failureCode);
+        } catch (IllegalArgumentException e) {
+            return ErrorCode.TRANSACTION_PROCESSING_FAILED;
+        }
+    }
+}

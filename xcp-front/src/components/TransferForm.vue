@@ -75,7 +75,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
 import { useExchangeCalculator } from '@/api/useExchangeCalculator.js'
 import PasswordConfirmModal from '@/components/PasswordConfirmModal.vue'
@@ -107,6 +107,14 @@ const maxDatetime = ref('')
 
 // 모달 상태
 const showPasswordModal = ref(false)
+const pendingIdempotencyKey = ref(null)
+
+watch(
+    [receiverName, receiverPhoneNumber, transferAmount, fromCurrency, toCurrency, transferType],
+    () => {
+      pendingIdempotencyKey.value = null
+    }
+)
 
 // 처음 mounted 시 잔액, 시간 초기화
 onMounted(async () => {
@@ -145,7 +153,7 @@ const confirmAndTransfer = async () => {
       transferDatetime:
           transferType.value === 'SCHEDULED'
               ? new Date(transferDatetime.value).toISOString()
-              : new Date().toISOString(),
+              : null,
       transferType: transferType.value
     }
 
@@ -154,7 +162,16 @@ const confirmAndTransfer = async () => {
             ? '/api/v1/wallet/transfer-schedule'
             : '/api/v1/wallet/transfer'
 
-    await axios.put(`http://localhost:8080${endpoint}`, payload)
+    const config = {}
+    if (transferType.value === 'GENERAL') {
+      pendingIdempotencyKey.value ??= crypto.randomUUID()
+      config.headers = {
+        'Idempotency-Key': pendingIdempotencyKey.value
+      }
+    }
+
+    await axios.put(`http://localhost:8080${endpoint}`, payload, config)
+    pendingIdempotencyKey.value = null
 
     alert(`${transferType.value === 'SCHEDULED' ? '예약' : '일반'} 송금 완료!`)
   } catch (e) {

@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.wallet;
 
 import bumblebee.xchangepass.config.TestUserInitializer;
+import bumblebee.xchangepass.domain.card.service.CardService;
 import bumblebee.xchangepass.domain.user.dto.request.UserRegisterRequest;
 import bumblebee.xchangepass.domain.user.entity.Sex;
 import bumblebee.xchangepass.domain.user.service.UserRegisterService;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -49,6 +51,8 @@ public class ScheduledTransferServiceTest {
     private WalletRepository walletRepository;
     @Autowired
     private WalletBalanceService balanceService;
+    @MockBean
+    private CardService cardService;
 
     private Long senderId;
     private Wallet testWallet1;
@@ -71,8 +75,8 @@ public class ScheduledTransferServiceTest {
         registry.add("spring.datasource.username", postgresContainer::getUsername);
         registry.add("spring.datasource.password", postgresContainer::getPassword);
 
-        registry.add("spring.redis.host", redisContainer::getHost);
-        registry.add("spring.redis.port", () -> redisContainer.getMappedPort(6379));
+        registry.add("spring.data.redis.host", redisContainer::getHost);
+        registry.add("spring.data.redis.port", () -> redisContainer.getMappedPort(6379));
     }
 
     @BeforeEach

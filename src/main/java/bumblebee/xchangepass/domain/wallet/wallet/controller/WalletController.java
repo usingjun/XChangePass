@@ -5,6 +5,7 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.WalletPasswordResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
+import bumblebee.xchangepass.domain.wallet.transfer.dto.WalletTransferResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletFacadeService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
 import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
@@ -76,7 +78,7 @@ public class WalletController {
 
     @Operation(summary = "앱 내 송금", description = "돈을 송금합니다.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "송금 성공", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "200", description = "송금 성공", content = @Content(mediaType = "application/json")),
             @ApiResponse(responseCode = "400", description = "먼저 충전이 필요합니다.",
                     content = @Content(mediaType = "application/json",
                             schema = @Schema(implementation = ErrorResponse.class),
@@ -91,10 +93,12 @@ public class WalletController {
             )
     })
     @PutMapping("/transfer")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void transfer(@RequestBody @Valid WalletTransferRequest request,
-                         @AuthenticationPrincipal CustomUserDetails user) {
-        walletFacadeService.transfer(user.getUserId(), request);
+    @ResponseStatus(HttpStatus.OK)
+    public WalletTransferResponse transfer(
+            @RequestHeader("Idempotency-Key") UUID idempotencyKey,
+            @RequestBody @Valid WalletTransferRequest request,
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return walletFacadeService.transfer(user.getUserId(), idempotencyKey, request);
     }
 
     @Operation(summary = "앱 내 예약 송금", description = "돈을 송금합니다.")
@@ -117,7 +121,7 @@ public class WalletController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void scheduleTransfer(@RequestBody @Valid WalletTransferRequest request,
                          @AuthenticationPrincipal CustomUserDetails user) {
-        walletFacadeService.transfer(user.getUserId(), request);
+        walletFacadeService.scheduleTransfer(user.getUserId(), request);
     }
 
     @Operation(summary = "잔액 조회", description = "잔액을 조회합니다.")

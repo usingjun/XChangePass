@@ -36,7 +36,7 @@ XChangePass를 금융권 포트폴리오의 첫 프로젝트로 제시할 수 �
 | Step | Topic | Specification | Current-state check | Approval | Implementation | Verification |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 지갑 거래 동시성 제어 | Approved | Checked | Approved 2026-06-19 | Completed | Completed 2026-06-20 |
-| 2 | 거래 요청 멱등성 | Drafted | Checked | Pending | Blocked by approval | Pending |
+| 2 | 거래 요청 멱등성 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
 | 3 | 거래내역 통합조회 최적화 | Drafted | Checked | Pending | Blocked by approval | Pending |
 | 4 | Redis 이상 거래 장애 대응 | Drafted | Checked | Pending | Blocked by approval | Pending |
 | 5 | 거래 상태 및 실패 추적 | Drafted | Checked | Pending | Blocked by approval | Pending |
@@ -463,3 +463,200 @@ Remaining risks:
 - 2.x의 non-generic `PostgreSQLContainer` API에 맞게 테스트 선언을 변경했다.
 - 서드파티 Redis Testcontainer를 제거하고 표준 `GenericContainer`로 교체했다.
 - 기존 테스트 시나리오와 Redis/PostgreSQL 이미지 버전은 유지했다.
+
+## 12. Step 2 Implementation Approval Proposal
+
+### 12.1 Scope
+
+- 즉시 지갑 송금에만 멱등성을 적용한다.
+- 예약 송금 등록과 예약 실행의 멱등성은 별도 명세로 분리한다.
+- 기존 `/api/v1/wallet/transfer` 경로는 유지한다.
+- 즉시 송금 엔드포인트에서 `SCHEDULED` 요청은 허용하지 않는다.
+
+### 12.2 API changes
+
+```http
+PUT /api/v1/wallet/transfer
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+```
+
+- `Idempotency-Key`는 필수 UUID 헤더다.
+- 성공 응답을 `204 No Content`에서 `200 OK`로 변경한다.
+- 최초 성공과 완료 후 중복 요청은 같은 응답을 반환한다.
+
+```json
+{
+  "transferId": "server-generated UUID",
+  "status": "COMPLETED"
+}
+```
+
+### 12.3 Request hash
+
+다음 필드를 정규화한 뒤 SHA-256 해시를 계산한다.
+
+- 수신자 이름: trim
+- 전화번호: 숫자만 유지
+- 송금액: `stripTrailingZeros().toPlainString()`
+- 출금·입금 통화: ISO currency code
+- 거래 유형: `GENERAL`
+
+`transferDatetime`은 즉시 송금의 의미에 포함되지 않으며 즉시 송금 요청에서는 무시하지 않고 null 여부를
+검증한다. 같은 키에 다른 해시가 들어오면 `409 IDEMPOTENCY_KEY_REUSED`를 반환한다.
+
+### 12.4 Persistence model
+
+새 `WalletTransfer` Aggregate를 추가한다.
+
+| Field | Purpose |
+| --- | --- |
+| `transferId` UUID | 외부 응답과 원장 연결에 사용하는 서버 거래 ID |
+| `senderUserId` | 인증된 송신 사용자 |
+| `idempotencyKey` UUID | 클라이언트 재전송 식별자 |
+| `requestHash` char(64) | 같은 키의 다른 요청 방지 |
+| `status` | `REQUESTED`, `PROCESSING`, `COMPLETED`, `FAILED` |
+| `failureCode` | 실패한 요청에 동일 오류를 반환하기 위한 ErrorCode 이름 |
+| `createdAt`, `updatedAt` | 요청 접수와 최종 처리 시각 |
+| `version` | 상태 전이 충돌 감지를 위한 낙관적 락 버전 |
+
+DB 최종 방어선:
+
+- Unique `(sender_user_id, idempotency_key)`
+- `wallet_transaction.transfer_id` unique, 기존 충전·출금 원장을 위해 nullable
+
+### 12.5 Transaction flow
+
+```text
+Controller
+  -> request hash 생성
+  -> Reservation Coordinator
+       -> REQUIRES_NEW 요청 INSERT + flush
+       -> unique 충돌이면 기존 요청 조회
+  -> 기존 요청 정책 적용
+  -> 최초 요청만 WalletService.transfer(transferId, ...)
+       -> 하나의 DB transaction
+       -> status PROCESSING
+       -> fraud validation
+       -> advisory locks
+       -> balances update
+       -> wallet ledger with transferId
+       -> status COMPLETED
+       -> commit
+  -> 예외 발생 시 별도 REQUIRES_NEW transaction으로 FAILED 기록
+```
+
+요청 예약과 자금 이동을 같은 트랜잭션에 넣지 않는다. 같은 트랜잭션이면 처리 실패 시 멱등성 레코드도
+롤백되어 동일 요청이 다시 최초 요청으로 실행될 수 있기 때문이다.
+
+`COMPLETED` 전이는 잔액 변경·원장 저장과 같은 트랜잭션에 둔다. 자금 이동은 커밋됐지만 상태만
+`PROCESSING`으로 남는 구간을 만들지 않는다.
+
+### 12.6 Concurrent insert handling
+
+- 단순 `exists -> insert` 방식은 사용하지 않는다.
+- 별도 Transaction Writer Bean이 요청을 INSERT하고 즉시 flush한다.
+- 유니크 충돌은 트랜잭션 프록시 밖 Coordinator가 잡는다.
+- 실패한 INSERT 트랜잭션이 종료된 뒤 기존 요청을 새 조회 트랜잭션에서 읽는다.
+- 이 구조로 Spring의 rollback-only 상태와 self-invocation 문제를 피한다.
+
+### 12.7 Existing request policy
+
+| State | Same hash | Different hash |
+| --- | --- | --- |
+| `COMPLETED` | 저장된 `transferId`, `COMPLETED` 반환 | `409 IDEMPOTENCY_KEY_REUSED` |
+| `REQUESTED`, `PROCESSING` | `409 TRANSACTION_IN_PROGRESS` | `409 IDEMPOTENCY_KEY_REUSED` |
+| `FAILED` | 저장된 기존 업무 오류 재반환, 재실행 금지 | `409 IDEMPOTENCY_KEY_REUSED` |
+
+서버가 자금 트랜잭션 도중 종료되면 예약 레코드는 `REQUESTED`로 남을 수 있다. Step 2에서는 안전성을
+우선해 자동 재실행하지 않고 처리 중으로 응답한다. 장시간 미완료 요청의 판정과 복구는 Step 5에서
+상태 시간과 운영 점검 정책으로 구현한다.
+
+### 12.8 Error codes
+
+- `IDEMPOTENCY_KEY_REUSED`: `409`, 같은 키로 다른 요청
+- `TRANSACTION_IN_PROGRESS`: `409`, 최초 요청 처리 중 또는 복구 대기
+- `INVALID_TRANSFER_REQUEST`: `400`, 즉시 송금 API에 예약 송금 정보 전달
+- 예상하지 못한 실패는 안정적인 내부 거래 오류 코드로 변환하고 `FAILED`에 저장한다.
+
+### 12.9 Expected file scope
+
+New:
+
+- WalletTransfer entity, status enum, repository
+- Idempotency request hasher
+- Reservation writer and coordinator
+- Transfer response DTO
+- Step 2 unit and PostgreSQL concurrency tests
+
+Changed:
+
+- `WalletController`: idempotency header and response
+- `WalletFacadeService`: 예약/즉시 계약 분리와 멱등성 조정
+- `WalletService`, `WalletServiceImpl`: `transferId`를 자금 트랜잭션에 전달
+- `WalletTransaction`: `transferId` nullable unique 연결
+- `WalletTransactionService`: 송금 원장에 `transferId` 저장
+- `ErrorCode`: 멱등성·처리 중 오류 추가
+
+Not changed:
+
+- Redis Lua Script와 Fraud 규칙
+- 거래내역 조회 최적화 파일
+- 예약 송금 실행 로직
+
+### 12.10 Required tests
+
+- 최초 송금 성공 후 같은 키 재전송 시 같은 결과 반환
+- 최초 응답 유실을 가정한 완료 요청 재조회
+- 동일 키 30건 동시 요청에서 잔액 변경과 원장 저장 정확히 1회
+- 처리 중 중복 요청은 `TRANSACTION_IN_PROGRESS`
+- 같은 사용자·같은 키·다른 금액은 `IDEMPOTENCY_KEY_REUSED`
+- 서로 다른 사용자는 같은 UUID 사용 가능
+- 잔액 부족, 이상 거래, Redis 장애 실패를 같은 키로 재전송해도 재실행하지 않음
+- 원장 `transferId` 중복 저장 차단
+- 예약 송금 요청이 즉시 송금 API의 멱등성 흐름에 진입하지 않음
+
+### 12.11 Approval gate
+
+이 절의 API 응답 변경, DB 제약, 실패 재실행 금지 정책, 트랜잭션 경계를 승인받아 구현했다.
+
+## 13. Step 2 Change and Verification Log
+
+### 13.1 Implemented flow
+
+- 즉시 송금 API가 필수 UUID `Idempotency-Key` 헤더를 받고 `transferId`, `status`를 반환한다.
+- `WalletTransfer` Aggregate가 요청 키, 요청 해시, 상태, 실패 코드를 저장한다.
+- `(sender_user_id, idempotency_key)` 유니크 제약으로 최초 INSERT 성공자만 실행 권한을 얻는다.
+- 요청 예약은 `REQUIRES_NEW` 트랜잭션에서 INSERT 후 flush한다.
+- 유니크 충돌은 트랜잭션 밖 Coordinator가 처리하고 기존 요청의 해시와 상태를 확인한다.
+- 완료 중복은 기존 결과를 반환하고 처리 중 중복은 `TRANSACTION_IN_PROGRESS`로 차단한다.
+- 실패한 동일 키는 저장된 기존 오류를 반환하며 자금 이동을 재실행하지 않는다.
+- 잔액 변경, 거래 원장의 `transferId` 저장, `COMPLETED` 전이는 하나의 DB 트랜잭션으로 커밋한다.
+- 자금 트랜잭션 실패 후 `FAILED`와 오류 코드는 별도 `REQUIRES_NEW` 트랜잭션으로 기록한다.
+- 예약 송금은 기존 경로를 유지하고 즉시 송금 멱등성 범위에서 제외했다.
+
+### 13.2 Frontend behavior
+
+- 일반 송금 입력이 유지되는 동안 같은 UUID를 재사용한다.
+- 네트워크 오류 후 같은 입력으로 다시 시도하면 같은 `Idempotency-Key`를 보낸다.
+- 입력 내용이 바뀌면 기존 키를 폐기하고 새 키를 생성한다.
+- 성공 응답 후 키를 폐기한다.
+- 일반 송금의 `transferDatetime`은 null로 보내고 예약 송금만 시각을 전달한다.
+
+### 13.3 Verification
+
+- PASS: 요청 해시의 이름·전화번호·금액 스케일 정규화 단위 테스트
+- PASS: 최초 INSERT 소유권, 완료 결과 반환, 다른 본문 충돌, 기존 실패 반환 단위 테스트
+- PASS: PostgreSQL에서 완료 요청 재전송 시 같은 `transferId` 반환
+- PASS: 동일 키 30건 동시 요청에서 거래 요청 1건, 잔액 변경 1회, 송금 원장 1건
+- PASS: 동일 키·다른 금액은 `IDEMPOTENCY_KEY_REUSED`
+- PASS: 실패 요청 재전송 시 이상 거래 검증과 자금 이동을 재실행하지 않음
+- PASS: 서로 다른 사용자는 같은 UUID 키를 독립적으로 사용
+- PASS: 기존 Advisory Lock 동시성, 예약 송금, 사용자, Redis Lua 탐지 회귀 테스트
+- PASS: `npm run build`
+
+### 13.4 Remaining risks
+
+- 서버가 요청 예약 커밋 후 자금 트랜잭션 시작 전에 종료되면 `REQUESTED` 상태가 남는다.
+- Step 2는 안전성을 우선해 해당 키를 자동 재실행하지 않는다.
+- 장시간 `REQUESTED`/`PROCESSING` 요청의 판정, lease, 운영 조회와 복구는 Step 5에서 구현한다.
+- 현재 프로젝트는 `ddl-auto=update`를 사용하므로 운영 배포 전 명시적 스키마 마이그레이션이 필요하다.

@@ -6,6 +6,7 @@ import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @Entity
@@ -36,6 +37,9 @@ public class WalletTransaction {
     @Column(precision = 19, scale = 4)
     private BigDecimal receivedAmount;
 
+    @Column(name = "transfer_id", unique = true)
+    private UUID transferId;
+
     @Column(length = 3)
     private String fromCurrency;
 
@@ -60,10 +64,18 @@ public class WalletTransaction {
     public WalletTransaction(User user, User counterpartyUser, BigDecimal amount, BigDecimal receivedAmount,
                              String fromCurrency, String toCurrency, WalletTransactionType transactionType,
                              LocalDateTime transactionTime) {
+        this(user, counterpartyUser, amount, receivedAmount, fromCurrency, toCurrency,
+                transactionType, transactionTime, null);
+    }
+
+    public WalletTransaction(User user, User counterpartyUser, BigDecimal amount, BigDecimal receivedAmount,
+                             String fromCurrency, String toCurrency, WalletTransactionType transactionType,
+                             LocalDateTime transactionTime, UUID transferId) {
         this.user = user;
         this.counterpartyUser = counterpartyUser;
         this.amount = amount;
         this.receivedAmount = receivedAmount;
+        this.transferId = transferId;
         this.fromCurrency = fromCurrency;
         this.toCurrency = toCurrency;
         this.transactionType = transactionType;

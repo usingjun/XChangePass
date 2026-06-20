@@ -10,6 +10,9 @@ import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectEvent;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudAmountNormalizer;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudTransactionType;
+import bumblebee.xchangepass.domain.wallet.transfer.dto.WalletTransferResponse;
+import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransfer;
+import bumblebee.xchangepass.domain.wallet.transfer.repository.WalletTransferRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.WalletPasswordResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
@@ -29,6 +32,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -43,6 +47,7 @@ public class WalletServiceImpl implements WalletService {
     private final FraudDetectionService fraudDetectionService;
     private final ExchangeService exchangeService;
     private final UserService userService;
+    private final WalletTransferRepository walletTransferRepository;
 
     @Transactional
     public void createWallet(User user, String walletPassword) {
@@ -100,6 +105,21 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public void transfer(Long senderId, WalletTransferRequest request) {
+        executeTransfer(null, senderId, request);
+    }
+
+    @Override
+    @Transactional
+    public WalletTransferResponse transfer(UUID transferId, Long senderId, WalletTransferRequest request) {
+        WalletTransfer transfer = walletTransferRepository.findById(transferId)
+                .orElseThrow(ErrorCode.TRANSACTION_PROCESSING_FAILED::commonException);
+        transfer.startProcessing();
+        executeTransfer(transferId, senderId, request);
+        transfer.complete();
+        return new WalletTransferResponse(transfer.getTransferId(), transfer.getStatus());
+    }
+
+    private void executeTransfer(UUID transferId, Long senderId, WalletTransferRequest request) {
         User receiver = userService.readUser(request.receiverName(), request.receiverPhoneNumber());
         Wallet fromWallet = findWalletByUserId(senderId);
         Wallet toWallet = findWalletByUserId(receiver.getUserId());
@@ -121,7 +141,9 @@ public class WalletServiceImpl implements WalletService {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
 
-        balanceService.transferBalance(fromBalance, toBalance, request.transferAmount(), receivedAmount);
+        balanceService.transferBalance(
+                fromBalance, toBalance, request.transferAmount(), receivedAmount, transferId
+        );
     }
 
     @Override

@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Currency;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -53,6 +54,14 @@ public class WalletTransactionService {
     public void saveTransferTransaction(Long senderWalletId, Long receiverWalletId,
                                         BigDecimal sentAmount, BigDecimal receivedAmount,
                                         Currency fromCurrency, Currency toCurrency) {
+        saveTransferTransaction(senderWalletId, receiverWalletId, sentAmount, receivedAmount,
+                fromCurrency, toCurrency, null);
+    }
+
+    @Transactional
+    public void saveTransferTransaction(Long senderWalletId, Long receiverWalletId,
+                                        BigDecimal sentAmount, BigDecimal receivedAmount,
+                                        Currency fromCurrency, Currency toCurrency, UUID transferId) {
         Wallet senderWallet = walletRepository.findById(senderWalletId)
                 .orElseThrow(ErrorCode.WALLET_NOT_FOUND::commonException);
         Wallet receiverWallet = walletRepository.findById(receiverWalletId)
@@ -66,7 +75,8 @@ public class WalletTransactionService {
                 currencyCode(fromCurrency),
                 currencyCode(toCurrency),
                 WalletTransactionType.TRANSFER,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                transferId
         ));
     }
 

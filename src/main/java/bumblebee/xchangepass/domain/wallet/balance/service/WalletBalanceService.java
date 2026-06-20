@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -139,6 +140,12 @@ public class WalletBalanceService {
     @Transactional
     public void transferBalance(WalletBalance fromBalance, WalletBalance toBalance,
                                 BigDecimal sentAmount, BigDecimal receivedAmount) {
+        transferBalance(fromBalance, toBalance, sentAmount, receivedAmount, null);
+    }
+
+    @Transactional
+    public void transferBalance(WalletBalance fromBalance, WalletBalance toBalance,
+                                BigDecimal sentAmount, BigDecimal receivedAmount, UUID transferId) {
         if (sentAmount.compareTo(fromBalance.getBalance()) > 0) {
             throw ErrorCode.BALANCE_NOT_AVAILABLE.commonException();
         }
@@ -154,7 +161,8 @@ public class WalletBalanceService {
                 sentAmount,
                 receivedAmount,
                 fromBalance.getCurrency(),
-                toBalance.getCurrency()
+                toBalance.getCurrency(),
+                transferId
         );
     }
 

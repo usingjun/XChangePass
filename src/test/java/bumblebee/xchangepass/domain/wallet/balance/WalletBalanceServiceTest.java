@@ -46,7 +46,7 @@ class WalletBalanceServiceTest {
         verify(repository).save(fromBalance);
         verify(repository).save(toBalance);
         verify(transactionService).saveTransferTransaction(
-                10L, 20L, sentAmount, receivedAmount, krw, usd
+                10L, 20L, sentAmount, receivedAmount, krw, usd, null
         );
     }
 

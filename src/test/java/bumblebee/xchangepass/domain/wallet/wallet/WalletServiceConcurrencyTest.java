@@ -421,7 +421,7 @@ class WalletServiceConcurrencyTest {
         ));
         doThrow(new IllegalStateException("ledger save failed"))
                 .when(walletTransactionService)
-                .saveTransferTransaction(anyLong(), anyLong(), any(), any(), any(), any());
+                .saveTransferTransaction(anyLong(), anyLong(), any(), any(), any(), any(), isNull());
 
         WalletTransferRequest request = new WalletTransferRequest(
                 receiver.getUserName().getValue(),

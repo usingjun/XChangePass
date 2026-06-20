@@ -8,6 +8,7 @@ import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.service.WalletBalanceService;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudAmountNormalizer;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
+import bumblebee.xchangepass.domain.wallet.transfer.repository.WalletTransferRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
@@ -42,7 +43,8 @@ class WalletServiceImplTest {
                 mock(FraudAmountNormalizer.class),
                 fraudDetectionService,
                 mock(ExchangeService.class),
-                userService
+                userService,
+                mock(WalletTransferRepository.class)
         );
 
         User receiver = mock(User.class);
@@ -71,7 +73,9 @@ class WalletServiceImplTest {
         var inOrder = inOrder(advisoryLock);
         inOrder.verify(advisoryLock).acquire(10L);
         inOrder.verify(advisoryLock).acquire(20L);
-        verify(balanceService).transferBalance(senderBalance, receiverBalance, BigDecimal.TEN, BigDecimal.TEN);
+        verify(balanceService).transferBalance(
+                senderBalance, receiverBalance, BigDecimal.TEN, BigDecimal.TEN, null
+        );
     }
 
     @Test
@@ -90,7 +94,8 @@ class WalletServiceImplTest {
                 normalizer,
                 mock(FraudDetectionService.class),
                 exchangeService,
-                userService
+                userService,
+                mock(WalletTransferRepository.class)
         );
 
         User receiver = mock(User.class);
@@ -120,7 +125,9 @@ class WalletServiceImplTest {
 
         walletService.transfer(1L, request);
 
-        verify(balanceService).transferBalance(senderBalance, receiverBalance, sentAmount, receivedAmount);
+        verify(balanceService).transferBalance(
+                senderBalance, receiverBalance, sentAmount, receivedAmount, null
+        );
         assertThat(sentAmount).isNotEqualByComparingTo(receivedAmount);
     }
 }

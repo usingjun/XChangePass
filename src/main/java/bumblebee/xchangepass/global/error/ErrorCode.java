@@ -51,6 +51,10 @@ public enum ErrorCode {
     UNAUTHORIZED_TRANSACTION_ACCESS(HttpStatus.UNAUTHORIZED, "T005", "당신의 환전 ID가 아닙니다."),
     SUSPICIOUS_TRANSACTION(HttpStatus.FORBIDDEN, "T006", "이상 거래가 감지되어 거래가 차단되었습니다."),
     FRAUD_DETECTION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "T007", "거래 안전성 검증이 지연되고 있습니다. 잠시 후 다시 시도해주세요."),
+    IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "T008", "동일한 멱등성 키가 다른 거래 요청에 사용되었습니다."),
+    TRANSACTION_IN_PROGRESS(HttpStatus.CONFLICT, "T009", "동일한 거래 요청이 처리 중입니다."),
+    INVALID_TRANSFER_REQUEST(HttpStatus.BAD_REQUEST, "T010", "즉시 송금 요청 형식이 올바르지 않습니다."),
+    TRANSACTION_PROCESSING_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "T011", "거래 처리 중 오류가 발생했습니다."),
 
     /*Card*/
     MOBILE_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C001","모바일 카드 발급에 실패했습니다."),
