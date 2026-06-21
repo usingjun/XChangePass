@@ -38,14 +38,6 @@ public class FraudPolicyProperties {
     @NotNull
     private LocalTime nightEnd = LocalTime.of(3, 30);
     @Min(1)
-    private int maxAttempts = 2;
-    @Min(0)
-    private long retryBackoffMillis = 50;
-    @Min(1)
-    private int circuitFailureThreshold = 3;
-    @Min(1)
-    private long circuitOpenMillis = 30000;
-    @Min(1)
     private int totalAmountScore = 50;
     @Min(1)
     private int frequencyScore = 40;

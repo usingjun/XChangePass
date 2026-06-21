@@ -35,7 +35,6 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-batch'             // Spring Batch 의존성
     implementation 'org.springframework.boot:spring-boot-starter-actuator'          // Spring 모니터링
     implementation 'org.springframework.boot:spring-boot-starter-aop'               // Spring AOP
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'          // Spring actuator
 
     // Spring Security (인증 및 인가 관련 보안 기능)
     implementation 'org.springframework.boot:spring-boot-starter-security'          // Spring Security 기본 설정 및 기능 제공
@@ -73,6 +72,7 @@ dependencies {
 
     // Prometheus
     implementation 'io.micrometer:micrometer-registry-prometheus'
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.3.0'
 
     // loki
     implementation 'net.logstash.logback:logstash-logback-encoder:7.4'

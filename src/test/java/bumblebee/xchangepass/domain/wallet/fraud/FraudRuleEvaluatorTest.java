@@ -3,11 +3,22 @@ package bumblebee.xchangepass.domain.wallet.fraud;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudEvaluationResult;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudReason;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudRuleEvaluator;
+import bumblebee.xchangepass.domain.wallet.fraud.config.FraudResilienceConfig;
+import bumblebee.xchangepass.global.error.ErrorCode;
+import bumblebee.xchangepass.global.exception.CommonException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryRegistry;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.dao.DataRetrievalFailureException;
+import org.springframework.core.env.Environment;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -19,6 +30,7 @@ import org.testcontainers.utility.DockerImageName;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
 @SpringBootTest
@@ -29,6 +41,18 @@ class FraudRuleEvaluatorTest {
 
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
+
+    @Autowired
+    private CircuitBreakerRegistry circuitBreakerRegistry;
+
+    @Autowired
+    private RetryRegistry retryRegistry;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
+
+    @Autowired
+    private Environment environment;
 
     @Container
     static PostgreSQLContainer postgresContainer = new PostgreSQLContainer("postgres:16")
@@ -42,8 +66,8 @@ class FraudRuleEvaluatorTest {
 
     @DynamicPropertySource
     static void overrideRedisProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.redis.host", redisContainer::getHost);
-        registry.add("spring.redis.port", () -> redisContainer.getMappedPort(6379));
+        registry.add("spring.data.redis.host", redisContainer::getHost);
+        registry.add("spring.data.redis.port", () -> redisContainer.getMappedPort(6379));
         registry.add("spring.datasource.url", postgresContainer::getJdbcUrl);
         registry.add("spring.datasource.username", postgresContainer::getUsername);
         registry.add("spring.datasource.password", postgresContainer::getPassword);
@@ -52,6 +76,7 @@ class FraudRuleEvaluatorTest {
     @BeforeEach
     void clearRedis() {
         redisTemplate.delete(redisTemplate.keys("fraud:test:*"));
+        circuitBreakerRegistry.circuitBreaker(FraudResilienceConfig.INSTANCE_NAME).reset();
     }
 
 
@@ -129,5 +154,49 @@ class FraudRuleEvaluatorTest {
                 FraudReason.REPEATED_AMOUNT
         );
         assertThat(result.riskScore()).isGreaterThan(0);
+    }
+
+    @Test
+    void exposesCircuitStateCallSlowBlockedAndTransitionMetrics() {
+        fraudRuleEvaluator.evaluate("fraud:test:metrics", BigDecimal.TEN);
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(FraudResilienceConfig.INSTANCE_NAME);
+        circuitBreaker.transitionToOpenState();
+
+        assertThatThrownBy(() -> fraudRuleEvaluator.evaluate("fraud:test:blocked", BigDecimal.TEN))
+                .isInstanceOf(CommonException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FRAUD_DETECTION_UNAVAILABLE);
+
+        assertThat(meterRegistry.getMeters())
+                .extracting(meter -> meter.getId().getName())
+                .contains(
+                        "resilience4j.circuitbreaker.state",
+                        "resilience4j.circuitbreaker.calls",
+                        "resilience4j.circuitbreaker.slow.calls",
+                        "resilience4j.circuitbreaker.not.permitted.calls",
+                        "fraud.circuitbreaker.transitions"
+                );
+        assertThat(environment.getProperty("management.endpoints.web.exposure.include"))
+                .contains("prometheus", "circuitbreakers", "circuitbreakerevents");
+    }
+
+    @Test
+    void bindsApprovedCircuitRetryAndExceptionClassificationConfiguration() {
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(FraudResilienceConfig.INSTANCE_NAME);
+        Retry retry = retryRegistry.retry(FraudResilienceConfig.INSTANCE_NAME);
+
+        assertThat(circuitBreaker.getCircuitBreakerConfig().getSlidingWindowSize()).isEqualTo(10);
+        assertThat(circuitBreaker.getCircuitBreakerConfig().getMinimumNumberOfCalls()).isEqualTo(5);
+        assertThat(circuitBreaker.getCircuitBreakerConfig().getFailureRateThreshold()).isEqualTo(50);
+        assertThat(circuitBreaker.getCircuitBreakerConfig().getPermittedNumberOfCallsInHalfOpenState()).isEqualTo(2);
+        assertThat(retry.getRetryConfig().getMaxAttempts()).isEqualTo(2);
+        assertThat(circuitBreaker.getCircuitBreakerConfig().getRecordExceptionPredicate()
+                .test(new RedisConnectionFailureException("unavailable"))).isTrue();
+        assertThat(circuitBreaker.getCircuitBreakerConfig().getIgnoreExceptionPredicate()
+                .test(new DataRetrievalFailureException("invalid Lua result"))).isTrue();
+        assertThat(retry.getRetryConfig().getExceptionPredicate()
+                .test(new RedisConnectionFailureException("unavailable"))).isTrue();
+        assertThat(retry.getRetryConfig().getExceptionPredicate()
+                .test(new DataRetrievalFailureException("invalid Lua result"))).isFalse();
     }
 }

@@ -38,7 +38,7 @@ XChangePass를 금융권 포트폴리오의 첫 프로젝트로 제시할 수 �
 | 1 | 지갑 거래 동시성 제어 | Approved | Checked | Approved 2026-06-19 | Completed | Completed 2026-06-20 |
 | 2 | 거래 요청 멱등성 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
 | 3 | 거래내역 통합조회 최적화 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
-| 4 | Redis 이상 거래 장애 대응 | Drafted | Checked | Pending | Blocked by approval | Pending |
+| 4 | Redis 이상 거래 장애 대응 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
 | 5 | 거래 상태 및 실패 추적 | Drafted | Checked | Pending | Blocked by approval | Pending |
 
 ## 5. Step 1 - Transaction-scoped Wallet Concurrency Control
@@ -915,3 +915,406 @@ Controller
   다른 사용자의 거래 접근에는 사용할 수 없다.
 - `/v2/transaction` 응답 형태가 변경되므로 이 API를 사용하는 외부 클라이언트는 페이지 응답으로 맞춰야 한다.
 - 프로젝트에 Flyway/Liquibase가 없으므로 운영 인덱스 SQL의 배포 실행은 현재 수동 절차다.
+
+## 16. Step 4 Implementation Approval Proposal
+
+### 16.1 Current code flow and problems
+
+현재 이상 거래 검사는 다음 순서로 동작한다.
+
+```text
+WalletService/CardService
+  -> FraudDetectionService.verify
+  -> FraudRuleEvaluator.evaluate
+       -> FraudRedisCircuitBreaker.checkAllowed
+       -> Redis Lua execute
+       -> 실패하면 recordFailure + 50ms sleep
+       -> 최대 2회 반복
+       -> 성공하면 recordSuccess
+  -> Lua 결과가 의심이면 SUSPICIOUS_TRANSACTION
+```
+
+현재 `FraudRedisCircuitBreaker`는 다음 두 필드만 서버 메모리에 보관한다.
+
+```java
+private int consecutiveFailures;
+private long openUntilMillis;
+```
+
+이 구조에는 다음 문제가 있다.
+
+- 한 거래의 Redis 호출을 두 번 재시도하면 `recordFailure()`도 두 번 호출돼 CircuitBreaker 실패 두 건으로 센다.
+- 3회 실패 기준에서 첫 거래가 2회를 차지하고 다음 거래의 첫 Redis 실패가 Circuit을 열 수 있다.
+- Circuit이 Retry 도중 열려도 `checkAllowed()`는 Retry 시작 전에 한 번만 실행돼 남은 Redis 재시도가 계속될 수 있다.
+- `OPEN` 시간이 지나면 시험 요청 수를 제한하는 명시적 `HALF_OPEN` 상태 없이 모든 요청이 다시 Redis로 갈 수 있다.
+- 연속 실패 횟수만 보므로 Sliding Window 실패율과 느린 호출을 평가하지 못한다.
+- 상태, 성공·실패·느린 호출·차단 호출·상태 전환 메트릭이 없다.
+- 모든 `DataAccessException`을 같은 장애로 처리해 연결 장애, 타임아웃, Lua 결과 오류를 구분하지 않는다.
+
+기존 Fail-Closed의 실행 위치는 올바르다. 지갑 송금과 카드 결제는 이상 거래 검사를 잔액 변경 전에
+실행하므로 `FRAUD_DETECTION_UNAVAILABLE`이 발생하면 자금 변경 코드에 진입하지 않는다.
+
+### 16.2 Dependency decision
+
+- Java 17과 Spring Boot 3.4.2를 유지한다.
+- `io.github.resilience4j:resilience4j-spring-boot3:2.3.0`을 추가한다.
+- Resilience4j 3은 Java 21을 요구하므로 이번 범위에 사용하지 않는다.
+- 기존 `spring-boot-starter-aop`, Actuator, Micrometer Prometheus 의존성은 유지한다.
+- 중복 선언된 Actuator 의존성 한 줄은 Step 4 범위에서 정리한다.
+
+### 16.3 Class ownership after refactoring
+
+Remove:
+
+- `FraudRedisCircuitBreaker`: 직접 관리한 `consecutiveFailures`, `openUntilMillis` 제거
+- `FraudRuleEvaluator`의 수동 for-loop Retry와 `Thread.sleep` 제거
+- `FraudPolicyProperties`의 `circuitFailureThreshold`, `circuitOpenMillis` 제거
+
+Add:
+
+1. `FraudRedisLuaExecutor`
+
+```text
+책임: RedisTemplate으로 기존 Lua Script 한 번 실행
+입력: Redis key, amount, timestamp, recordId, 정책 값
+출력: Lua 결과 문자열
+금지: Retry, Circuit 상태 전환, 업무 예외 판단
+```
+
+2. `FraudRedisCommand`
+
+```text
+한 거래의 Lua 인자를 보관하는 불변 값
+recordId를 Retry 밖에서 한 번 생성해 모든 재시도에서 재사용
+```
+
+3. `FraudRedisResilienceExecutor`
+
+```text
+책임: Resilience4j Retry와 CircuitBreaker 함수형 API 조합
+CallNotPermittedException과 최종 기술 실패를 FRAUD_DETECTION_UNAVAILABLE로 변환
+```
+
+4. `FraudRedisFailureClassifier`
+
+```text
+예외 원인 체인을 검사해 Redis 연결 오류와 명령 타임아웃인지 판정
+Retry와 CircuitBreaker가 같은 판정 규칙을 공유
+```
+
+5. `FraudCircuitBreakerEventListener`
+
+```text
+상태 전환 이벤트를 구조화 로그와 Micrometer Counter로 기록
+CLOSED -> OPEN -> HALF_OPEN -> CLOSED/OPEN 추적
+```
+
+Changed:
+
+- `FraudRuleEvaluator`: 명령 생성, Resilience Executor 호출, Lua 결과를 도메인 결과로 변환
+- `FraudDetectionService`: 기존 의심 거래 알림과 업무 예외 변환 유지
+- `FraudPolicyProperties`: 탐지 규칙과 위험 점수만 유지
+- 설정 파일: Resilience4j CircuitBreaker/Retry와 Actuator 노출 설정 추가
+
+Not changed:
+
+- `lua/fraud_check.lua`
+- 누적 금액, 빈도, 동일 금액 반복, 심야 거래 규칙과 위험 점수 계산
+- Redis key 구조와 한 요청의 `recordId` 재사용
+- 지갑 Advisory Lock, PostgreSQL 자금 트랜잭션, Step 2 멱등성
+- 이상 거래 검사를 잔액 변경 전에 동기로 실행하는 순서
+
+### 16.4 Exact invocation order
+
+함수형 API로 다음 순서를 직접 구성한다. Spring AOP 어노테이션은 사용하지 않으므로 self-invocation 문제도
+발생하지 않는다.
+
+```java
+Supplier<String> redisCall = () -> luaExecutor.execute(command);
+Supplier<String> retried = Retry.decorateSupplier(retry, redisCall);
+Supplier<String> guarded = CircuitBreaker.decorateSupplier(circuitBreaker, retried);
+return guarded.get();
+```
+
+실제 실행 순서는 다음과 같다.
+
+```text
+CircuitBreaker 권한 확인
+  -> CLOSED/HALF_OPEN 허용이면 Retry 시작
+       -> Redis Lua 1차 호출
+       -> 연결/타임아웃이면 50ms 대기
+       -> Redis Lua 2차 호출
+  -> Retry의 최종 성공/실패 한 건만 CircuitBreaker에 기록
+```
+
+- 첫 Redis 호출 실패 후 두 번째가 성공하면 CircuitBreaker 성공 1건이다.
+- 두 Redis 호출이 모두 실패하면 CircuitBreaker 실패 1건이다.
+- `OPEN`이면 Retry에 들어가기 전에 `CallNotPermittedException`이 발생해 Redis를 한 번도 호출하지 않는다.
+- `HALF_OPEN`에서는 설정한 시험 요청 수만 Retry 묶음에 진입할 수 있다.
+
+### 16.5 Exception classification
+
+Retry 및 CircuitBreaker 실패율에 포함:
+
+- Spring Data Redis `RedisConnectionFailureException`
+- Spring `QueryTimeoutException`
+- Lettuce `RedisCommandTimeoutException`
+- 위 예외가 `DataAccessException` 또는 `RedisSystemException` 원인 체인 안에 있는 경우
+
+Retry하지 않고 CircuitBreaker 실패율에도 포함하지 않지만 Fail-Closed 처리:
+
+- Lua가 null 또는 해석 불가능한 결과를 반환하는 경우
+- 예상하지 못한 Redis/Lua 기술 예외
+- Retry 대기 중 스레드가 중단된 경우. interrupt 상태를 복구한 뒤 거래를 차단한다.
+
+업무 결과:
+
+- Lua가 반환한 의심 사유는 예외가 아니라 `FraudEvaluationResult.suspicious`로 보호 구간을 정상 종료한다.
+- `FraudDetectionService`가 보호 구간 밖에서 `SUSPICIOUS_TRANSACTION`을 발생시킨다.
+- 따라서 의심 거래는 CircuitBreaker 성공 호출로 기록되며 실패율에는 포함되지 않는다.
+
+최종 변환:
+
+- `CallNotPermittedException` -> `FRAUD_DETECTION_UNAVAILABLE`
+- Redis 연결/타임아웃 Retry 최종 실패 -> `FRAUD_DETECTION_UNAVAILABLE`
+- 그 밖의 탐지 불가능 기술 오류 -> `FRAUD_DETECTION_UNAVAILABLE`
+
+### 16.6 Configuration contract
+
+Resilience4j 표준 설정의 `fraudRedis` 인스턴스를 사용한다.
+
+```yaml
+resilience4j:
+  circuitbreaker:
+    instances:
+      fraudRedis:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 200ms
+        slow-call-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        register-health-indicator: true
+        event-consumer-buffer-size: 100
+  retry:
+    instances:
+      fraudRedis:
+        max-attempts: 2
+        wait-duration: 50ms
+        event-consumer-buffer-size: 100
+```
+
+각 값은 환경 변수로 덮어쓸 수 있게 한다. Retry의 `max-attempts=2`는 최초 호출을 포함한 총 두 번이다.
+예외 판정은 YAML 클래스명 나열 대신 `CircuitBreakerConfigCustomizer`와 `RetryConfigCustomizer`가
+`FraudRedisFailureClassifier`를 공통 사용하도록 구성한다.
+
+테스트에서는 동일 구성 이름을 사용하되 작은 Sliding Window와 짧은 Open 유지 시간을 적용한다.
+
+### 16.7 State behavior
+
+```text
+CLOSED
+  -> 최소 호출 수 충족 후 실패율 또는 느린 호출률이 임계치 이상
+  -> OPEN
+
+OPEN
+  -> 모든 거래를 즉시 FRAUD_DETECTION_UNAVAILABLE로 차단
+  -> Open 유지 시간 경과
+  -> HALF_OPEN
+
+HALF_OPEN
+  -> 최대 2개의 시험 거래만 허용
+  -> 시험 호출 성공률 충족: CLOSED
+  -> 시험 호출 실패: OPEN
+```
+
+CircuitBreaker는 애플리케이션 서버 인스턴스별 메모리 상태다. 서버가 3대면 각 서버가 서로 다른
+`CLOSED/OPEN/HALF_OPEN` 상태와 Sliding Window를 가진다. Redis 장애 자체는 모든 인스턴스에서 발생하므로
+각 인스턴스가 독립적으로 열리지만 상태를 서로 공유하지 않는다.
+
+### 16.8 Metrics and Actuator
+
+Actuator 노출 대상:
+
+- `/actuator/health`: `fraudRedis` 상태 포함
+- `/actuator/metrics/resilience4j.circuitbreaker.state`: 현재 상태
+- `/actuator/metrics/resilience4j.circuitbreaker.calls`: 성공·실패·느린 호출
+- `/actuator/metrics/resilience4j.circuitbreaker.not.permitted.calls`: 차단 호출
+- `/actuator/circuitbreakers`: 등록된 CircuitBreaker와 상태
+- `/actuator/circuitbreakerevents`: 상태 전환 및 호출 이벤트
+- `/actuator/prometheus`: Prometheus 형식 메트릭
+
+상태 전환은 다음 두 경로에 남긴다.
+
+- Resilience4j 이벤트 버퍼와 `/actuator/circuitbreakerevents`
+- `fraud_circuitbreaker_transitions_total{from,to}` Micrometer Counter 및 구조화 로그
+
+운영 문서에는 Resilience4j가 Redis 장애 전파를 제한하고 복구를 시험하는 장치일 뿐 금융 정합성을 직접
+보장하지 않는다고 명시한다. 금융 정합성은 PostgreSQL 트랜잭션, Advisory Lock, 거래내역 저장,
+그리고 탐지 실패 시 잔액 변경 전에 차단하는 Fail-Closed 정책이 담당한다.
+
+### 16.9 Expected file scope
+
+Remove:
+
+- `src/main/java/.../fraud/service/FraudRedisCircuitBreaker.java`
+
+New:
+
+- `FraudRedisCommand`
+- `FraudRedisLuaExecutor`
+- `FraudRedisResilienceExecutor`
+- `FraudRedisFailureClassifier`
+- Resilience4j 설정 Customizer
+- CircuitBreaker 상태 전환 이벤트·메트릭 Listener
+- CircuitBreaker/Retry/Metric 자동화 테스트
+
+Changed:
+
+- `build.gradle`
+- `FraudRuleEvaluator`
+- `FraudPolicyProperties`
+- 애플리케이션 및 테스트 설정
+- 기존 Fraud 단위·Redis Lua·지갑·카드 Fail-Closed 테스트
+- 이 금융 거래 고도화 문서와 운영 문서
+
+기존 사용자 변경과 관계없는 인프라 데이터, KMS, 거래내역 조회 코드는 수정하지 않는다.
+
+### 16.10 Required automated tests
+
+- Redis 첫 호출 연결 실패 후 Retry 성공, Redis 실제 호출 2회, Circuit 성공 1건
+- Retry 두 번 모두 실패하면 `FRAUD_DETECTION_UNAVAILABLE`, Circuit 실패 1건
+- 최소 호출 수 이후 실패율 임계치 초과 시 `OPEN`
+- `OPEN`에서 Redis Lua Executor 호출 0회 및 즉시 차단
+- Open 유지 시간 이후 `HALF_OPEN`
+- `HALF_OPEN`에서 설정된 수의 시험 요청만 허용
+- Redis 복구 시험 성공 시 `CLOSED`
+- `HALF_OPEN` 시험 요청 실패 시 다시 `OPEN`
+- 의심 거래가 `SUSPICIOUS_TRANSACTION`으로 차단되지만 Circuit 실패율은 증가하지 않음
+- 느린 호출 수와 차단 호출 수 메트릭
+- 상태 전환 Counter와 이벤트
+- Redis 장애 시 송금·카드 결제 잔액 변경 0건
+- 기존 누적 금액·거래 빈도·동일 금액 반복·심야 거래 Lua 테스트 유지
+- 관련 테스트, `git diff --check`, Actuator/Prometheus 지표 확인
+
+### 16.11 Approval gate
+
+구현 전 다음 사항을 승인받는다.
+
+- Resilience4j Spring Boot 3 `2.3.0` 의존성 추가
+- 수동 CircuitBreaker와 수동 Retry 제거
+- 함수형 조합 `CircuitBreaker(Retry(Redis Lua))` 적용
+- 연결 오류·타임아웃만 Retry와 Circuit 실패율에 포함
+- 기본값: Window 10, 최소 5, 실패율 50%, 느린 호출 200ms/50%, Open 30초, Half-Open 2건
+- Retry 총 2회, 고정 50ms 대기
+- Actuator endpoint, Micrometer 상태 전환 Counter와 이벤트 로그 추가
+- Circuit 상태가 서버 인스턴스별이며 금융 정합성 보장 수단이 아니라는 운영 문서 명시
+
+위 의존성, 실행 순서, 예외 분류, 상태 기본값과 관측 범위를 2026-06-20 승인받아 구현했다.
+
+## 17. Step 4 Change and Verification Log
+
+### 17.1 Removed manual state and retry
+
+- `FraudRedisCircuitBreaker`를 삭제했다.
+- `consecutiveFailures`, `openUntilMillis`, `synchronized` 상태 관리를 제거했다.
+- `FraudRuleEvaluator`의 for-loop Retry와 `Thread.sleep`을 제거했다.
+- `FraudPolicyProperties`에서 Retry와 Circuit 전용 필드를 제거하고 탐지 정책만 남겼다.
+- `build.gradle`에 Java 17/Spring Boot 3용 `resilience4j-spring-boot3:2.3.0`을 추가했다.
+- 중복된 Spring Boot Actuator 의존성 한 줄을 제거했다.
+
+### 17.2 Implemented class flow
+
+```text
+FraudDetectionService
+  -> FraudRuleEvaluator
+       -> FraudRedisCommand 생성(recordId 한 번 생성)
+       -> FraudRedisResilienceExecutor
+            -> CircuitBreaker
+                 -> Retry
+                      -> FraudRedisLuaExecutor
+                           -> 기존 fraud_check.lua
+       -> Lua 코드를 FraudEvaluationResult로 변환
+  -> suspicious이면 보호 구간 밖에서 SUSPICIOUS_TRANSACTION
+```
+
+- `FraudRedisCommand`: 한 거래의 Redis key, 금액, 시각, 심야 여부, recordId를 보관한다.
+- `FraudRedisLuaExecutor`: 기존 Lua Script를 Redis에 정확히 한 번 실행한다.
+- `FraudRedisResilienceExecutor`: CircuitBreaker 바깥, Retry 안쪽 순서로 함수형 API를 조합한다.
+- `FraudRedisFailureClassifier`: 원인 체인을 순회해 연결 실패와 명령 타임아웃만 판정한다.
+- `FraudResilienceConfig`: Retry와 CircuitBreaker가 같은 예외 판정 규칙을 사용하게 한다.
+- `FraudCircuitBreakerEventListener`: 상태 전환 로그와 Micrometer Counter를 기록한다.
+
+### 17.3 Final result accounting
+
+- Redis 첫 호출 실패 후 Retry 성공: Redis 2회, Circuit 성공 1건
+- Redis Retry 최종 실패: Redis 2회, Circuit 실패 1건
+- `OPEN`에서 차단: Redis 0회, not-permitted 1건
+- 의심 거래 탐지: Redis 정상 결과이므로 Circuit 성공 1건, 실패 0건
+- null/잘못된 Lua 결과: Retry 0회, Circuit 실패율 미포함, 거래는 Fail-Closed
+
+CircuitBreaker가 Retry 전체 실행 시간을 감싸므로 느린 호출도 개별 Redis 시도가 아니라 한 거래의 최종
+탐지 실행 시간을 기준으로 측정한다.
+
+### 17.4 Configuration and override
+
+버전 관리되는 `src/main/resources/config/application.properties`에 다음 기본값을 적용했다.
+
+- Count-based Sliding Window 10
+- 최소 호출 5
+- 실패율 50%
+- 느린 호출 200ms, 느린 호출률 50%
+- Open 30초
+- Half-Open 시험 거래 2건
+- Open에서 Half-Open 자동 전환
+- Retry 총 2회, 고정 50ms
+
+모든 주요 값은 `FRAUD_CB_*`, `FRAUD_RETRY_*` 환경 변수로 덮어쓸 수 있다.
+
+### 17.5 Metrics and events
+
+- PASS: `resilience4j.circuitbreaker.state`
+- PASS: `resilience4j.circuitbreaker.calls`
+- PASS: `resilience4j.circuitbreaker.slow.calls`
+- PASS: `resilience4j.circuitbreaker.not.permitted.calls`
+- PASS: `fraud.circuitbreaker.transitions{from,to}`
+- PASS: Prometheus, circuitbreakers, circuitbreakerevents endpoint 노출 설정
+- PASS: Spring 설정에서 Window 10, 최소 5, 실패율 50%, Half-Open 2, Retry 2가 바인딩됨
+- PASS: Spring Customizer에서 연결 실패는 Retry/Circuit 대상, Lua 결과 오류는 제외됨
+
+### 17.6 State verification
+
+- PASS: 최소 호출 수와 실패율 충족 후 `CLOSED -> OPEN`
+- PASS: `OPEN` 상태에서 실제 Redis Executor 미호출
+- PASS: Open 유지 시간 후 자동 `HALF_OPEN`
+- PASS: Half-Open 동시 요청 3건 중 설정된 2건만 Redis 진입
+- PASS: Half-Open 시험 요청 모두 성공하면 `CLOSED`
+- PASS: Half-Open 시험 요청 실패하면 다시 `OPEN`
+- PASS: 상태 전환 Counter와 구조화 로그
+
+Half-Open 2건은 각각 Retry 2회를 가질 수 있으므로 Redis 실제 호출은 최대 4회다. 한 시험 거래의 첫 호출이
+실패하고 두 번째가 성공하면 그 시험 거래는 성공 한 건으로 계산한다.
+
+### 17.7 Fail-Closed and regression verification
+
+- PASS: Redis 연결 실패 Retry 최종 실패를 `FRAUD_DETECTION_UNAVAILABLE`로 변환
+- PASS: 의심 거래를 `SUSPICIOUS_TRANSACTION`으로 차단하고 Circuit 실패율에서 제외
+- PASS: 지갑 송금 탐지 불가 30건에서 송·수신 잔액 변경 0건
+- PASS: 카드 결제 탐지 불가 시 잔액 Lock, 출금, 카드 원장 호출 0건
+- PASS: 누적 금액, 거래 빈도, 동일 금액 반복, 복수 사유와 위험 점수 Redis Lua 회귀 테스트
+- PASS: Step 1 Advisory Lock, Step 2 멱등성 선별 회귀 테스트
+- 전체 테스트 106개 중 7개는 기존 KMS 미기동으로 `AES 키 암호화에 실패했습니다`가 발생했다.
+  이번 Resilience4j 변경과 무관한 기존 카드 관리·로그인 테스트다.
+
+### 17.8 Operational boundaries
+
+- CircuitBreaker 상태와 Sliding Window는 서버 인스턴스별 메모리에 존재하며 서버 간 공유되지 않는다.
+- Resilience4j는 Redis 장애 중 불필요한 호출을 줄이고 제한된 복구 시험을 수행한다.
+- Resilience4j는 잔액 정합성이나 거래 원자성을 보장하지 않는다.
+- 금융 정합성은 PostgreSQL 트랜잭션, Advisory Lock, 잔액과 원장 동시 저장이 담당한다.
+- Redis 장애 시 잔액 변경 전에 예외를 발생시키는 Fail-Closed 순서가 거래 차단을 담당한다.
+- CircuitBreaker Health Indicator를 일반 liveness 재시작 조건으로 직접 사용하면 공통 Redis 장애 때 모든
+  인스턴스가 동시에 재시작될 수 있다. liveness와 Redis 의존 상태를 분리해서 운영해야 한다.
