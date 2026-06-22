@@ -57,6 +57,7 @@ public enum ErrorCode {
     TRANSACTION_PROCESSING_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "T011", "거래 처리 중 오류가 발생했습니다."),
     INVALID_TRANSACTION_CURSOR(HttpStatus.BAD_REQUEST, "T012", "거래내역 조회 커서가 올바르지 않습니다."),
     INVALID_TRANSACTION_PAGE_SIZE(HttpStatus.BAD_REQUEST, "T013", "거래내역 조회 크기는 1개 이상 100개 이하여야 합니다."),
+    TRANSACTION_STALE(HttpStatus.CONFLICT, "T014", "거래 처리 시간이 초과되어 종료되었습니다. 새 요청으로 다시 시도해주세요."),
 
     /*Card*/
     MOBILE_CARD_GENERATION_FAILED(HttpStatus.BAD_REQUEST,"C001","모바일 카드 발급에 실패했습니다."),

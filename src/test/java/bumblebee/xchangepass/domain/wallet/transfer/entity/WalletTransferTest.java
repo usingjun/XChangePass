@@ -59,6 +59,25 @@ class WalletTransferTest {
         )).isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void doesNotOverwriteAnExistingFailure() {
+        WalletTransfer transfer = transfer();
+        transfer.startValidating();
+        transfer.fail(
+                ErrorCode.TRANSACTION_STALE,
+                WalletTransferFailureStage.RECOVERY_TIMEOUT,
+                true
+        );
+
+        assertThatThrownBy(() -> transfer.fail(
+                ErrorCode.TRANSACTION_PROCESSING_FAILED,
+                WalletTransferFailureStage.UNKNOWN,
+                false
+        )).isInstanceOf(IllegalStateException.class);
+        assertThat(transfer.getFailureCode()).isEqualTo(ErrorCode.TRANSACTION_STALE.name());
+        assertThat(transfer.getFailureStage()).isEqualTo(WalletTransferFailureStage.RECOVERY_TIMEOUT);
+    }
+
     private WalletTransfer transfer() {
         return new WalletTransfer(UUID.randomUUID(), 1L, UUID.randomUUID(), "a".repeat(64));
     }

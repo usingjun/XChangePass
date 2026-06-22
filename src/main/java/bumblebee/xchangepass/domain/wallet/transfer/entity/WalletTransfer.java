@@ -112,8 +112,8 @@ public class WalletTransfer {
     }
 
     public void fail(ErrorCode errorCode, WalletTransferFailureStage stage, boolean retryable) {
-        if (status == WalletTransferStatus.COMPLETED) {
-            throw new IllegalStateException("A completed transfer cannot be marked as failed");
+        if (status == WalletTransferStatus.COMPLETED || status == WalletTransferStatus.FAILED) {
+            throw new IllegalStateException("A terminal transfer cannot be marked as failed again");
         }
         status = WalletTransferStatus.FAILED;
         failureCode = errorCode.name();

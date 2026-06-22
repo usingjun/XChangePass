@@ -31,7 +31,7 @@ public class WalletTransferOperationsService {
     private final WalletTransactionRepository transactionRepository;
     private final MeterRegistry meterRegistry;
 
-    @Value("${wallet.transfer.stale-threshold-minutes:5}")
+    @Value("${wallet.transfer.recovery.stale-threshold-minutes:5}")
     private long staleThresholdMinutes;
 
     @Transactional(readOnly = true)

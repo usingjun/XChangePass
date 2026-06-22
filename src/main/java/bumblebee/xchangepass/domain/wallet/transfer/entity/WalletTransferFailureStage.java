@@ -6,5 +6,6 @@ public enum WalletTransferFailureStage {
     LOCK_ACQUISITION,
     BALANCE_VALIDATION,
     FUNDS_AND_LEDGER_TRANSACTION,
+    RECOVERY_TIMEOUT,
     UNKNOWN
 }

@@ -40,6 +40,7 @@ XChangePass를 금융권 포트폴리오의 첫 프로젝트로 제시할 수 �
 | 3 | 거래내역 통합조회 최적화 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
 | 4 | Redis 이상 거래 장애 대응 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
 | 5 | 거래 상태 및 실패 추적 | Approved | Rechecked 2026-06-21 | Approved 2026-06-21 | Completed | Completed (targeted); full suite has existing KMS failures |
+| 6 | 안전한 stale 종료 및 운영 예외 대기열 | Approved | Checked 2026-06-22 | Approved 2026-06-22 | Completed | Completed (targeted); full suite has existing KMS failures |
 
 ## 5. Step 1 - Transaction-scoped Wallet Concurrency Control
 
@@ -1759,3 +1760,337 @@ GET /api/v1/wallet/transfers/{transferId}
 - `UserLoginScenarioTest`: 4건
 
 Step 5 관련 테스트와 기존 Step 1~4 선별 회귀 테스트는 모두 통과했다.
+
+## 20. Final Hardening - Safe Stale Recovery and Operations Exception Queue
+
+### 20.1 Goal and boundary
+
+마지막 고도화는 오래 멈춘 거래를 모두 다시 실행하는 기능이 아니다. 결과가 확실한 거래만 자동으로
+종료하고, 자금 처리 여부가 모호한 거래는 영속적인 운영 예외 건으로 등록한다.
+
+```text
+확실하게 자금 처리 전인 stale 거래
+→ 조건부 FAILED 전환
+
+자금 처리 단계에 진입했거나 상태·원장이 불일치하는 거래
+→ 자동 재실행·잔액 수정 금지
+→ 운영 예외 대기열 등록
+```
+
+기존 원칙을 유지한다.
+
+- 동일 멱등성 키를 자동 재실행하지 않는다.
+- 잔액, 원장, `COMPLETED`의 PostgreSQL 단일 트랜잭션을 변경하지 않는다.
+- Redis, Resilience4j, Advisory Lock의 책임을 변경하지 않는다.
+- 자동 복구기가 금융 정합성을 보장한다고 표현하지 않는다.
+
+### 20.2 State decision matrix
+
+기본 stale 기준은 기존 설정과 동일하게 5분이며 설정으로 변경할 수 있다.
+
+| Transaction state | Ledger count | Automated action |
+| --- | ---: | --- |
+| `REQUESTED`, `VALIDATING` | 0 | DB 조건을 다시 확인한 후 `FAILED/TRANSACTION_STALE` 전환 |
+| `REQUESTED`, `VALIDATING` | 1 이상 | 상태·원장 불일치 예외 건 생성, 거래 변경 금지 |
+| `PROCESSING` | 0 | 처리 결과가 모호하므로 예외 건 생성, 거래 변경 금지 |
+| `PROCESSING` | 1 이상 | 심각한 상태·원장 불일치 예외 건 생성, 거래 변경 금지 |
+| `COMPLETED` | 1 | 정상, 조치 없음 |
+| `COMPLETED` | 0 또는 2 이상 | 심각한 원장 불일치 예외 건 생성, 거래 변경 금지 |
+| `FAILED` | 0 | 정상, 조치 없음 |
+| `FAILED` | 1 이상 | 심각한 원장 불일치 예외 건 생성, 거래 변경 금지 |
+
+`PROCESSING + 원장 0건`을 자동 실패로 바꾸지 않는 이유는 기존 자금 트랜잭션이 아직 Advisory Lock을
+기다리거나 커밋 중일 가능성을 외부 스캐너가 단순 시각만으로 확정할 수 없기 때문이다.
+
+### 20.3 Safe conditional stale finalization
+
+`REQUESTED/VALIDATING` 자동 종료는 엔티티를 읽은 뒤 일반 `save()`로 처리하지 않는다. 다음 조건을
+하나의 DB 조건부 갱신으로 다시 검사한다.
+
+```sql
+UPDATE wallet_transfer_request
+SET status = 'FAILED',
+    failure_code = 'TRANSACTION_STALE',
+    failure_stage = 'RECOVERY_TIMEOUT',
+    retryable = true,
+    failed_at = now(),
+    updated_at = now(),
+    version = version + 1
+WHERE transfer_id = :transferId
+  AND status = :observedStatus
+  AND version = :observedVersion
+  AND updated_at < :cutoff
+  AND status IN ('REQUESTED', 'VALIDATING')
+  AND NOT EXISTS (
+      SELECT 1 FROM wallet_transaction
+      WHERE transfer_id = :transferId
+  );
+```
+
+갱신 결과가 1건이면 자동 종료 성공, 0건이면 원래 요청이나 다른 서버가 먼저 상태를 변경한 것이므로
+아무 작업도 하지 않고 다음 주기에 다시 판정한다.
+
+이 방식의 효과:
+
+- 복구기가 읽은 뒤 원래 요청이 진행되면 status/version 조건이 달라져 복구 갱신이 실패한다.
+- 복구기가 먼저 실패 처리하면 원래 요청의 다음 상태 전이가 실패해 자금 처리로 진입하지 못한다.
+- 여러 서버의 복구 스케줄러가 동시에 실행돼도 한 서버만 1건 갱신한다.
+- 자동 종료 후 같은 멱등성 키는 기존 `FAILED` 오류를 반환하고 송금을 다시 실행하지 않는다.
+
+`TRANSACTION_STALE` 오류와 `RECOVERY_TIMEOUT` 실패 단계를 추가한다. `retryable=true`는 새 멱등성 키로
+새 요청을 판단할 수 있다는 뜻이며 기존 요청의 자동 재실행을 의미하지 않는다.
+
+### 20.4 Persistent operations exception queue
+
+메모리 로그만으로는 재시작 후 예외가 사라지므로 `wallet_transfer_recovery_case` 테이블을 추가한다.
+
+필드:
+
+| Field | Purpose |
+| --- | --- |
+| `caseId` | 운영 예외 식별자 |
+| `transferId` | 대상 송금 ID, 활성 예외 기준 unique |
+| `caseType` | `AMBIGUOUS_PROCESSING`, `LEDGER_MISMATCH` |
+| `severity` | `WARNING`, `CRITICAL` |
+| `observedTransferStatus` | 탐지 당시 거래 상태 |
+| `observedTransferVersion` | 탐지 당시 version |
+| `observedLedgerCount` | 탐지 당시 원장 건수 |
+| `caseStatus` | `OPEN`, `ACKNOWLEDGED`, `RESOLVED` |
+| `firstDetectedAt`, `lastDetectedAt` | 최초·최근 탐지 시각 |
+| `detectionCount` | 반복 탐지 횟수 |
+| `resolutionNote`, `resolvedAt` | 운영 확인 결과 |
+
+개인정보, 요청 본문, 전화번호, 잔액, 예외 Stack Trace는 저장하지 않는다.
+
+같은 거래와 같은 예외 유형은 하나의 활성 건만 유지한다. 여러 서버가 동시에 탐지하면 DB unique 제약을
+기준으로 한 건만 만들고 나머지는 `lastDetectedAt`, `detectionCount`를 갱신한다.
+
+운영 예외 건의 상태를 변경하는 내부 서비스는 예외 건만 갱신한다. 거래 상태, 잔액, 원장을 자동으로
+수정하지 않는다. 실제 금전 보정 기능은 별도 승인·감사 모델 없이는 추가하지 않는다.
+
+### 20.5 Recovery scheduler flow
+
+`WalletTransferRecoveryScheduler`를 추가하고 실행 여부, 주기, batch 크기, stale 기준을 설정으로 분리한다.
+
+```text
+설정된 주기로 stale 후보를 오래된 순서와 batch 크기로 조회
+→ 각 후보의 원장 건수 조회
+→ REQUESTED/VALIDATING + 원장 0
+     → DB 조건부 FAILED 갱신
+→ 그 외 비정상 조합
+     → recovery case 생성 또는 반복 탐지 갱신
+→ COMPLETED/FAILED 원장 정합성도 별도 batch로 검사
+→ 성공·경합·예외 건 생성·오류 메트릭 기록
+```
+
+초기 설정안:
+
+```properties
+wallet.transfer.recovery.enabled=true
+wallet.transfer.recovery.fixed-delay=60000
+wallet.transfer.recovery.stale-threshold-minutes=5
+wallet.transfer.recovery.batch-size=100
+```
+
+스케줄러 한 번의 실패가 다음 실행을 중단하지 않게 거래별 예외를 격리한다. 단, DB 장애 때 거래를
+정상으로 간주하거나 상태를 추측해서 변경하지 않는다.
+
+### 20.6 Metrics and audit
+
+다음 Micrometer 지표를 추가한다.
+
+```text
+wallet.transfer.recovery.finalized{previous_status}
+wallet.transfer.recovery.conflicts
+wallet.transfer.recovery.cases.created{type,severity}
+wallet.transfer.recovery.cases.reobserved{type}
+wallet.transfer.recovery.errors{operation}
+wallet.transfer.recovery.open_cases{type,severity}
+```
+
+자동 `FAILED` 처리 로그에는 `transferId`, 이전 상태, 관찰 version, 처리 결과만 남긴다. 운영 예외 건의
+승인·해결에는 변경 시각과 상태를 남기고 개인정보와 잔액은 로그에 출력하지 않는다.
+
+### 20.7 Expected implementation scope
+
+New:
+
+- `WalletTransferRecoveryCase`와 case type/status/severity enum
+- `WalletTransferRecoveryCaseRepository`
+- `WalletTransferStaleFinalizer`
+- `WalletTransferRecoveryCaseService`
+- `WalletTransferRecoveryScheduler`
+- 복구 설정 properties
+- 조건부 갱신, 다중 실행 경합, 예외 건 중복 방지, 메트릭 테스트
+
+Changed:
+
+- `WalletTransferFailureStage`: `RECOVERY_TIMEOUT` 추가
+- `ErrorCode`: `TRANSACTION_STALE` 추가
+- `WalletTransferRepository`: batch 후보 조회와 원자적 조건부 실패 갱신
+- `WalletTransferOperationsService`: 전체 `findAll()` 대조를 batch 기반 복구 판정으로 교체
+- `application.properties`: 복구 설정 추가
+
+Not changed:
+
+- 송금 API와 기존 멱등성 키 계약
+- `WalletFacadeService`의 정상 송금 흐름
+- `WalletServiceImpl`의 자금·원장·완료 단일 트랜잭션
+- Redis Lua와 Resilience4j
+- Advisory Lock 획득 범위와 순서
+
+### 20.8 Required automated tests
+
+- stale `REQUESTED/VALIDATING`, 원장 0건이면 `FAILED/TRANSACTION_STALE/RECOVERY_TIMEOUT` 전환
+- 최신 `REQUESTED/VALIDATING`은 변경하지 않음
+- `PROCESSING`은 오래됐어도 자동 실패·자동 재실행하지 않고 예외 건 생성
+- 관찰 후 상태나 version이 변경되면 조건부 갱신 0건, 기존 상태 보존
+- 복구기와 원래 요청이 경합해도 잔액·원장 변경 최대 1회
+- 복구 스케줄러 두 개가 동시에 실행돼도 자동 종료 1회
+- 같은 예외의 동시 생성은 활성 case 1건, detectionCount 증가
+- `COMPLETED + 원장 1`, `FAILED + 원장 0`은 예외 건을 만들지 않음
+- `COMPLETED + 원장 0`, `FAILED + 원장 1`, 활성 상태 + 원장 1은 CRITICAL case 생성
+- 예외 건 ACKNOWLEDGED/RESOLVED 전이가 거래·잔액·원장을 수정하지 않음
+- batch 크기와 오래된 순서 적용
+- 자동 종료·경합·예외 건·오류·open case 메트릭 검증
+- 기존 1~5단계 선별 회귀 테스트와 `git diff --check`
+
+### 20.9 Approval gate
+
+구현 전 다음 사항을 승인받는다.
+
+- 자동 상태 변경은 `REQUESTED/VALIDATING + stale + 원장 0`에만 적용
+- 조건부 UPDATE에서 status, version, cutoff, 원장 부재를 한 번에 재검증
+- 자동 종료 결과는 `FAILED/TRANSACTION_STALE/RECOVERY_TIMEOUT/retryable=true`
+- `PROCESSING`과 모든 원장 불일치는 자동 재실행·잔액 수정하지 않고 운영 예외 건으로 등록
+- 운영 예외 대기열은 상태·관찰 정보만 저장하고 개인정보·잔액은 저장하지 않음
+- 다중 서버 중복 실행은 DB 조건부 갱신과 unique 제약으로 제어
+- 복구 스케줄러는 기본 활성화, 1분 주기, stale 5분, batch 100건
+- 운영 예외 ACKNOWLEDGED/RESOLVED는 거래 상태와 금액을 변경하지 않음
+
+## 21. Final Hardening Implementation Result
+
+### 21.1 Implemented recovery flow
+
+정상 송금 요청은 기존 동기 경로에서 즉시 처리한다. 복구 스케줄러는 정상 요청을 지연시키지 않고,
+기본 1분마다 5분 이상 상태가 바뀌지 않은 거래만 별도로 검사한다.
+
+```text
+WalletTransferRecoveryScheduler
+  -> WalletTransferRecoveryService.recover
+       -> 활성 예외 건이 없는 stale 거래 최대 100건 조회
+       -> transferId 원장 건수 확인
+       -> REQUESTED/VALIDATING + 원장 0건
+            -> WalletTransferStaleFinalizer 조건부 UPDATE
+       -> PROCESSING + 원장 0건
+            -> AMBIGUOUS_PROCESSING/WARNING case 생성
+       -> 활성 상태 + 원장 존재
+            -> LEDGER_MISMATCH/CRITICAL case 생성
+       -> COMPLETED/FAILED 최대 100건 원장 대조
+            -> 불일치 case 생성
+```
+
+원장 대조는 한 실행에서 전체 테이블을 읽지 않는다. `createdAt`, `transferId` 순서의 페이지를 실행마다
+최대 batch 크기만큼 처리하고 다음 실행에서 다음 페이지로 이동한다. 애플리케이션 재시작 시 첫
+페이지부터 다시 검사하지만 recovery case unique 제약으로 중복 예외는 생성하지 않는다.
+
+이미 `OPEN/ACKNOWLEDGED` 예외가 있는 stale 거래는 후보 batch에서 제외해 같은 오래된 100건이 뒤의
+후보를 계속 가리는 문제를 막는다. `RESOLVED` 후에도 상태가 계속 비정상이면 다시 후보가 되어 기존
+case를 `OPEN`으로 재개한다.
+
+### 21.2 Atomic stale finalization
+
+`WalletTransferRepository.finalizeStaleTransfer`는 PostgreSQL 조건부 `UPDATE` 한 번으로 다음 조건을
+모두 다시 확인한다.
+
+```text
+관찰한 transferId
++ 관찰한 REQUESTED 또는 VALIDATING 상태
++ 관찰한 version
++ stale cutoff 이전 updatedAt
++ 같은 transferId 원장 NOT EXISTS
+```
+
+모두 일치하면 다음 값을 저장하고 version을 1 증가시킨다.
+
+```text
+status       = FAILED
+failureCode  = TRANSACTION_STALE
+failureStage = RECOVERY_TIMEOUT
+retryable    = true
+failedAt     = DB current timestamp
+```
+
+갱신 행이 0건이면 원래 요청이나 다른 서버가 상태를 먼저 바꿨거나 원장이 존재하는 것이므로 복구기는
+아무것도 변경하지 않고 conflict 메트릭만 증가시킨다. 두 복구 실행기가 동시에 같은 거래를 처리하는
+PostgreSQL 통합 테스트에서 한 실행만 `true`, 다른 실행은 `false`가 되는 것을 검증했다.
+
+복구기가 먼저 `FAILED`로 바꾼 뒤 원래 요청의 예외 처리기가 실패 정보를 덮어쓰지 못하도록
+`WalletTransfer.fail`도 `COMPLETED/FAILED` 상태의 재실패 기록을 거절하게 강화했다.
+
+### 21.3 Persistent recovery cases
+
+`WalletTransferRecoveryCase`를 `wallet_transfer_recovery_case` 테이블로 저장한다.
+
+- `(transferId, caseType)` unique 제약으로 서버가 여러 대여도 case 한 건만 유지한다.
+- 동시 INSERT 패자는 별도 `REQUIRES_NEW` 트랜잭션에서 기존 case를 비관적 락으로 조회한다.
+- 반복 탐지는 `lastDetectedAt`, `detectionCount`, 관찰 상태·version·원장 건수를 갱신한다.
+- `RESOLVED`된 문제가 재탐지되면 기존 case를 `OPEN`으로 재개한다.
+- `ACKNOWLEDGED/RESOLVED`는 case 상태와 메모만 바꾸며 거래, 잔액, 원장은 수정하지 않는다.
+- 요청 본문, 사용자 이름·전화번호, 잔액, Stack Trace는 case 테이블에 저장하지 않는다.
+
+10개 스레드가 같은 예외를 동시에 기록하는 PostgreSQL 통합 테스트에서 DB row는 1건이고
+`detectionCount=10`인 것을 검증했다.
+
+### 21.4 Configuration and metrics
+
+추가 설정:
+
+```properties
+wallet.transfer.recovery.enabled=true
+wallet.transfer.recovery.fixed-delay=60000
+wallet.transfer.recovery.initial-delay=60000
+wallet.transfer.recovery.stale-threshold-minutes=5
+wallet.transfer.recovery.batch-size=100
+```
+
+환경변수로 모든 값을 변경할 수 있다. 테스트 프로필에서는 Spring task scheduling을 비활성화하고 복구
+서비스를 직접 호출해 결정적으로 검증한다.
+
+추가 지표:
+
+```text
+wallet.transfer.recovery.finalized{previous_status}
+wallet.transfer.recovery.conflicts
+wallet.transfer.recovery.cases.created{type,severity}
+wallet.transfer.recovery.cases.reobserved{type}
+wallet.transfer.recovery.errors{operation}
+wallet.transfer.recovery.open.cases{type,severity}
+```
+
+### 21.5 Verification result
+
+통과한 신규 검증:
+
+- `REQUESTED/VALIDATING + stale + 원장 0건`만 조건부 `FAILED` 전환
+- 최근 거래, version 변경 거래, 원장이 있는 거래는 변경 0건
+- `PROCESSING + 원장 0건`은 자동 종료하지 않고 WARNING case 생성
+- 활성 상태에 원장이 있으면 CRITICAL ledger mismatch case 생성
+- 동시 stale 종료에서 한 실행만 성공
+- 동시 recovery case 10건 요청에서 DB row 1건과 detection count 10
+- case ACKNOWLEDGED/RESOLVED와 재탐지 시 OPEN 재개
+- 기존 실패 정보 재기록 금지
+- 기존 멱등성·상태 추적·Advisory Lock·자금/원장 롤백·Fraud/Resilience4j 회귀 테스트
+
+전체 테스트 결과:
+
+```text
+129 tests completed, 7 failed, 5 skipped
+```
+
+실패 7건은 기존과 동일한 운영 KMS/AES 초기화 의존 테스트다.
+
+- `CardServiceTest`: 3건
+- `UserLoginScenarioTest`: 4건
+
+복구 고도화 관련 테스트와 기존 금융 거래 선별 회귀 테스트는 모두 통과했다.
