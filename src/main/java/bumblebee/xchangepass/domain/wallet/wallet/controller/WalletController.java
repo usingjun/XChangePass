@@ -6,6 +6,8 @@ import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.response.WalletBalanceResponse;
 import bumblebee.xchangepass.domain.wallet.transfer.dto.WalletTransferResponse;
+import bumblebee.xchangepass.domain.wallet.transfer.dto.WalletTransferStatusResponse;
+import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferQueryService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletFacadeService;
 import bumblebee.xchangepass.domain.wallet.wallet.service.impl.WalletServiceImpl;
 import bumblebee.xchangepass.global.security.jwt.CustomUserDetails;
@@ -35,6 +37,7 @@ public class WalletController {
 
     private final WalletServiceImpl walletService;
     private final WalletFacadeService walletFacadeService;
+    private final WalletTransferQueryService walletTransferQueryService;
 
     @Operation(summary = "잔액 충전", description = "잔액을 충전합니다.")
     @ApiResponses(value = {
@@ -99,6 +102,14 @@ public class WalletController {
             @RequestBody @Valid WalletTransferRequest request,
             @AuthenticationPrincipal CustomUserDetails user) {
         return walletFacadeService.transfer(user.getUserId(), idempotencyKey, request);
+    }
+
+    @Operation(summary = "송금 처리 상태 조회", description = "본인이 요청한 즉시 송금의 처리 상태를 조회합니다.")
+    @GetMapping("/transfers/{transferId}")
+    public WalletTransferStatusResponse transferStatus(
+            @PathVariable UUID transferId,
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return walletTransferQueryService.findStatus(user.getUserId(), transferId);
     }
 
     @Operation(summary = "앱 내 예약 송금", description = "돈을 송금합니다.")

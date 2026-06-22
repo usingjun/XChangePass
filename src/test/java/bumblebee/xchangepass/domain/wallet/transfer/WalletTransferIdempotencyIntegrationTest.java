@@ -12,7 +12,9 @@ import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionT
 import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
 import bumblebee.xchangepass.domain.wallet.transfer.dto.WalletTransferResponse;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferStatus;
+import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferFailureStage;
 import bumblebee.xchangepass.domain.wallet.transfer.repository.WalletTransferRepository;
+import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferQueryService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.Wallet;
@@ -48,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -89,6 +92,8 @@ class WalletTransferIdempotencyIntegrationTest {
     private WalletTransactionRepository transactionRepository;
     @Autowired
     private WalletTransferRepository transferRepository;
+    @Autowired
+    private WalletTransferQueryService transferQueryService;
 
     @MockBean
     private FraudDetectionService fraudDetectionService;
@@ -126,6 +131,11 @@ class WalletTransferIdempotencyIntegrationTest {
 
         assertThat(duplicate).isEqualTo(first);
         assertThat(first.status()).isEqualTo(WalletTransferStatus.COMPLETED);
+        var stored = transferRepository.findById(first.transferId()).orElseThrow();
+        assertThat(stored.getAttemptCount()).isEqualTo(1);
+        assertThat(stored.getValidatingAt()).isNotNull();
+        assertThat(stored.getProcessingAt()).isNotNull();
+        assertThat(stored.getCompletedAt()).isNotNull();
         assertSingleMoneyMovement(INITIAL_AMOUNT.subtract(TRANSFER_AMOUNT), TRANSFER_AMOUNT);
         verify(fraudDetectionService, times(1)).verify(any());
     }
@@ -200,11 +210,49 @@ class WalletTransferIdempotencyIntegrationTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.BALANCE_NOT_AVAILABLE);
 
-        assertThat(transferRepository.findAll()).singleElement()
-                .extracting(transfer -> transfer.getStatus())
-                .isEqualTo(WalletTransferStatus.FAILED);
+        var failed = transferRepository.findAll().get(0);
+        assertThat(failed.getStatus()).isEqualTo(WalletTransferStatus.FAILED);
+        assertThat(failed.getFailureStage()).isEqualTo(WalletTransferFailureStage.BALANCE_VALIDATION);
+        assertThat(failed.getRetryable()).isFalse();
+        assertThat(failed.getFailedAt()).isNotNull();
         verify(fraudDetectionService, times(1)).verify(any());
         assertThat(countTransferLedgers()).isZero();
+    }
+
+    @Test
+    void fraudUnavailableIsRecordedAsRetryableWithoutMoneyMovement() {
+        charge(sender, INITIAL_AMOUNT);
+        UUID key = UUID.randomUUID();
+        doThrow(ErrorCode.FRAUD_DETECTION_UNAVAILABLE.commonException())
+                .when(fraudDetectionService).verify(any());
+
+        assertThatThrownBy(() -> facadeService.transfer(
+                sender.getUserId(), key, transferRequest(receiver, TRANSFER_AMOUNT)
+        ))
+                .isInstanceOf(CommonException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.FRAUD_DETECTION_UNAVAILABLE);
+
+        var failed = transferRepository.findAll().get(0);
+        assertThat(failed.getFailureStage()).isEqualTo(WalletTransferFailureStage.FRAUD_VALIDATION);
+        assertThat(failed.getRetryable()).isTrue();
+        assertThat(countTransferLedgers()).isZero();
+        assertBalances(INITIAL_AMOUNT, BigDecimal.ZERO);
+    }
+
+    @Test
+    void statusCanOnlyBeReadByOwningSender() {
+        charge(sender, INITIAL_AMOUNT);
+        WalletTransferResponse response = facadeService.transfer(
+                sender.getUserId(), UUID.randomUUID(), transferRequest(receiver, TRANSFER_AMOUNT)
+        );
+
+        assertThat(transferQueryService.findStatus(sender.getUserId(), response.transferId()).status())
+                .isEqualTo(WalletTransferStatus.COMPLETED);
+        assertThatThrownBy(() -> transferQueryService.findStatus(receiver.getUserId(), response.transferId()))
+                .isInstanceOf(CommonException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.TRANSACTION_HISTORY_NOT_FOUND);
     }
 
     @Test
@@ -260,11 +308,15 @@ class WalletTransferIdempotencyIntegrationTest {
     }
 
     private void assertSingleMoneyMovement(BigDecimal senderAmount, BigDecimal receiverAmount) {
+        assertBalances(senderAmount, receiverAmount);
+        assertThat(countTransferLedgers()).isEqualTo(1);
+    }
+
+    private void assertBalances(BigDecimal senderAmount, BigDecimal receiverAmount) {
         WalletBalance senderBalance = balanceService.findBalance(senderWallet.getWalletId(), KRW);
         WalletBalance receiverBalance = balanceService.findBalance(receiverWallet.getWalletId(), KRW);
         assertThat(senderBalance.getBalance()).isEqualByComparingTo(senderAmount);
         assertThat(receiverBalance.getBalance()).isEqualByComparingTo(receiverAmount);
-        assertThat(countTransferLedgers()).isEqualTo(1);
     }
 
     private long countTransferLedgers() {

@@ -39,7 +39,7 @@ XChangePass를 금융권 포트폴리오의 첫 프로젝트로 제시할 수 �
 | 2 | 거래 요청 멱등성 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
 | 3 | 거래내역 통합조회 최적화 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
 | 4 | Redis 이상 거래 장애 대응 | Approved | Checked | Approved 2026-06-20 | Completed | Completed 2026-06-20 |
-| 5 | 거래 상태 및 실패 추적 | Drafted | Checked | Pending | Blocked by approval | Pending |
+| 5 | 거래 상태 및 실패 추적 | Approved | Rechecked 2026-06-21 | Approved 2026-06-21 | Completed | Completed (targeted); full suite has existing KMS failures |
 
 ## 5. Step 1 - Transaction-scoped Wallet Concurrency Control
 
@@ -374,18 +374,23 @@ Expected production-file scope after approval:
 
 Already present:
 
-- `WalletTransactionStatus`에 `PENDING`, `SUCCESS`, `FAILED`가 선언돼 있다.
-- 환전과 예약 송금에는 각각 별도의 상태 모델이 있다.
+- Step 2에서 즉시 송금 요청 Aggregate인 `WalletTransfer`를 추가했다.
+- `(senderUserId, idempotencyKey)` 유니크 제약과 `@Version`이 존재한다.
+- `REQUESTED`, `PROCESSING`, `COMPLETED`, `FAILED` 상태가 존재한다.
+- 요청 예약은 `REQUIRES_NEW`, 자금 이동·원장·`COMPLETED`는 하나의 트랜잭션이다.
+- 자금 트랜잭션 실패 후 별도 `REQUIRES_NEW`로 `FAILED`와 오류 코드를 저장한다.
+- 거래 원장은 nullable unique `transferId`를 저장한다.
 
 Gaps and expected scope:
 
-- `WalletTransactionStatus`는 `WalletTransaction` 엔티티와 송금 처리 흐름에서 사용되지 않는다.
-- 즉시 송금 요청을 나타내는 Aggregate와 `REQUESTED`, `VALIDATING`, `PROCESSING`, `COMPLETED`,
-  `FAILED` 상태 전이가 없다.
-- 실패 상태를 자금 트랜잭션 롤백 이후 별도 트랜잭션으로 저장하는 경계가 없다.
-- 실패 단계, 오류 코드, 재시도 가능 여부, 상태 시각, 낙관적 락 버전이 없다.
-- 거래 원장에 `transferId` 유니크 참조가 없어 요청 상태와 실제 자금 이동을 직접 대조할 수 없다.
+- `VALIDATING` 상태가 없고 Fraud 검증과 자금 처리 단계를 구분하지 못한다.
+- 현재 `PROCESSING` 전이는 자금 트랜잭션 안에서 발생해 실패·서버 종료 시 롤백된다. 운영 DB에는 다시
+  `REQUESTED`로 남으므로 실제로 어느 단계까지 갔는지 알 수 없다.
+- 실패 코드는 있지만 실패 단계, 재시도 가능 여부와 상태별 시각이 없다.
+- 예상하지 못한 런타임 예외는 모두 같은 코드로 기록돼 운영 분류가 어렵다.
 - 장시간 `PROCESSING` 거래 조회와 운영 점검 흐름이 없다.
+- `COMPLETED`와 원장 존재 여부를 대조하는 정합성 점검이 없다.
+- 사용되지 않는 `WalletTransactionStatus`가 즉시 송금 상태 모델과 별도로 남아 혼동을 준다.
 
 ### 10.6 Step 1 approval decisions
 
@@ -1318,3 +1323,439 @@ Half-Open 2건은 각각 Retry 2회를 가질 수 있으므로 Redis 실제 호�
 - Redis 장애 시 잔액 변경 전에 예외를 발생시키는 Fail-Closed 순서가 거래 차단을 담당한다.
 - CircuitBreaker Health Indicator를 일반 liveness 재시작 조건으로 직접 사용하면 공통 Redis 장애 때 모든
   인스턴스가 동시에 재시작될 수 있다. liveness와 Redis 의존 상태를 분리해서 운영해야 한다.
+
+## 18. Step 5 Implementation Approval Proposal
+
+### 18.1 Scope and current limitation
+
+대상은 Step 2와 동일하게 `Idempotency-Key`를 사용하는 즉시 지갑 송금이다. 예약 송금, 카드 결제,
+환전의 기존 상태 모델을 하나의 공통 enum으로 합치지 않는다.
+
+현재 실제 흐름은 다음과 같다.
+
+```text
+REQUIRES_NEW: REQUESTED 저장
+  -> 자금 트랜잭션 시작
+       -> PROCESSING 변경
+       -> Fraud 검사
+       -> 잔액 변경
+       -> 원장 저장
+       -> COMPLETED 변경
+  -> 커밋
+```
+
+`PROCESSING`이 자금 트랜잭션 안에 있으므로 Fraud 실패, 잔액 부족, DB 오류 또는 서버 종료가 발생하면
+`PROCESSING`도 함께 롤백된다. 이후 실패 기록까지 성공하면 `FAILED`가 남지만, 실패 기록 전 서버가
+종료되면 DB에는 `REQUESTED`만 남는다. 따라서 현재 상태만으로는 다음 질문에 답할 수 없다.
+
+- Fraud 검사 전에 멈췄는가, 검사 중에 멈췄는가?
+- 자금 처리 단계에 진입했는가?
+- 실패 기록 자체가 누락됐는가?
+- 오래된 `REQUESTED/PROCESSING`이 실제 처리 중인가, 서버 종료로 고립됐는가?
+
+### 18.2 Final state model
+
+```text
+REQUESTED -> VALIDATING -> PROCESSING -> COMPLETED
+     |           |             |
+     +-----------+-------------+-> FAILED
+```
+
+상태 의미:
+
+| Status | Meaning |
+| --- | --- |
+| `REQUESTED` | 멱등성 키와 요청 본문을 DB에 접수했지만 검증을 시작하지 않음 |
+| `VALIDATING` | 수신자·요청 조건과 Redis 이상 거래 검증 수행 중 |
+| `PROCESSING` | 검증을 통과하고 지갑 Lock·잔액·환전·원장 트랜잭션 수행 중 |
+| `COMPLETED` | 잔액 변경과 거래 원장 저장이 같은 DB 트랜잭션으로 커밋됨 |
+| `FAILED` | 자금 트랜잭션이 커밋되지 않았고 실패 코드와 단계가 별도 커밋됨 |
+
+허용 전이만 엔티티 메서드로 제공한다.
+
+```java
+markValidating(); // REQUESTED -> VALIDATING
+markProcessing(); // VALIDATING -> PROCESSING
+complete();       // PROCESSING -> COMPLETED
+fail(...);        // REQUESTED/VALIDATING/PROCESSING -> FAILED
+```
+
+- `COMPLETED -> FAILED`, `FAILED -> PROCESSING`, 중복 `COMPLETED`는 거절한다.
+- 상태 변경은 현재 예상 상태를 확인하며 `@Version`으로 동시 운영 작업과 실제 처리 충돌을 검출한다.
+- 예약 송금의 별도 `WalletTransferStatus`는 변경하지 않는다.
+- 사용되지 않는 `WalletTransactionStatus(PENDING/SUCCESS/FAILED)`는 제거한다.
+
+### 18.3 Persistence fields
+
+`WalletTransfer`에 다음 필드를 추가한다.
+
+| Field | Purpose |
+| --- | --- |
+| `failureStage` | 어느 처리 구간에서 실패했는지 저장 |
+| `retryable` | 운영상 새로운 거래로 재시도 가능한 유형인지 표시 |
+| `validatingAt` | 검증 단계 진입 시각 |
+| `processingAt` | 자금 처리 단계 진입 시각 |
+| `completedAt` | 자금·원장 커밋 시각 |
+| `failedAt` | 실패 기록 시각 |
+| `attemptCount` | 실제 처리 권한을 얻어 검증을 시작한 횟수 |
+
+기존 필드 의미:
+
+- `createdAt`: `REQUESTED` 접수 시각으로 유지한다.
+- `updatedAt`: 마지막 상태 전환 시각으로 사용한다.
+- `failureCode`: 외부에 사용하는 안정적인 `ErrorCode.name()`을 저장한다.
+- `version`: 낙관적 락과 운영 명령의 충돌 검출에 사용한다.
+
+개인정보, 전화번호, 수신자 이름, 예외 원문과 Stack Trace는 상태 테이블에 추가 저장하지 않는다.
+
+### 18.4 Failure stages
+
+```java
+public enum WalletTransferFailureStage {
+    PARTICIPANT_VALIDATION,
+    FRAUD_VALIDATION,
+    LOCK_ACQUISITION,
+    BALANCE_VALIDATION,
+    FUNDS_AND_LEDGER_TRANSACTION,
+    UNKNOWN
+}
+```
+
+- `PARTICIPANT_VALIDATION`: 수신자나 지갑을 찾지 못함
+- `FRAUD_VALIDATION`: 의심 거래 또는 Redis 탐지 불가
+- `LOCK_ACQUISITION`: Advisory Lock 대기·중단 실패
+- `BALANCE_VALIDATION`: 통화 잔액 없음 또는 잔액 부족
+- `FUNDS_AND_LEDGER_TRANSACTION`: 잔액 변경과 원장 저장을 포함한 원자적 DB 처리 실패
+- `UNKNOWN`: 분류되지 않은 런타임 오류
+
+잔액 변경과 원장 저장은 같은 트랜잭션이며 JPA SQL 실행 시점도 커밋까지 지연될 수 있으므로, 실제로
+구분할 수 없는 오류를 억지로 `MONEY_MOVEMENT`와 `LEDGER_PERSISTENCE`로 나누지 않는다. 두 작업을
+`FUNDS_AND_LEDGER_TRANSACTION`으로 기록하고 전체 롤백 여부를 검증한다.
+
+### 18.5 Retryable classification
+
+`retryable`은 동일 멱등성 키를 자동 재실행한다는 뜻이 아니다. 운영자와 클라이언트가 **새로운 요청과
+새로운 멱등성 키로 재시도할 수 있는 장애 유형인지** 판단하기 위한 정보다.
+
+기본 분류:
+
+| Error | Stage | Retryable |
+| --- | --- | --- |
+| `FRAUD_DETECTION_UNAVAILABLE` | `FRAUD_VALIDATION` | true |
+| `LOCK_TIME_OUT`, `THREAD_INTERRUPTED` | `LOCK_ACQUISITION` | true |
+| `SUSPICIOUS_TRANSACTION` | `FRAUD_VALIDATION` | false |
+| `RECEIVER_NOT_FOUND`, `WALLET_NOT_FOUND` | `PARTICIPANT_VALIDATION` | false |
+| `BALANCE_NOT_FOUND`, `BALANCE_NOT_AVAILABLE` | `BALANCE_VALIDATION` | false |
+| `TRANSACTION_PROCESSING_FAILED` | `UNKNOWN` | false, 운영 점검 필요 |
+
+이 매핑은 `WalletTransferFailureClassifier` 한 곳에서 관리한다.
+
+### 18.6 Transaction boundaries and class flow
+
+변경 후 호출 흐름:
+
+```text
+WalletFacadeService
+  -> WalletTransferIdempotencyService.reserve
+       -> REQUIRES_NEW: REQUESTED
+  -> WalletTransferLifecycleService.markValidating
+       -> REQUIRES_NEW: VALIDATING + validatingAt + attemptCount
+  -> WalletService.validateImmediateTransfer
+       -> 수신자 확인 + Fraud 검증
+  -> WalletTransferLifecycleService.markProcessing
+       -> REQUIRES_NEW: PROCESSING + processingAt
+  -> WalletService.processImmediateTransfer
+       -> 하나의 자금 DB transaction
+       -> 지갑 Lock + 잔액 확인 + 환전
+       -> 송·수신 잔액 변경
+       -> transferId 원장 저장
+       -> COMPLETED + completedAt
+       -> commit
+  -> 예외 발생
+       -> REQUIRES_NEW: FAILED + stage + code + retryable + failedAt
+```
+
+클래스 변경:
+
+1. `WalletTransferLifecycleService`
+
+- 상태 전용 `REQUIRES_NEW` 트랜잭션을 제공한다.
+- `markValidating`, `markProcessing`, `markFailed`를 담당한다.
+- 자금 이동이나 Fraud 검사를 수행하지 않는다.
+
+2. `WalletServiceImpl`
+
+- 즉시 송금의 검증 단계와 자금 처리 단계를 분리한다.
+- 검증 결과에는 수신 사용자 ID만 전달해 자금 단계에서 요청 이름·전화번호를 다시 해석하지 않게 한다.
+- 자금 처리 메서드는 `PROCESSING` 상태만 허용하고 원장·잔액·`COMPLETED`를 같이 커밋한다.
+
+3. `WalletFacadeService`
+
+- 현재 처리 단계를 조정하고 예외 발생 시 `WalletTransferFailureClassifier` 결과를 실패 서비스에 전달한다.
+- 상태 저장이 실패하면 원래 거래 예외를 덮어쓰지 않고 별도 오류 로그와 메트릭을 남긴다.
+
+4. `WalletTransferFailureService`
+
+- 단순 오류 코드 대신 `failureStage`, `retryable`, `failedAt`까지 별도 트랜잭션으로 저장한다.
+
+### 18.7 Crash windows and durable result
+
+| Crash point | Durable DB state | Money/ledger |
+| --- | --- | --- |
+| 예약 직후, 검증 전 | `REQUESTED` | 없음 |
+| 검증 상태 커밋 후, Fraud 도중 | `VALIDATING` | 없음 |
+| Fraud 성공 후 처리 상태 커밋 직후 | `PROCESSING` | 없음 |
+| 자금 트랜잭션 도중 | `PROCESSING` | 전체 롤백, 없음 |
+| 자금 트랜잭션 커밋 후 응답 유실 | `COMPLETED` | 정확히 한 건 |
+| 정상 예외 후 실패 기록 성공 | `FAILED` | 전체 롤백, 없음 |
+| 예외 직후 실패 기록 전 서버 종료 | 마지막 활성 상태 | 없음, stale 조회 대상 |
+
+`COMPLETED` 전이는 잔액과 원장 트랜잭션 안에 그대로 둔다. 따라서 자금이 커밋됐는데 상태만
+`PROCESSING`으로 남는 정상 코드 경로를 만들지 않는다.
+
+### 18.8 Idempotency behavior after state expansion
+
+기존 중복 정책을 유지하고 `VALIDATING`을 처리 중 상태에 추가한다.
+
+| Existing state | Same request result |
+| --- | --- |
+| `REQUESTED`, `VALIDATING`, `PROCESSING` | `409 TRANSACTION_IN_PROGRESS` |
+| `COMPLETED` | 기존 `transferId`, `COMPLETED` 반환 |
+| `FAILED` | 저장된 기존 오류 반환, 동일 키 재실행 금지 |
+
+새 상태 전환은 최초 DB 예약에 성공한 요청만 수행한다. 동시 중복 30건은 상태 전이와 Fraud 검사,
+자금 이동을 다시 실행하지 않는다.
+
+### 18.9 Status query contract
+
+인증 사용자가 본인의 거래 처리 결과를 조회할 수 있게 한다.
+
+```http
+GET /api/v1/wallet/transfers/{transferId}
+```
+
+```json
+{
+  "transferId": "uuid",
+  "status": "FAILED",
+  "failureStage": "FRAUD_VALIDATION",
+  "failureCode": "FRAUD_DETECTION_UNAVAILABLE",
+  "retryable": true,
+  "requestedAt": "...",
+  "validatingAt": "...",
+  "processingAt": null,
+  "completedAt": null,
+  "failedAt": "...",
+  "lastUpdatedAt": "..."
+}
+```
+
+- `senderUserId`가 인증 사용자와 일치하는 거래만 반환한다.
+- 요청 해시, 멱등성 키, 내부 버전과 개인정보는 응답하지 않는다.
+- 다른 사용자의 `transferId`는 존재 여부를 노출하지 않도록 동일한 NOT_FOUND로 응답한다.
+
+### 18.10 Stale transaction operations
+
+`WalletTransferOperationsService`에 다음 내부 조회를 추가한다.
+
+```text
+status in (REQUESTED, VALIDATING, PROCESSING)
+and updatedAt < now - configuredThreshold
+order by updatedAt asc
+```
+
+- 기본 stale 기준은 설정으로 분리하고 초기값은 5분으로 둔다.
+- 운영 조회 결과는 `transferId`, 상태, 마지막 전환 시각, version만 포함한다.
+- 자동 재실행이나 자동 실패 처리는 구현하지 않는다.
+- 장시간 거래를 자동 `FAILED`로 바꾸면 아직 실행 중인 요청과 경합할 수 있으므로 운영 확인 후 별도
+  복구 명령이 필요하다.
+- 복구 명령을 이후 추가할 때는 예상 `version`, stale 기준, 원장 부재를 모두 확인해야 한다.
+
+### 18.11 Ledger reconciliation invariant
+
+`wallet_transfer_request`와 `wallet_transaction.transfer_id`를 다음 규칙으로 점검한다.
+
+```text
+COMPLETED
+→ 같은 transferId의 원장 정확히 1건
+
+REQUESTED / VALIDATING / PROCESSING / FAILED
+→ 같은 transferId의 원장 0건
+```
+
+위 규칙을 검사하는 `WalletTransferReconciliationService`를 추가한다. 자동으로 잔액이나 상태를 수정하지
+않고 불일치 건수와 transferId를 운영 로그·메트릭으로 노출한다.
+
+### 18.12 Compensation decision
+
+이번 즉시 지갑 송금은 다음 항목이 모두 하나의 PostgreSQL 트랜잭션이다.
+
+```text
+송신 잔액 차감
+수신 잔액 증가
+거래 원장 저장
+COMPLETED 전이
+```
+
+정상 실패는 전체 롤백되므로 `COMPENSATION_REQUIRED`, `COMPENSATED` 상태를 추가하지 않는다.
+외부 결제망이나 이미 커밋된 외부 효과가 도입될 때 별도 보상 모델을 설계한다.
+
+### 18.13 Expected file scope
+
+New:
+
+- `WalletTransferFailureStage`
+- `WalletTransferFailureClassifier`
+- `WalletTransferLifecycleService`
+- 상태 조회 DTO와 Query Service
+- stale 운영 조회 Service와 설정
+- 원장 대조 `WalletTransferReconciliationService`
+- 상태 전이, 실패 단계, stale, reconciliation 테스트
+
+Changed:
+
+- `WalletTransfer`, `WalletTransferStatus`, `WalletTransferRepository`
+- `WalletFacadeService`, `WalletService`, `WalletServiceImpl`
+- `WalletTransferFailureService`, `WalletTransferIdempotencyService`
+- `WalletController`, `ErrorCode`
+- Step 2 멱등성 PostgreSQL 통합 테스트
+
+Remove:
+
+- 실제 엔티티에서 사용되지 않는 `WalletTransactionStatus`
+
+Not changed:
+
+- Redis Lua와 Resilience4j 설정
+- Advisory Lock 키와 획득 순서
+- 잔액·원장 PostgreSQL 원자적 트랜잭션
+- 예약 송금 상태 모델
+- 거래내역 Top-N 조회
+
+### 18.14 Required automated tests
+
+- 정상 거래의 `REQUESTED -> VALIDATING -> PROCESSING -> COMPLETED` 전이와 모든 시각
+- Fraud 탐지 불가: `FAILED/FRAUD_VALIDATION/retryable=true`, 잔액·원장 0건
+- 의심 거래: `FAILED/FRAUD_VALIDATION/retryable=false`, 잔액·원장 0건
+- 수신자 없음: `FAILED/PARTICIPANT_VALIDATION`
+- 잔액 부족: `FAILED/BALANCE_VALIDATION`, 자금 롤백
+- Lock 실패: `FAILED/LOCK_ACQUISITION/retryable=true`
+- 자금·원장 예외: `FAILED/FUNDS_AND_LEDGER_TRANSACTION`, 양쪽 잔액과 원장 전체 롤백
+- 허용하지 않은 상태 전이와 중복 완료 거절
+- 완료 거래를 실패로 바꾸지 못함
+- 동시에 같은 상태를 변경할 때 `@Version` 충돌
+- 동일 키 30건에서 상태 흐름, Fraud, 잔액, 원장 각 1회
+- 상태 조회에서 본인 거래만 허용
+- 오래된 활성 상태만 stale 조회되고 최신·완료·실패 거래는 제외
+- `COMPLETED` 원장 1건, 비완료 원장 0건 reconciliation 정상
+- 상태·원장 불일치 탐지
+- 기존 Step 1~4 선별 회귀 테스트와 `git diff --check`
+
+### 18.15 Approval gate
+
+구현 전 다음 사항을 승인받는다.
+
+- 즉시 송금에 `VALIDATING` 상태와 상태별 시각 추가
+- 상태 변경을 별도 `REQUIRES_NEW`로 영속화
+- 자금·원장·`COMPLETED`의 기존 단일 트랜잭션 유지
+- 실패 단계 6종과 운영용 `retryable` 저장
+- 동일 멱등성 키의 실패 거래 자동 재실행 금지 유지
+- 본인 거래 상태 조회 API 추가
+- stale 기준 기본 5분과 읽기 전용 운영 조회 추가
+- 자동 복구·자동 재실행·보상 상태는 이번 단계에서 제외
+- 완료 상태와 원장 존재 여부 대조 기능 추가
+
+## 19. Step 5 Implementation Result
+
+### 19.1 Implemented transaction flow
+
+승인된 즉시 송금 경로를 다음과 같이 구현했다.
+
+```text
+WalletFacadeService
+  -> WalletTransferIdempotencyService.reserve
+       -> REQUIRES_NEW: REQUESTED 저장
+  -> WalletTransferLifecycleService.startValidating
+       -> REQUIRES_NEW: VALIDATING, validatingAt, attemptCount 저장
+  -> WalletTransferValidationService.resolveReceiver
+  -> WalletTransferValidationService.verifyFraud
+  -> WalletTransferLifecycleService.startProcessing
+       -> REQUIRES_NEW: PROCESSING, processingAt 저장
+  -> WalletServiceImpl.transfer
+       -> 하나의 PostgreSQL transaction
+       -> Advisory Lock 획득
+       -> 잔액 확인·변경
+       -> transferId 거래 원장 저장
+       -> COMPLETED, completedAt 저장
+       -> commit
+  -> 예외 발생 시 WalletTransferFailureService
+       -> REQUIRES_NEW: FAILED, failureStage, failureCode, retryable, failedAt 저장
+```
+
+`PROCESSING` 진입은 자금 트랜잭션보다 먼저 별도 커밋되므로 서버가 자금 처리 중 종료되어도 마지막
+진입 단계가 남는다. 잔액 변경, 원장 저장, `COMPLETED` 전이는 계속 하나의 PostgreSQL 트랜잭션에
+있으므로 부분 성공은 허용하지 않는다.
+
+### 19.2 Entity and failure classification
+
+`WalletTransfer`에 다음 정보를 추가했다.
+
+- 상태: `VALIDATING`
+- 실패: `failureStage`, `failureCode`, `retryable`
+- 시각: `validatingAt`, `processingAt`, `completedAt`, `failedAt`
+- 처리 횟수: `attemptCount`
+- 기존 `@Version` 유지
+
+`WalletTransferFailureClassifier`가 예외 코드를 실패 단계와 재시도 가능 여부로 변환한다.
+
+- Redis 탐지 불가와 Lock 대기·중단은 `retryable=true`다.
+- 의심 거래, 참여자 없음, 잔액 없음·부족은 `retryable=false`다.
+- 분류되지 않은 오류는 Facade가 알고 있는 현재 처리 단계를 유지하고 자동 재시도하지 않는다.
+- `retryable=true`여도 동일 멱등성 키를 다시 실행하지 않으며 새 키를 사용한 새 요청 판단에만 쓴다.
+
+### 19.3 Query and operations support
+
+사용자 상태 조회 API를 추가했다.
+
+```http
+GET /api/v1/wallet/transfers/{transferId}
+```
+
+응답에는 상태, 실패 단계·코드, 재시도 가능 여부, 처리 횟수와 단계별 시각이 포함된다. 멱등성 키,
+요청 해시, 내부 version은 노출하지 않는다. `senderUserId`까지 조회 조건에 포함해 다른 사용자의 거래는
+동일한 `TRANSACTION_HISTORY_NOT_FOUND`로 처리한다.
+
+`WalletTransferOperationsService`는 다음 읽기 전용 점검을 제공한다.
+
+- 기본 5분 이상 갱신되지 않은 `REQUESTED/VALIDATING/PROCESSING` 조회
+- `COMPLETED`는 원장 1건, 그 외 상태는 원장 0건인지 대조
+- 불일치 로그와 `wallet.transfer.reconciliation.mismatches` Micrometer 카운터 기록
+- 자동 상태 변경, 자동 송금 재실행, 자동 보상은 수행하지 않음
+
+사용되지 않던 `WalletTransactionStatus` enum은 제거했다. Redis Lua와 Resilience4j 설정, Advisory Lock
+키와 정렬 순서, 예약 송금 상태 모델, 거래내역 조회 구현은 변경하지 않았다.
+
+### 19.4 Verification result
+
+통과:
+
+- `WalletTransferTest`: 정상·실패 상태 전이, 단계별 시각, 불법 전이, 완료 후 실패 금지
+- `WalletTransferFailureClassifierTest`: Fraud·Lock·잔액·참여자 실패 분류와 retryable 정책
+- `WalletTransferIdempotencyServiceTest`: 완료·실패 중복 요청 정책 유지
+- `WalletTransferIdempotencyIntegrationTest`: 정상 상태 정보, 30건 중복 1회 처리, 실패 기록,
+  Fraud 탐지 불가 시 잔액·원장 0건, 상태 조회 소유권
+- `WalletTransferOperationsServiceTest`: stale 읽기 전용 조회, 원장 불일치와 메트릭
+- 기존 지갑 동시성·자금/원장 롤백·Fraud·Resilience4j 선별 회귀 테스트
+
+전체 테스트 결과:
+
+```text
+113 tests completed, 7 failed, 5 skipped
+```
+
+실패 7건은 이번 변경 이전부터 확인된 운영 KMS/AES 초기화 의존 테스트다.
+
+- `CardServiceTest`: 3건
+- `UserLoginScenarioTest`: 4건
+
+Step 5 관련 테스트와 기존 Step 1~4 선별 회귀 테스트는 모두 통과했다.

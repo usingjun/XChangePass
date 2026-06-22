@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.transfer;
 
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransfer;
+import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferFailureStage;
 import bumblebee.xchangepass.domain.wallet.transfer.repository.WalletTransferRepository;
 import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferIdempotencyService;
 import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferRequestHasher;
@@ -56,6 +57,7 @@ class WalletTransferIdempotencyServiceTest {
         UUID key = UUID.randomUUID();
         WalletTransferRequest request = request(BigDecimal.TEN);
         WalletTransfer transfer = transfer(key, request);
+        transfer.startValidating();
         transfer.startProcessing();
         transfer.complete();
         duplicateReturns(key, transfer);
@@ -84,7 +86,8 @@ class WalletTransferIdempotencyServiceTest {
         UUID key = UUID.randomUUID();
         WalletTransferRequest request = request(BigDecimal.TEN);
         WalletTransfer transfer = transfer(key, request);
-        transfer.fail(ErrorCode.BALANCE_NOT_AVAILABLE);
+        transfer.fail(ErrorCode.BALANCE_NOT_AVAILABLE,
+                WalletTransferFailureStage.BALANCE_VALIDATION, false);
         duplicateReturns(key, transfer);
 
         assertThatThrownBy(() -> service.reserve(1L, key, request))

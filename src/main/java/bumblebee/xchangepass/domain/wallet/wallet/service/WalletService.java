@@ -18,7 +18,8 @@ public interface WalletService {
 
     void transfer(Long senderId, WalletTransferRequest request);
 
-    WalletTransferResponse transfer(UUID transferId, Long senderId, WalletTransferRequest request);
+    WalletTransferResponse transfer(UUID transferId, Long senderId, Long receiverId,
+                                    WalletTransferRequest request);
 
     List<WalletBalanceResponse> balance(Long userId);
 }

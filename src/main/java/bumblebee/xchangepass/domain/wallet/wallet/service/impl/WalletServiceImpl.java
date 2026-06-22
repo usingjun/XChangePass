@@ -110,26 +110,31 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     @Transactional
-    public WalletTransferResponse transfer(UUID transferId, Long senderId, WalletTransferRequest request) {
+    public WalletTransferResponse transfer(UUID transferId, Long senderId, Long receiverId,
+                                           WalletTransferRequest request) {
         WalletTransfer transfer = walletTransferRepository.findById(transferId)
                 .orElseThrow(ErrorCode.TRANSACTION_PROCESSING_FAILED::commonException);
-        transfer.startProcessing();
-        executeTransfer(transferId, senderId, request);
+        executeMoneyTransfer(transferId, senderId, receiverId, request);
         transfer.complete();
         return new WalletTransferResponse(transfer.getTransferId(), transfer.getStatus());
     }
 
     private void executeTransfer(UUID transferId, Long senderId, WalletTransferRequest request) {
         User receiver = userService.readUser(request.receiverName(), request.receiverPhoneNumber());
-        Wallet fromWallet = findWalletByUserId(senderId);
-        Wallet toWallet = findWalletByUserId(receiver.getUserId());
-
         BigDecimal normalizedAmount = fraudAmountNormalizer.normalize(
                 request.transferAmount(), request.fromCurrency()
         );
         fraudDetectionService.verify(new FraudDetectEvent(
                 senderId, normalizedAmount, LocalDateTime.now(), null, FraudTransactionType.WALLET
         ));
+
+        executeMoneyTransfer(transferId, senderId, receiver.getUserId(), request);
+    }
+
+    private void executeMoneyTransfer(UUID transferId, Long senderId, Long receiverId,
+                                      WalletTransferRequest request) {
+        Wallet fromWallet = findWalletByUserId(senderId);
+        Wallet toWallet = findWalletByUserId(receiverId);
 
         acquireInOrder(fromWallet.getWalletId(), toWallet.getWalletId());
 

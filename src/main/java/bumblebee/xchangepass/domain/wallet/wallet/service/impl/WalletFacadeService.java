@@ -1,9 +1,13 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.impl;
 
 import bumblebee.xchangepass.domain.wallet.transfer.dto.WalletTransferResponse;
+import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferFailureStage;
 import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferFailureService;
+import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferFailureClassifier;
 import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferIdempotencyService;
+import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferLifecycleService;
 import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferReservation;
+import bumblebee.xchangepass.domain.wallet.transfer.service.WalletTransferValidationService;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletTransferRequest;
 import bumblebee.xchangepass.domain.wallet.wallet.entity.WalletTransferType;
 import bumblebee.xchangepass.domain.wallet.wallet.scheduler.ScheduledTransferService;
@@ -24,6 +28,9 @@ public class WalletFacadeService {
     private final WalletService walletService;
     private final ScheduledTransferService scheduledTransferService;
     private final WalletTransferIdempotencyService idempotencyService;
+    private final WalletTransferLifecycleService lifecycleService;
+    private final WalletTransferValidationService validationService;
+    private final WalletTransferFailureClassifier failureClassifier;
     private final WalletTransferFailureService failureService;
 
     public void transfer(Long senderId, WalletTransferRequest request) {
@@ -40,13 +47,28 @@ public class WalletFacadeService {
             return reservation.existingResponse();
         }
 
+        WalletTransferFailureStage stage = WalletTransferFailureStage.UNKNOWN;
         try {
-            return walletService.transfer(reservation.transferId(), senderId, request);
+            lifecycleService.startValidating(reservation.transferId());
+
+            stage = WalletTransferFailureStage.PARTICIPANT_VALIDATION;
+            Long receiverId = validationService.resolveReceiver(request);
+
+            stage = WalletTransferFailureStage.FRAUD_VALIDATION;
+            validationService.verifyFraud(senderId, request);
+
+            lifecycleService.startProcessing(reservation.transferId());
+            stage = WalletTransferFailureStage.FUNDS_AND_LEDGER_TRANSACTION;
+            return walletService.transfer(reservation.transferId(), senderId, receiverId, request);
         } catch (CommonException e) {
-            markFailed(reservation.transferId(), e.getErrorCode());
+            ErrorCode errorCode = e.getErrorCode();
+            var classification = failureClassifier.classify(errorCode, stage);
+            markFailed(reservation.transferId(), errorCode,
+                    classification.stage(), classification.retryable());
             throw e;
         } catch (RuntimeException e) {
-            markFailed(reservation.transferId(), ErrorCode.TRANSACTION_PROCESSING_FAILED);
+            markFailed(reservation.transferId(), ErrorCode.TRANSACTION_PROCESSING_FAILED,
+                    stage, false);
             throw e;
         }
     }
@@ -64,9 +86,10 @@ public class WalletFacadeService {
         }
     }
 
-    private void markFailed(UUID transferId, ErrorCode errorCode) {
+    private void markFailed(UUID transferId, ErrorCode errorCode,
+                            WalletTransferFailureStage stage, boolean retryable) {
         try {
-            failureService.markFailed(transferId, errorCode);
+            failureService.markFailed(transferId, errorCode, stage, retryable);
         } catch (RuntimeException failureRecordingException) {
             log.error("Failed to record wallet transfer failure: transferId={}", transferId,
                     failureRecordingException);

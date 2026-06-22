@@ -43,7 +43,7 @@ public class WalletTransferIdempotencyService {
             case COMPLETED -> WalletTransferReservation.completed(new WalletTransferResponse(
                     existing.getTransferId(), WalletTransferStatus.COMPLETED
             ));
-            case REQUESTED, PROCESSING -> throw ErrorCode.TRANSACTION_IN_PROGRESS.commonException();
+            case REQUESTED, VALIDATING, PROCESSING -> throw ErrorCode.TRANSACTION_IN_PROGRESS.commonException();
             case FAILED -> throw previousFailure(existing.getFailureCode()).commonException();
         };
     }

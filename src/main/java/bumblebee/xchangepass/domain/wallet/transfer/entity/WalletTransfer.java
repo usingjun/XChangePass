@@ -47,6 +47,28 @@ public class WalletTransfer {
     @Column(name = "failure_code", length = 64)
     private String failureCode;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "failure_stage", length = 40)
+    private WalletTransferFailureStage failureStage;
+
+    @Column(name = "retryable")
+    private Boolean retryable;
+
+    @Column(name = "validating_at")
+    private LocalDateTime validatingAt;
+
+    @Column(name = "processing_at")
+    private LocalDateTime processingAt;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    @Column(name = "failed_at")
+    private LocalDateTime failedAt;
+
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -67,23 +89,37 @@ public class WalletTransfer {
         this.status = WalletTransferStatus.REQUESTED;
     }
 
-    public void startProcessing() {
+    public void startValidating() {
         requireStatus(WalletTransferStatus.REQUESTED);
+        status = WalletTransferStatus.VALIDATING;
+        validatingAt = LocalDateTime.now();
+        attemptCount++;
+    }
+
+    public void startProcessing() {
+        requireStatus(WalletTransferStatus.VALIDATING);
         status = WalletTransferStatus.PROCESSING;
+        processingAt = LocalDateTime.now();
     }
 
     public void complete() {
         requireStatus(WalletTransferStatus.PROCESSING);
         status = WalletTransferStatus.COMPLETED;
         failureCode = null;
+        failureStage = null;
+        retryable = null;
+        completedAt = LocalDateTime.now();
     }
 
-    public void fail(ErrorCode errorCode) {
+    public void fail(ErrorCode errorCode, WalletTransferFailureStage stage, boolean retryable) {
         if (status == WalletTransferStatus.COMPLETED) {
             throw new IllegalStateException("A completed transfer cannot be marked as failed");
         }
         status = WalletTransferStatus.FAILED;
         failureCode = errorCode.name();
+        failureStage = stage;
+        this.retryable = retryable;
+        failedAt = LocalDateTime.now();
     }
 
     @PrePersist
