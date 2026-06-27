@@ -129,13 +129,6 @@ public class WalletServiceImpl implements WalletService {
                 .status(previousStatus, previousStatus)
                 .build());
         transfer.complete();
-        eventService.record(TransactionStatusEvent.builder(
-                        transfer.getTransferId(), TransactionStatusEventType.COMPLETED
-                )
-                .userId(transfer.getSenderUserId())
-                .idempotencyKey(transfer.getIdempotencyKey())
-                .status(previousStatus, transfer.getStatus())
-                .build());
         return new WalletTransferResponse(transfer.getTransferId(), transfer.getStatus());
     }
 

@@ -23,16 +23,7 @@ public class WalletTransferLifecycleService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void startValidating(UUID transferId) {
-        WalletTransfer transfer = find(transferId);
-        WalletTransferStatus previousStatus = transfer.getStatus();
-        transfer.startValidating();
-        eventService.record(TransactionStatusEvent.builder(
-                        transfer.getTransferId(), TransactionStatusEventType.VALIDATION_STARTED
-                )
-                .userId(transfer.getSenderUserId())
-                .idempotencyKey(transfer.getIdempotencyKey())
-                .status(previousStatus, transfer.getStatus())
-                .build());
+        find(transferId).startValidating();
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

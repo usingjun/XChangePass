@@ -51,8 +51,8 @@ class TransactionStatusHourlySummaryServiceTest {
     void summarizesHourlyEventsWithoutDuplicatingOnRerun() {
         LocalDateTime from = LocalDateTime.of(2026, 6, 26, 13, 0);
         LocalDateTime to = from.plusHours(1);
-        eventRepository.save(event(TransactionStatusEventType.REQUEST_ACCEPTED, from.plusMinutes(1))
-                .status(null, WalletTransferStatus.REQUESTED)
+        eventRepository.save(event(TransactionStatusEventType.PROCESSING_STARTED, from.plusMinutes(1))
+                .status(WalletTransferStatus.VALIDATING, WalletTransferStatus.PROCESSING)
                 .build());
         eventRepository.save(event(TransactionStatusEventType.FAILED, from.plusMinutes(2))
                 .status(WalletTransferStatus.VALIDATING, WalletTransferStatus.FAILED)
@@ -64,8 +64,8 @@ class TransactionStatusHourlySummaryServiceTest {
                 .failure(WalletTransferFailureStage.FUNDS_AND_LEDGER_TRANSACTION,
                         "TRANSACTION_PROCESSING_FAILED", false)
                 .build());
-        eventRepository.save(event(TransactionStatusEventType.COMPLETED, to.plusMinutes(1))
-                .status(WalletTransferStatus.PROCESSING, WalletTransferStatus.COMPLETED)
+        eventRepository.save(event(TransactionStatusEventType.LEDGER_SAVED, to.plusMinutes(1))
+                .status(WalletTransferStatus.PROCESSING, WalletTransferStatus.PROCESSING)
                 .build());
 
         var first = summaryService.summarize(from, to);
@@ -144,8 +144,8 @@ class TransactionStatusHourlySummaryServiceTest {
     void findsHourlySummariesByRange() {
         LocalDateTime firstHour = LocalDateTime.of(2026, 6, 26, 13, 0);
         LocalDateTime secondHour = firstHour.plusHours(1);
-        eventRepository.save(event(TransactionStatusEventType.REQUEST_ACCEPTED, firstHour.plusMinutes(1))
-                .status(null, WalletTransferStatus.REQUESTED)
+        eventRepository.save(event(TransactionStatusEventType.PROCESSING_STARTED, firstHour.plusMinutes(1))
+                .status(WalletTransferStatus.VALIDATING, WalletTransferStatus.PROCESSING)
                 .build());
         eventRepository.save(event(TransactionStatusEventType.FAILED, secondHour.plusMinutes(1))
                 .status(WalletTransferStatus.PROCESSING, WalletTransferStatus.FAILED)
@@ -160,8 +160,8 @@ class TransactionStatusHourlySummaryServiceTest {
         assertThat(responses).singleElement()
                 .satisfies(response -> {
                     assertThat(response.summaryHour()).isEqualTo(firstHour);
-                    assertThat(response.eventType()).isEqualTo(TransactionStatusEventType.REQUEST_ACCEPTED.name());
-                    assertThat(response.status()).isEqualTo(WalletTransferStatus.REQUESTED.name());
+                    assertThat(response.eventType()).isEqualTo(TransactionStatusEventType.PROCESSING_STARTED.name());
+                    assertThat(response.status()).isEqualTo(WalletTransferStatus.PROCESSING.name());
                     assertThat(response.count()).isEqualTo(1);
                     assertThat(response.retryableCount()).isZero();
                     assertThat(response.nonRetryableCount()).isZero();
@@ -172,11 +172,11 @@ class TransactionStatusHourlySummaryServiceTest {
     void defaultDatabaseAggregationMatchesJavaGroupingSummary() {
         LocalDateTime from = LocalDateTime.of(2026, 6, 26, 13, 0);
         LocalDateTime to = from.plusHours(2);
-        eventRepository.save(event(TransactionStatusEventType.REQUEST_ACCEPTED, from.plusMinutes(1))
-                .status(null, WalletTransferStatus.REQUESTED)
+        eventRepository.save(event(TransactionStatusEventType.PROCESSING_STARTED, from.plusMinutes(1))
+                .status(WalletTransferStatus.VALIDATING, WalletTransferStatus.PROCESSING)
                 .build());
-        eventRepository.save(event(TransactionStatusEventType.REQUEST_ACCEPTED, from.plusMinutes(2))
-                .status(null, WalletTransferStatus.REQUESTED)
+        eventRepository.save(event(TransactionStatusEventType.LEDGER_SAVED, from.plusMinutes(2))
+                .status(WalletTransferStatus.PROCESSING, WalletTransferStatus.PROCESSING)
                 .build());
         eventRepository.save(event(TransactionStatusEventType.FAILED, from.plusMinutes(3))
                 .status(WalletTransferStatus.PROCESSING, WalletTransferStatus.FAILED)

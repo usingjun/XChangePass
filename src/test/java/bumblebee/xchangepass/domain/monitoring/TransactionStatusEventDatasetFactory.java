@@ -52,34 +52,25 @@ final class TransactionStatusEventDatasetFactory {
 
     private static TransactionStatusEventType eventType(int index) {
         int bucket = index % 1_000;
-        if (bucket < 200) {
-            return TransactionStatusEventType.REQUEST_ACCEPTED;
-        }
-        if (bucket < 400) {
-            return TransactionStatusEventType.VALIDATION_STARTED;
-        }
-        if (bucket < 550) {
+        if (bucket < 250) {
             return TransactionStatusEventType.PROCESSING_STARTED;
         }
-        if (bucket < 700) {
+        if (bucket < 500) {
             return TransactionStatusEventType.LEDGER_SAVED;
         }
-        if (bucket < 900) {
-            return TransactionStatusEventType.COMPLETED;
-        }
-        if (bucket < 960) {
+        if (bucket < 760) {
             return TransactionStatusEventType.FAILED;
         }
-        if (bucket < 980) {
+        if (bucket < 860) {
             return TransactionStatusEventType.FRAUD_DETECTION_UNAVAILABLE;
         }
-        if (bucket < 985) {
+        if (bucket < 900) {
             return TransactionStatusEventType.FRAUD_CHECK_BLOCKED;
         }
-        if (bucket < 990) {
+        if (bucket < 940) {
             return TransactionStatusEventType.IDEMPOTENT_DUPLICATE_DETECTED;
         }
-        if (bucket < 995) {
+        if (bucket < 970) {
             return TransactionStatusEventType.AUTO_FAILED;
         }
         return TransactionStatusEventType.OPERATIONAL_EXCEPTION_CREATED;
@@ -97,11 +88,9 @@ final class TransactionStatusEventDatasetFactory {
     private static void applyStatus(TransactionStatusEvent.TransactionStatusEventBuilder builder,
                                     TransactionStatusEventType eventType) {
         switch (eventType) {
-            case REQUEST_ACCEPTED -> builder.status(null, WalletTransferStatus.REQUESTED);
-            case VALIDATION_STARTED -> builder.status(WalletTransferStatus.REQUESTED, WalletTransferStatus.VALIDATING);
             case PROCESSING_STARTED -> builder.status(WalletTransferStatus.VALIDATING, WalletTransferStatus.PROCESSING);
             case LEDGER_SAVED -> builder.status(WalletTransferStatus.PROCESSING, WalletTransferStatus.PROCESSING);
-            case COMPLETED, IDEMPOTENT_DUPLICATE_DETECTED -> builder.status(
+            case IDEMPOTENT_DUPLICATE_DETECTED -> builder.status(
                     WalletTransferStatus.PROCESSING, WalletTransferStatus.COMPLETED
             );
             case FAILED, FRAUD_DETECTION_UNAVAILABLE, AUTO_FAILED, OPERATIONAL_EXCEPTION_CREATED -> builder.status(

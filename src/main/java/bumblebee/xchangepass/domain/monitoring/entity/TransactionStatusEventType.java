@@ -1,11 +1,8 @@
 package bumblebee.xchangepass.domain.monitoring.entity;
 
 public enum TransactionStatusEventType {
-    REQUEST_ACCEPTED,
-    VALIDATION_STARTED,
     PROCESSING_STARTED,
     LEDGER_SAVED,
-    COMPLETED,
     FAILED,
     IDEMPOTENT_DUPLICATE_DETECTED,
     FRAUD_CHECK_BLOCKED,
