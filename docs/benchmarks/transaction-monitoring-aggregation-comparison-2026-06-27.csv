@@ -1,0 +1,3 @@
+aggregation_mode,source_count,summary_count,summary_rows,total_elapsed_ms,events_per_second,count_diff
+JAVA_GROUPING,1000000,1000000,336,2866,348918.35,0
+DB_GROUP_BY,1000000,1000000,336,566,1766784.45,0
