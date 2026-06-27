@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.transfer.recovery;
 
+import bumblebee.xchangepass.domain.monitoring.service.TransactionStatusEventService;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransfer;
 import bumblebee.xchangepass.domain.wallet.transfer.recovery.entity.WalletTransferRecoveryCaseSeverity;
 import bumblebee.xchangepass.domain.wallet.transfer.recovery.entity.WalletTransferRecoveryCaseType;
@@ -22,7 +23,9 @@ class WalletTransferRecoveryCaseServiceTest {
     void uniqueConflictReobservesExistingCase() {
         WalletTransferRecoveryCaseWriter writer = mock(WalletTransferRecoveryCaseWriter.class);
         WalletTransferRecoveryMetrics metrics = mock(WalletTransferRecoveryMetrics.class);
-        WalletTransferRecoveryCaseService service = new WalletTransferRecoveryCaseService(writer, metrics);
+        TransactionStatusEventService eventService = mock(TransactionStatusEventService.class);
+        WalletTransferRecoveryCaseService service =
+                new WalletTransferRecoveryCaseService(writer, metrics, eventService);
         WalletTransfer transfer = transfer();
         doThrow(new DataIntegrityViolationException("duplicate")).when(writer).create(
                 transfer.getTransferId(),

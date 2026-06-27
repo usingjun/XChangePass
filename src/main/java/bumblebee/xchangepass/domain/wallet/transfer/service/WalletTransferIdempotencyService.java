@@ -1,5 +1,8 @@
 package bumblebee.xchangepass.domain.wallet.transfer.service;
 
+import bumblebee.xchangepass.domain.monitoring.entity.TransactionStatusEvent;
+import bumblebee.xchangepass.domain.monitoring.entity.TransactionStatusEventType;
+import bumblebee.xchangepass.domain.monitoring.service.TransactionStatusEventService;
 import bumblebee.xchangepass.domain.wallet.transfer.dto.WalletTransferResponse;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransfer;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferStatus;
@@ -19,6 +22,7 @@ public class WalletTransferIdempotencyService {
     private final WalletTransferReservationWriter reservationWriter;
     private final WalletTransferRepository repository;
     private final WalletTransferRequestHasher requestHasher;
+    private final TransactionStatusEventService eventService;
 
     public WalletTransferReservation reserve(Long senderUserId, UUID idempotencyKey,
                                              WalletTransferRequest request) {
@@ -30,8 +34,20 @@ public class WalletTransferIdempotencyService {
             WalletTransfer existing = repository
                     .findBySenderUserIdAndIdempotencyKey(senderUserId, idempotencyKey)
                     .orElseThrow(() -> e);
+            recordDuplicate(existing);
             return resolveExisting(existing, requestHash);
         }
+    }
+
+    private void recordDuplicate(WalletTransfer existing) {
+        eventService.recordBestEffort(TransactionStatusEvent.builder(
+                        existing.getTransferId(), TransactionStatusEventType.IDEMPOTENT_DUPLICATE_DETECTED
+                )
+                .userId(existing.getSenderUserId())
+                .idempotencyKey(existing.getIdempotencyKey())
+                .status(existing.getStatus(), existing.getStatus())
+                .failure(existing.getFailureStage(), existing.getFailureCode(), existing.getRetryable())
+                .build());
     }
 
     private WalletTransferReservation resolveExisting(WalletTransfer existing, String requestHash) {

@@ -1,5 +1,6 @@
 package bumblebee.xchangepass.domain.wallet.wallet;
 
+import bumblebee.xchangepass.domain.monitoring.service.TransactionStatusEventService;
 import bumblebee.xchangepass.domain.card.service.CardService;
 import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -44,7 +45,8 @@ class WalletServiceImplTest {
                 fraudDetectionService,
                 mock(ExchangeService.class),
                 userService,
-                mock(WalletTransferRepository.class)
+                mock(WalletTransferRepository.class),
+                mock(TransactionStatusEventService.class)
         );
 
         User receiver = mock(User.class);
@@ -95,7 +97,8 @@ class WalletServiceImplTest {
                 mock(FraudDetectionService.class),
                 exchangeService,
                 userService,
-                mock(WalletTransferRepository.class)
+                mock(WalletTransferRepository.class),
+                mock(TransactionStatusEventService.class)
         );
 
         User receiver = mock(User.class);

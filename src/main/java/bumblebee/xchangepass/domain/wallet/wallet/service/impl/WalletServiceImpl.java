@@ -1,5 +1,8 @@
 package bumblebee.xchangepass.domain.wallet.wallet.service.impl;
 
+import bumblebee.xchangepass.domain.monitoring.entity.TransactionStatusEvent;
+import bumblebee.xchangepass.domain.monitoring.entity.TransactionStatusEventType;
+import bumblebee.xchangepass.domain.monitoring.service.TransactionStatusEventService;
 import bumblebee.xchangepass.domain.card.service.CardService;
 import bumblebee.xchangepass.domain.exchangeRate.service.ExchangeService;
 import bumblebee.xchangepass.domain.user.entity.User;
@@ -12,6 +15,7 @@ import bumblebee.xchangepass.domain.wallet.fraud.service.FraudDetectionService;
 import bumblebee.xchangepass.domain.wallet.fraud.service.FraudTransactionType;
 import bumblebee.xchangepass.domain.wallet.transfer.dto.WalletTransferResponse;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransfer;
+import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferStatus;
 import bumblebee.xchangepass.domain.wallet.transfer.repository.WalletTransferRepository;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.WalletPasswordResponse;
 import bumblebee.xchangepass.domain.wallet.wallet.dto.request.WalletInOutRequest;
@@ -48,6 +52,7 @@ public class WalletServiceImpl implements WalletService {
     private final ExchangeService exchangeService;
     private final UserService userService;
     private final WalletTransferRepository walletTransferRepository;
+    private final TransactionStatusEventService eventService;
 
     @Transactional
     public void createWallet(User user, String walletPassword) {
@@ -115,7 +120,22 @@ public class WalletServiceImpl implements WalletService {
         WalletTransfer transfer = walletTransferRepository.findById(transferId)
                 .orElseThrow(ErrorCode.TRANSACTION_PROCESSING_FAILED::commonException);
         executeMoneyTransfer(transferId, senderId, receiverId, request);
+        WalletTransferStatus previousStatus = transfer.getStatus();
+        eventService.record(TransactionStatusEvent.builder(
+                        transfer.getTransferId(), TransactionStatusEventType.LEDGER_SAVED
+                )
+                .userId(transfer.getSenderUserId())
+                .idempotencyKey(transfer.getIdempotencyKey())
+                .status(previousStatus, previousStatus)
+                .build());
         transfer.complete();
+        eventService.record(TransactionStatusEvent.builder(
+                        transfer.getTransferId(), TransactionStatusEventType.COMPLETED
+                )
+                .userId(transfer.getSenderUserId())
+                .idempotencyKey(transfer.getIdempotencyKey())
+                .status(previousStatus, transfer.getStatus())
+                .build());
         return new WalletTransferResponse(transfer.getTransferId(), transfer.getStatus());
     }
 

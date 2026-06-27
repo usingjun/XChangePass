@@ -1,5 +1,7 @@
 package bumblebee.xchangepass.domain.wallet.transfer;
 
+import bumblebee.xchangepass.domain.monitoring.entity.TransactionStatusEventType;
+import bumblebee.xchangepass.domain.monitoring.service.TransactionStatusEventService;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransfer;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferFailureStage;
 import bumblebee.xchangepass.domain.wallet.transfer.repository.WalletTransferRepository;
@@ -22,6 +24,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class WalletTransferIdempotencyServiceTest {
@@ -29,6 +32,7 @@ class WalletTransferIdempotencyServiceTest {
     private WalletTransferReservationWriter writer;
     private WalletTransferRepository repository;
     private WalletTransferRequestHasher hasher;
+    private TransactionStatusEventService eventService;
     private WalletTransferIdempotencyService service;
 
     @BeforeEach
@@ -36,7 +40,8 @@ class WalletTransferIdempotencyServiceTest {
         writer = mock(WalletTransferReservationWriter.class);
         repository = mock(WalletTransferRepository.class);
         hasher = new WalletTransferRequestHasher();
-        service = new WalletTransferIdempotencyService(writer, repository, hasher);
+        eventService = mock(TransactionStatusEventService.class);
+        service = new WalletTransferIdempotencyService(writer, repository, hasher, eventService);
     }
 
     @Test
@@ -66,6 +71,12 @@ class WalletTransferIdempotencyServiceTest {
 
         assertThat(result.owner()).isFalse();
         assertThat(result.existingResponse().transferId()).isEqualTo(transfer.getTransferId());
+        verify(eventService).recordBestEffort(argThat(event ->
+                event.getEventType() == TransactionStatusEventType.IDEMPOTENT_DUPLICATE_DETECTED
+                        && event.getTransactionId().equals(transfer.getTransferId())
+                        && event.getCurrentStatus() == transfer.getStatus()
+                        && event.getIdempotencyKey().equals(key)
+        ));
     }
 
     @Test

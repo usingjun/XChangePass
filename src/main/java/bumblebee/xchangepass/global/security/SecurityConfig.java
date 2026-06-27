@@ -78,6 +78,7 @@ public class SecurityConfig {
 
                         // 🔓 환율 조회는 인증 없이 허용
                         .requestMatchers("/api/exchange-rate/**").permitAll()
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
                         // 관리자만 사용자 삭제 가능
                         .requestMatchers("/user").hasRole("ADMIN")
 
