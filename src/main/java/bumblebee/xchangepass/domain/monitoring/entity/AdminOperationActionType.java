@@ -1,0 +1,11 @@
+package bumblebee.xchangepass.domain.monitoring.entity;
+
+public enum AdminOperationActionType {
+    VIEW_PENDING_TRANSACTION,
+    VIEW_OPERATIONAL_EXCEPTION,
+    DRY_RUN_TRANSACTION,
+    MARK_TRANSACTION_FAILED,
+    ACKNOWLEDGE_RECOVERY_CASE,
+    RESOLVE_RECOVERY_CASE,
+    RETRY_EXCHANGE_RATE_SYNC_FAILURE
+}
