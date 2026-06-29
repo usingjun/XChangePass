@@ -2,6 +2,9 @@ package bumblebee.xchangepass.domain.exchangeRate.service;
 
 import bumblebee.xchangepass.domain.exchangeRate.dto.response.ExchangeRateResponse;
 import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRate;
+import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRateSyncFailureType;
+import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRateSyncHistory;
+import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRateSyncSnapshot;
 import bumblebee.xchangepass.domain.exchangeRate.entity.ExchangeRateTemp;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRateTempRepository;
 import bumblebee.xchangepass.domain.exchangeRate.repository.ExchangeRepository;
@@ -42,6 +45,8 @@ public class ExchangeService {
     private final ExchangeRateTempRepository exchangeRateTempRepository;
     private final ExchangeRateLockManager lockManager;
     private final CacheManager cacheManager;
+    private final ExchangeRateResponseValidator exchangeRateResponseValidator;
+    private final ExchangeRateSyncRecordService exchangeRateSyncRecordService;
 
     @Autowired
     public ExchangeService(@Qualifier("asyncExecutor") Executor executor,
@@ -51,7 +56,9 @@ public class ExchangeService {
                            ApplicationContext applicationContext,
                            ExchangeRateLockManager lockManager,
                            CacheManager cacheManager,
-                           RestTemplate restTemplate) {
+                           RestTemplate restTemplate,
+                           ExchangeRateResponseValidator exchangeRateResponseValidator,
+                           ExchangeRateSyncRecordService exchangeRateSyncRecordService) {
         this.exchangeRepository = exchangeRepository;
         this.exchangeRateTempRepository = exchangeRateTempRepository;
         this.exchangeTransactionService = exchangeTransactionService;
@@ -60,6 +67,8 @@ public class ExchangeService {
         this.restTemplate = restTemplate;
         this.lockManager = lockManager;
         this.cacheManager = cacheManager;
+        this.exchangeRateResponseValidator = exchangeRateResponseValidator;
+        this.exchangeRateSyncRecordService = exchangeRateSyncRecordService;
     }
 
     public ExchangeRateResponse fetchExchangeRates(String baseCurrency) {
@@ -76,25 +85,20 @@ public class ExchangeService {
     public CompletableFuture<Void> fetchAndSaveAllExchangeRates() {
 
         List<String> currencies = Country.create();
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        ExchangeRateSyncHistory history = exchangeRateSyncRecordService.start(currencies.size());
+        List<CompletableFuture<ExchangeRateSyncItemResult>> futures = new ArrayList<>();
 
         for (String baseCurrency : currencies) {
-            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-                try {
-                    ExchangeService self = applicationContext.getBean(ExchangeService.class);
-                    self.fetchAndSaveExchangeRate(baseCurrency);
-                } catch (Exception e) {
-                    throw ErrorCode.EXCHANGE_RATE_NOT_FOUND.commonException();
-                }
-            }, executor);
+            CompletableFuture<ExchangeRateSyncItemResult> future = CompletableFuture.supplyAsync(
+                    () -> fetchValidateAndSaveExchangeRate(history, baseCurrency),
+                    executor
+            );
             futures.add(future);
         }
 
         CompletableFuture<Void> allOf = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
 
-        allOf.thenRun(exchangeTransactionService::swapExchangeRateTables);
-
-        return allOf;
+        return allOf.thenRun(() -> finishExchangeRateSync(history, futures));
     }
 
     @Transactional
@@ -189,6 +193,139 @@ public class ExchangeService {
             exchangeRateTempRepository.save(exchangeRateTemp);
         } catch (Exception e) {
             throw ErrorCode.EXCHANGE_SAVE_FAIL.commonException();
+        }
+    }
+
+    private ExchangeRateSyncItemResult fetchValidateAndSaveExchangeRate(ExchangeRateSyncHistory history,
+                                                                        String baseCurrency) {
+        ExchangeRateResponse response;
+        try {
+            response = fetchExchangeRates(baseCurrency);
+        } catch (RuntimeException exception) {
+            String errorMessage = exception.getMessage();
+            exchangeRateSyncRecordService.recordFailedSnapshot(history, baseCurrency, errorMessage);
+            exchangeRateSyncRecordService.recordFailure(
+                    history,
+                    baseCurrency,
+                    ExchangeRateSyncFailureType.API_ERROR,
+                    null,
+                    errorMessage,
+                    true
+            );
+            return ExchangeRateSyncItemResult.failure(
+                    baseCurrency,
+                    ExchangeRateSyncFailureType.API_ERROR,
+                    errorMessage
+            );
+        }
+
+        ExchangeRateSyncSnapshot snapshot;
+        try {
+            snapshot = exchangeRateSyncRecordService.recordReceivedSnapshot(history, baseCurrency, response);
+        } catch (RuntimeException exception) {
+            return recordSaveFailure(history, baseCurrency, null, exception.getMessage());
+        }
+
+        ExchangeRateValidationResult validationResult = exchangeRateResponseValidator
+                .validate(baseCurrency, response);
+        if (!validationResult.valid()) {
+            exchangeRateSyncRecordService.recordValidationFailure(
+                    history,
+                    baseCurrency,
+                    snapshot.getPayload(),
+                    validationResult
+            );
+            return ExchangeRateSyncItemResult.failure(
+                    baseCurrency,
+                    validationResult.failureType(),
+                    validationResult.errorMessage()
+            );
+        }
+
+        try {
+            saveRatesToTempDB(baseCurrency, response);
+            return ExchangeRateSyncItemResult.success(baseCurrency);
+        } catch (RuntimeException exception) {
+            return recordSaveFailure(history, baseCurrency, snapshot.getPayload(), exception.getMessage());
+        }
+    }
+
+    private ExchangeRateSyncItemResult recordSaveFailure(ExchangeRateSyncHistory history,
+                                                         String baseCurrency,
+                                                         String rawPayload,
+                                                         String errorMessage) {
+        exchangeRateSyncRecordService.recordFailure(
+                history,
+                baseCurrency,
+                ExchangeRateSyncFailureType.SAVE_FAILED,
+                rawPayload,
+                errorMessage,
+                true
+        );
+        return ExchangeRateSyncItemResult.failure(
+                baseCurrency,
+                ExchangeRateSyncFailureType.SAVE_FAILED,
+                errorMessage
+        );
+    }
+
+    private void finishExchangeRateSync(ExchangeRateSyncHistory history,
+                                        List<CompletableFuture<ExchangeRateSyncItemResult>> futures) {
+        List<ExchangeRateSyncItemResult> results = futures.stream()
+                .map(CompletableFuture::join)
+                .toList();
+        long successCount = results.stream()
+                .filter(ExchangeRateSyncItemResult::success)
+                .count();
+        int failureCount = results.size() - Math.toIntExact(successCount);
+
+        if (failureCount == 0) {
+            try {
+                exchangeTransactionService.swapExchangeRateTables();
+                exchangeRateSyncRecordService.complete(history, Math.toIntExact(successCount), true);
+            } catch (RuntimeException exception) {
+                exchangeRateSyncRecordService.recordFailure(
+                        history,
+                        "ALL",
+                        ExchangeRateSyncFailureType.SWAP_FAILED,
+                        null,
+                        exception.getMessage(),
+                        true
+                );
+                exchangeRateSyncRecordService.fail(history, exception.getMessage());
+                throw exception;
+            }
+            return;
+        }
+
+        if (successCount == 0) {
+            exchangeRateSyncRecordService.fail(history, "All exchange rates failed");
+            return;
+        }
+
+        exchangeRateSyncRecordService.partialFail(
+                history,
+                Math.toIntExact(successCount),
+                failureCount,
+                "Some exchange rates failed"
+        );
+    }
+
+    private record ExchangeRateSyncItemResult(
+            String baseCurrency,
+            boolean success,
+            ExchangeRateSyncFailureType failureType,
+            String errorMessage
+    ) {
+
+        private static ExchangeRateSyncItemResult success(String baseCurrency) {
+            return new ExchangeRateSyncItemResult(baseCurrency, true, null, null);
+        }
+
+        private static ExchangeRateSyncItemResult failure(String baseCurrency,
+                                                          ExchangeRateSyncFailureType failureType,
+                                                          String errorMessage) {
+            return new ExchangeRateSyncItemResult(baseCurrency, false, failureType, errorMessage);
         }
     }
 
