@@ -3,13 +3,13 @@ package bumblebee.xchangepass.domain.wallet.reconciliation;
 import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
+import bumblebee.xchangepass.domain.wallet.reconciliation.dto.WalletLedgerAggregationResult;
+import bumblebee.xchangepass.domain.wallet.reconciliation.dto.WalletLedgerBalanceAggregate;
 import bumblebee.xchangepass.domain.wallet.reconciliation.entity.WalletBalanceReconciliationIssue;
 import bumblebee.xchangepass.domain.wallet.reconciliation.entity.WalletBalanceReconciliationIssueStatus;
 import bumblebee.xchangepass.domain.wallet.reconciliation.repository.WalletBalanceReconciliationIssueRepository;
+import bumblebee.xchangepass.domain.wallet.reconciliation.repository.WalletLedgerAggregationRepository;
 import bumblebee.xchangepass.domain.wallet.reconciliation.service.WalletBalanceReconciliationService;
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
-import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransfer;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferFailureStage;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferStatus;
@@ -45,7 +45,8 @@ import static org.mockito.Mockito.when;
 class WalletBalanceReconciliationServiceTest {
 
     private final WalletBalanceRepository balanceRepository = mock(WalletBalanceRepository.class);
-    private final WalletTransactionRepository transactionRepository = mock(WalletTransactionRepository.class);
+    private final WalletLedgerAggregationRepository ledgerAggregationRepository =
+            mock(WalletLedgerAggregationRepository.class);
     private final WalletTransferRepository transferRepository = mock(WalletTransferRepository.class);
     private final WalletTransferRecoveryCaseRepository recoveryCaseRepository =
             mock(WalletTransferRecoveryCaseRepository.class);
@@ -54,7 +55,7 @@ class WalletBalanceReconciliationServiceTest {
 
     private final WalletBalanceReconciliationService service = new WalletBalanceReconciliationService(
             balanceRepository,
-            transactionRepository,
+            ledgerAggregationRepository,
             transferRepository,
             recoveryCaseRepository,
             issueRepository
@@ -65,9 +66,7 @@ class WalletBalanceReconciliationServiceTest {
         User user = user(1L);
         WalletBalance balance = balance(10L, user, "KRW", "1000.00");
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         noSkippedTargets();
 
         var response = service.reconcileAll();
@@ -82,9 +81,7 @@ class WalletBalanceReconciliationServiceTest {
         User user = user(1L);
         WalletBalance balance = balance(10L, user, "KRW", "1200.00");
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         noSkippedTargets();
         when(issueRepository.findByWalletIdAndCurrencyAndStatus(
                 10L, "KRW", WalletBalanceReconciliationIssueStatus.OPEN
@@ -108,9 +105,7 @@ class WalletBalanceReconciliationServiceTest {
         User user = user(1L);
         WalletBalance balance = balance(10L, user, "KRW", "800.00");
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         noSkippedTargets();
         when(issueRepository.findByWalletIdAndCurrencyAndStatus(
                 10L, "KRW", WalletBalanceReconciliationIssueStatus.OPEN
@@ -126,10 +121,7 @@ class WalletBalanceReconciliationServiceTest {
         User user = user(1L);
         WalletBalance balance = balance(10L, user, "KRW", "1500.00");
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT),
-                ledger(user, null, "500.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1500.00"));
         noSkippedTargets();
 
         service.reconcileAll();
@@ -142,10 +134,7 @@ class WalletBalanceReconciliationServiceTest {
         User user = user(1L);
         WalletBalance balance = balance(10L, user, "KRW", "700.00");
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT),
-                ledger(user, null, "300.00", null, null, "KRW", WalletTransactionType.WITHDRAWAL)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "700.00"));
         noSkippedTargets();
 
         service.reconcileAll();
@@ -160,10 +149,10 @@ class WalletBalanceReconciliationServiceTest {
         WalletBalance senderBalance = balance(10L, sender, "KRW", "9000.00");
         WalletBalance receiverBalance = balance(20L, receiver, "USD", "7.50");
         when(balanceRepository.findAll()).thenReturn(List.of(senderBalance, receiverBalance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(sender, null, "10000.00", null, null, "KRW", WalletTransactionType.DEPOSIT),
-                ledger(sender, receiver, "1000.00", "7.50", "KRW", "USD", WalletTransactionType.TRANSFER)
-        ));
+        ledgerAggregates(0,
+                aggregate(1L, "KRW", "9000.00"),
+                aggregate(2L, "USD", "7.50")
+        );
         noSkippedTargets();
 
         service.reconcileAll();
@@ -177,9 +166,7 @@ class WalletBalanceReconciliationServiceTest {
         User receiver = user(2L);
         WalletBalance receiverBalance = balance(20L, receiver, "KRW", "1000.00");
         when(balanceRepository.findAll()).thenReturn(List.of(receiverBalance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(sender, receiver, "1000.00", null, "KRW", "KRW", WalletTransactionType.TRANSFER)
-        ));
+        ledgerAggregates(0, aggregate(2L, "KRW", "1000.00"));
         noSkippedTargets();
 
         var response = service.reconcileAll();
@@ -194,9 +181,7 @@ class WalletBalanceReconciliationServiceTest {
         User receiver = user(2L);
         WalletBalance receiverBalance = balance(20L, receiver, "USD", "0.00");
         when(balanceRepository.findAll()).thenReturn(List.of(receiverBalance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(sender, receiver, "1000.00", null, "KRW", "USD", WalletTransactionType.TRANSFER)
-        ));
+        ledgerAggregates(1);
         noSkippedTargets();
 
         var response = service.reconcileAll();
@@ -213,9 +198,7 @@ class WalletBalanceReconciliationServiceTest {
         WalletBalance senderBalance = balance(10L, sender, "KRW", "-1000.00");
         WalletBalance receiverBalance = balance(20L, receiver, "USD", "0.00");
         when(balanceRepository.findAll()).thenReturn(List.of(senderBalance, receiverBalance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(sender, receiver, "1000.00", null, "KRW", "USD", WalletTransactionType.TRANSFER)
-        ));
+        ledgerAggregates(1, aggregate(1L, "KRW", "-1000.00"));
         noSkippedTargets();
 
         var response = service.reconcileAll();
@@ -233,9 +216,7 @@ class WalletBalanceReconciliationServiceTest {
                 amount("1100.00"), amount("1000.00"), amount("100.00"), LocalDateTime.now().minusDays(1)
         );
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         noSkippedTargets();
         when(issueRepository.findByWalletIdAndCurrencyAndStatus(
                 10L, "KRW", WalletBalanceReconciliationIssueStatus.OPEN
@@ -261,9 +242,7 @@ class WalletBalanceReconciliationServiceTest {
         );
         resolved.resolve();
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         noSkippedTargets();
         when(issueRepository.findByWalletIdAndCurrencyAndStatus(
                 10L, "KRW", WalletBalanceReconciliationIssueStatus.OPEN
@@ -282,9 +261,7 @@ class WalletBalanceReconciliationServiceTest {
         WalletBalance krwBalance = balance(10L, user, "KRW", "1200.00");
         WalletBalance usdBalance = balance(10L, user, "USD", "50.00");
         when(balanceRepository.findAll()).thenReturn(List.of(krwBalance, usdBalance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         noSkippedTargets();
         when(issueRepository.findByWalletIdAndCurrencyAndStatus(
                 eq(10L), any(), eq(WalletBalanceReconciliationIssueStatus.OPEN)
@@ -304,9 +281,7 @@ class WalletBalanceReconciliationServiceTest {
         WalletBalance firstBalance = balance(10L, firstUser, "KRW", "1200.00");
         WalletBalance secondBalance = balance(20L, secondUser, "KRW", "900.00");
         when(balanceRepository.findAll()).thenReturn(List.of(firstBalance, secondBalance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(firstUser, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         noSkippedTargets();
         when(issueRepository.findByWalletIdAndCurrencyAndStatus(
                 any(), eq("KRW"), eq(WalletBalanceReconciliationIssueStatus.OPEN)
@@ -325,9 +300,7 @@ class WalletBalanceReconciliationServiceTest {
         WalletBalance balance = balance(10L, user, "KRW", "1200.00");
         AtomicReference<WalletBalanceReconciliationIssue> openIssue = new AtomicReference<>();
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         noSkippedTargets();
         when(issueRepository.findByWalletIdAndCurrencyAndStatus(
                 10L, "KRW", WalletBalanceReconciliationIssueStatus.OPEN
@@ -354,9 +327,7 @@ class WalletBalanceReconciliationServiceTest {
         User user = user(1L);
         WalletBalance balance = balance(10L, user, "KRW", "1200.00");
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         noSkippedTargets();
         when(issueRepository.findByWalletIdAndCurrencyAndStatus(
                 10L, "KRW", WalletBalanceReconciliationIssueStatus.OPEN
@@ -375,9 +346,7 @@ class WalletBalanceReconciliationServiceTest {
         WalletBalance balance = balance(10L, user, "KRW", "1200.00");
         WalletTransfer activeTransfer = new WalletTransfer(UUID.randomUUID(), 1L, UUID.randomUUID(), "a".repeat(64));
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         when(transferRepository.findAll()).thenReturn(List.of(activeTransfer));
         when(recoveryCaseRepository.findAll()).thenReturn(List.of());
 
@@ -396,9 +365,7 @@ class WalletBalanceReconciliationServiceTest {
         activeTransfer.startValidating();
         activeTransfer.assignReceiver(2L);
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(receiver, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(2L, "KRW", "1000.00"));
         when(transferRepository.findAll()).thenReturn(List.of(activeTransfer));
         when(recoveryCaseRepository.findAll()).thenReturn(List.of());
 
@@ -425,7 +392,7 @@ class WalletBalanceReconciliationServiceTest {
         failedTransfer.assignReceiver(1L);
         failedTransfer.fail(ErrorCode.TRANSACTION_PROCESSING_FAILED, WalletTransferFailureStage.UNKNOWN, false);
         when(balanceRepository.findAll()).thenReturn(List.of(senderBalance, receiverBalance));
-        when(transactionRepository.findAll()).thenReturn(List.of());
+        ledgerAggregates(0);
         when(transferRepository.findAll()).thenReturn(List.of(completedTransfer, failedTransfer));
         when(recoveryCaseRepository.findAll()).thenReturn(List.of());
         when(issueRepository.findByWalletIdAndCurrencyAndStatus(
@@ -461,9 +428,7 @@ class WalletBalanceReconciliationServiceTest {
                 1L
         );
         when(balanceRepository.findAll()).thenReturn(List.of(balance));
-        when(transactionRepository.findAll()).thenReturn(List.of(
-                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
-        ));
+        ledgerAggregates(0, aggregate(1L, "KRW", "1000.00"));
         when(transferRepository.findAll()).thenReturn(List.of(failedTransfer));
         when(recoveryCaseRepository.findAll()).thenReturn(List.of(recoveryCase));
 
@@ -510,18 +475,13 @@ class WalletBalanceReconciliationServiceTest {
         return user;
     }
 
-    private WalletTransaction ledger(User user, User counterpartyUser, String amount, String receivedAmount,
-                                     String fromCurrency, String toCurrency, WalletTransactionType type) {
-        return new WalletTransaction(
-                user,
-                counterpartyUser,
-                amount(amount),
-                receivedAmount == null ? null : amount(receivedAmount),
-                fromCurrency,
-                toCurrency,
-                type,
-                LocalDateTime.now()
-        );
+    private void ledgerAggregates(int uncalculableLedgerCount, WalletLedgerBalanceAggregate... balances) {
+        when(ledgerAggregationRepository.aggregate())
+                .thenReturn(new WalletLedgerAggregationResult(List.of(balances), uncalculableLedgerCount));
+    }
+
+    private WalletLedgerBalanceAggregate aggregate(Long userId, String currency, String amount) {
+        return new WalletLedgerBalanceAggregate(userId, currency, amount(amount));
     }
 
     private BigDecimal amount(String value) {

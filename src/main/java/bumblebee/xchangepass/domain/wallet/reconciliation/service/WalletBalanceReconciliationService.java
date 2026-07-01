@@ -4,12 +4,11 @@ import bumblebee.xchangepass.domain.user.entity.User;
 import bumblebee.xchangepass.domain.wallet.balance.entity.WalletBalance;
 import bumblebee.xchangepass.domain.wallet.balance.repository.WalletBalanceRepository;
 import bumblebee.xchangepass.domain.wallet.reconciliation.dto.WalletBalanceReconciliationRunResponse;
+import bumblebee.xchangepass.domain.wallet.reconciliation.dto.WalletLedgerAggregationResult;
 import bumblebee.xchangepass.domain.wallet.reconciliation.entity.WalletBalanceReconciliationIssue;
 import bumblebee.xchangepass.domain.wallet.reconciliation.entity.WalletBalanceReconciliationIssueStatus;
 import bumblebee.xchangepass.domain.wallet.reconciliation.repository.WalletBalanceReconciliationIssueRepository;
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransaction;
-import bumblebee.xchangepass.domain.wallet.transaction.entity.WalletTransactionType;
-import bumblebee.xchangepass.domain.wallet.transaction.repository.WalletTransactionRepository;
+import bumblebee.xchangepass.domain.wallet.reconciliation.repository.WalletLedgerAggregationRepository;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransfer;
 import bumblebee.xchangepass.domain.wallet.transfer.entity.WalletTransferStatus;
 import bumblebee.xchangepass.domain.wallet.transfer.recovery.entity.WalletTransferRecoveryCaseStatus;
@@ -31,6 +30,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -43,7 +43,7 @@ public class WalletBalanceReconciliationService {
     );
 
     private final WalletBalanceRepository balanceRepository;
-    private final WalletTransactionRepository transactionRepository;
+    private final WalletLedgerAggregationRepository ledgerAggregationRepository;
     private final WalletTransferRepository transferRepository;
     private final WalletTransferRecoveryCaseRepository recoveryCaseRepository;
     private final WalletBalanceReconciliationIssueRepository issueRepository;
@@ -63,8 +63,8 @@ public class WalletBalanceReconciliationService {
 
     private WalletBalanceReconciliationRunResponse reconcile(List<WalletBalance> balances) {
         LocalDateTime basisTime = LocalDateTime.now();
-        LedgerCalculationResult ledgerCalculation = calculateLedgerBalances(transactionRepository.findAll());
-        Map<LedgerKey, BigDecimal> ledgerBalances = ledgerCalculation.ledgerBalances();
+        WalletLedgerAggregationResult ledgerCalculation = ledgerAggregationRepository.aggregate();
+        Map<LedgerKey, BigDecimal> ledgerBalances = ledgerBalances(ledgerCalculation);
         Set<Long> skippedUserIds = skippedUserIds(transferRepository.findAll());
 
         int checkedBalanceCount = 0;
@@ -137,39 +137,13 @@ public class WalletBalanceReconciliationService {
         }
     }
 
-    private LedgerCalculationResult calculateLedgerBalances(List<WalletTransaction> transactions) {
-        Map<LedgerKey, BigDecimal> ledgerBalances = new HashMap<>();
-        int uncalculableLedgerCount = 0;
-        for (WalletTransaction transaction : transactions) {
-            if (transaction.getTransactionType() == WalletTransactionType.DEPOSIT) {
-                add(ledgerBalances, transaction.getUser(), transaction.getToCurrency(), transaction.getAmount());
-            } else if (transaction.getTransactionType() == WalletTransactionType.WITHDRAWAL) {
-                add(ledgerBalances, transaction.getUser(), transaction.getToCurrency(), transaction.getAmount().negate());
-            } else if (transaction.getTransactionType() == WalletTransactionType.TRANSFER) {
-                add(ledgerBalances, transaction.getUser(), transaction.getFromCurrency(), transaction.getAmount().negate());
-                if (transaction.getReceivedAmount() != null) {
-                    add(ledgerBalances, transaction.getCounterpartyUser(),
-                            transaction.getToCurrency(), transaction.getReceivedAmount());
-                } else if (sameCurrency(transaction.getFromCurrency(), transaction.getToCurrency())) {
-                    add(ledgerBalances, transaction.getCounterpartyUser(),
-                            transaction.getToCurrency(), transaction.getAmount());
-                } else {
-                    uncalculableLedgerCount++;
-                }
-            }
-        }
-        return new LedgerCalculationResult(ledgerBalances, uncalculableLedgerCount);
-    }
-
-    private boolean sameCurrency(String fromCurrency, String toCurrency) {
-        return fromCurrency != null && fromCurrency.equals(toCurrency);
-    }
-
-    private void add(Map<LedgerKey, BigDecimal> ledgerBalances, User user, String currency, BigDecimal amount) {
-        if (user == null || currency == null || amount == null) {
-            return;
-        }
-        ledgerBalances.merge(new LedgerKey(user.getUserId(), currency), amount, BigDecimal::add);
+    private Map<LedgerKey, BigDecimal> ledgerBalances(WalletLedgerAggregationResult ledgerCalculation) {
+        return ledgerCalculation.balances().stream()
+                .collect(Collectors.toMap(
+                        aggregate -> new LedgerKey(aggregate.userId(), aggregate.currency()),
+                        aggregate -> aggregate.ledgerCalculatedAmount(),
+                        BigDecimal::add
+                ));
     }
 
     private Set<Long> skippedUserIds(List<WalletTransfer> transfers) {
@@ -205,12 +179,6 @@ public class WalletBalanceReconciliationService {
     }
 
     private record IssueKey(Long walletId, String currency) {
-    }
-
-    private record LedgerCalculationResult(
-            Map<LedgerKey, BigDecimal> ledgerBalances,
-            int uncalculableLedgerCount
-    ) {
     }
 
     private enum IssueRecordResult {
