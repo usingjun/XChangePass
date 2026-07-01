@@ -53,6 +53,7 @@ public class WalletFacadeService {
 
             stage = WalletTransferFailureStage.PARTICIPANT_VALIDATION;
             Long receiverId = validationService.resolveReceiver(request);
+            lifecycleService.assignReceiver(reservation.transferId(), receiverId);
 
             stage = WalletTransferFailureStage.FRAUD_VALIDATION;
             validationService.verifyFraud(senderId, reservation.transferId(), idempotencyKey, request);

@@ -43,6 +43,26 @@ class WalletTransferTest {
     }
 
     @Test
+    void assignsReceiverUserId() {
+        WalletTransfer transfer = transfer();
+
+        transfer.startValidating();
+        transfer.assignReceiver(2L);
+
+        assertThat(transfer.getReceiverUserId()).isEqualTo(2L);
+    }
+
+    @Test
+    void rejectsChangingAssignedReceiverUserId() {
+        WalletTransfer transfer = transfer();
+
+        transfer.assignReceiver(2L);
+
+        assertThatThrownBy(() -> transfer.assignReceiver(3L))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void rejectsInvalidTransitionAndCompletedFailure() {
         WalletTransfer transfer = transfer();
 

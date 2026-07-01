@@ -27,6 +27,11 @@ public class WalletTransferLifecycleService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void assignReceiver(UUID transferId, Long receiverUserId) {
+        find(transferId).assignReceiver(receiverUserId);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void startProcessing(UUID transferId) {
         WalletTransfer transfer = find(transferId);
         WalletTransferStatus previousStatus = transfer.getStatus();

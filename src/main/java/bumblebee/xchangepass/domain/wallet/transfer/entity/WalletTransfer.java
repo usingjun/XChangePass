@@ -34,6 +34,9 @@ public class WalletTransfer {
     @Column(name = "sender_user_id", nullable = false, updatable = false)
     private Long senderUserId;
 
+    @Column(name = "receiver_user_id")
+    private Long receiverUserId;
+
     @Column(name = "idempotency_key", nullable = false, updatable = false)
     private UUID idempotencyKey;
 
@@ -100,6 +103,16 @@ public class WalletTransfer {
         requireStatus(WalletTransferStatus.VALIDATING);
         status = WalletTransferStatus.PROCESSING;
         processingAt = LocalDateTime.now();
+    }
+
+    public void assignReceiver(Long receiverUserId) {
+        if (receiverUserId == null) {
+            throw new IllegalArgumentException("receiverUserId is required");
+        }
+        if (this.receiverUserId != null && !this.receiverUserId.equals(receiverUserId)) {
+            throw new IllegalStateException("Wallet transfer receiver cannot be changed");
+        }
+        this.receiverUserId = receiverUserId;
     }
 
     public void complete() {
