@@ -85,6 +85,10 @@ public class WalletBalanceReconciliationIssue {
         this.detectionCount++;
     }
 
+    public void resolve() {
+        this.status = WalletBalanceReconciliationIssueStatus.RESOLVED;
+    }
+
     @PrePersist
     void onCreate() {
         LocalDateTime now = LocalDateTime.now();

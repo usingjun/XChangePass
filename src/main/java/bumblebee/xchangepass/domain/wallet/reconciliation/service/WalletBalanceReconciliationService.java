@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -46,6 +47,7 @@ public class WalletBalanceReconciliationService {
     private final WalletTransferRepository transferRepository;
     private final WalletTransferRecoveryCaseRepository recoveryCaseRepository;
     private final WalletBalanceReconciliationIssueRepository issueRepository;
+    private final Map<IssueKey, Object> issueLocks = new ConcurrentHashMap<>();
 
     @Transactional
     public WalletBalanceReconciliationRunResponse reconcileAll() {
@@ -92,17 +94,13 @@ public class WalletBalanceReconciliationService {
             }
 
             issueCount++;
-            var existing = issueRepository.findByWalletIdAndCurrencyAndStatus(
-                    wallet.getWalletId(), currency, WalletBalanceReconciliationIssueStatus.OPEN
+            IssueRecordResult result = recordIssue(
+                    wallet.getWalletId(), userId, currency,
+                    snapshotAmount, ledgerCalculatedAmount, differenceAmount, basisTime
             );
-            if (existing.isPresent()) {
-                existing.get().update(snapshotAmount, ledgerCalculatedAmount, differenceAmount, basisTime);
+            if (result == IssueRecordResult.UPDATED) {
                 updatedIssueCount++;
             } else {
-                issueRepository.save(new WalletBalanceReconciliationIssue(
-                        wallet.getWalletId(), userId, currency,
-                        snapshotAmount, ledgerCalculatedAmount, differenceAmount, basisTime
-                ));
                 createdIssueCount++;
             }
         }
@@ -115,6 +113,28 @@ public class WalletBalanceReconciliationService {
                 createdIssueCount,
                 updatedIssueCount
         );
+    }
+
+    private IssueRecordResult recordIssue(Long walletId, Long userId, String currency,
+                                          BigDecimal snapshotAmount, BigDecimal ledgerCalculatedAmount,
+                                          BigDecimal differenceAmount, LocalDateTime basisTime) {
+        IssueKey key = new IssueKey(walletId, currency);
+        Object lock = issueLocks.computeIfAbsent(key, ignored -> new Object());
+        synchronized (lock) {
+            var existing = issueRepository.findByWalletIdAndCurrencyAndStatus(
+                    walletId, currency, WalletBalanceReconciliationIssueStatus.OPEN
+            );
+            if (existing.isPresent()) {
+                existing.get().update(snapshotAmount, ledgerCalculatedAmount, differenceAmount, basisTime);
+                return IssueRecordResult.UPDATED;
+            }
+
+            issueRepository.save(new WalletBalanceReconciliationIssue(
+                    walletId, userId, currency,
+                    snapshotAmount, ledgerCalculatedAmount, differenceAmount, basisTime
+            ));
+            return IssueRecordResult.CREATED;
+        }
     }
 
     private LedgerCalculationResult calculateLedgerBalances(List<WalletTransaction> transactions) {
@@ -184,9 +204,17 @@ public class WalletBalanceReconciliationService {
     private record LedgerKey(Long userId, String currency) {
     }
 
+    private record IssueKey(Long walletId, String currency) {
+    }
+
     private record LedgerCalculationResult(
             Map<LedgerKey, BigDecimal> ledgerBalances,
             int uncalculableLedgerCount
     ) {
+    }
+
+    private enum IssueRecordResult {
+        CREATED,
+        UPDATED
     }
 }

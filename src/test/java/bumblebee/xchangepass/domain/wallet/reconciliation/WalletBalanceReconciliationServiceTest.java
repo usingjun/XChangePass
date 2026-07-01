@@ -29,8 +29,12 @@ import java.util.Currency;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -248,6 +252,104 @@ class WalletBalanceReconciliationServiceTest {
     }
 
     @Test
+    void resolvedIssueDoesNotBlockNewOpenIssueCreation() {
+        User user = user(1L);
+        WalletBalance balance = balance(10L, user, "KRW", "1200.00");
+        WalletBalanceReconciliationIssue resolved = new WalletBalanceReconciliationIssue(
+                10L, 1L, "KRW",
+                amount("1100.00"), amount("1000.00"), amount("100.00"), LocalDateTime.now().minusDays(1)
+        );
+        resolved.resolve();
+        when(balanceRepository.findAll()).thenReturn(List.of(balance));
+        when(transactionRepository.findAll()).thenReturn(List.of(
+                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
+        ));
+        noSkippedTargets();
+        when(issueRepository.findByWalletIdAndCurrencyAndStatus(
+                10L, "KRW", WalletBalanceReconciliationIssueStatus.OPEN
+        )).thenReturn(Optional.empty());
+
+        var response = service.reconcileAll();
+
+        assertThat(resolved.getStatus()).isEqualTo(WalletBalanceReconciliationIssueStatus.RESOLVED);
+        assertThat(response.createdIssueCount()).isEqualTo(1);
+        assertThat(savedIssue().getStatus()).isEqualTo(WalletBalanceReconciliationIssueStatus.OPEN);
+    }
+
+    @Test
+    void differentCurrenciesCanHaveSeparateOpenIssues() {
+        User user = user(1L);
+        WalletBalance krwBalance = balance(10L, user, "KRW", "1200.00");
+        WalletBalance usdBalance = balance(10L, user, "USD", "50.00");
+        when(balanceRepository.findAll()).thenReturn(List.of(krwBalance, usdBalance));
+        when(transactionRepository.findAll()).thenReturn(List.of(
+                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
+        ));
+        noSkippedTargets();
+        when(issueRepository.findByWalletIdAndCurrencyAndStatus(
+                eq(10L), any(), eq(WalletBalanceReconciliationIssueStatus.OPEN)
+        )).thenReturn(Optional.empty());
+
+        var response = service.reconcileAll();
+
+        assertThat(response.createdIssueCount()).isEqualTo(2);
+        assertThat(savedIssues()).extracting(WalletBalanceReconciliationIssue::getCurrency)
+                .containsExactlyInAnyOrder("KRW", "USD");
+    }
+
+    @Test
+    void differentWalletsCanHaveSeparateOpenIssues() {
+        User firstUser = user(1L);
+        User secondUser = user(2L);
+        WalletBalance firstBalance = balance(10L, firstUser, "KRW", "1200.00");
+        WalletBalance secondBalance = balance(20L, secondUser, "KRW", "900.00");
+        when(balanceRepository.findAll()).thenReturn(List.of(firstBalance, secondBalance));
+        when(transactionRepository.findAll()).thenReturn(List.of(
+                ledger(firstUser, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
+        ));
+        noSkippedTargets();
+        when(issueRepository.findByWalletIdAndCurrencyAndStatus(
+                any(), eq("KRW"), eq(WalletBalanceReconciliationIssueStatus.OPEN)
+        )).thenReturn(Optional.empty());
+
+        var response = service.reconcileAll();
+
+        assertThat(response.createdIssueCount()).isEqualTo(2);
+        assertThat(savedIssues()).extracting(WalletBalanceReconciliationIssue::getWalletId)
+                .containsExactlyInAnyOrder(10L, 20L);
+    }
+
+    @Test
+    void concurrentReconciliationCreatesOnlyOneOpenIssueForSameWalletAndCurrency() throws Exception {
+        User user = user(1L);
+        WalletBalance balance = balance(10L, user, "KRW", "1200.00");
+        AtomicReference<WalletBalanceReconciliationIssue> openIssue = new AtomicReference<>();
+        when(balanceRepository.findAll()).thenReturn(List.of(balance));
+        when(transactionRepository.findAll()).thenReturn(List.of(
+                ledger(user, null, "1000.00", null, null, "KRW", WalletTransactionType.DEPOSIT)
+        ));
+        noSkippedTargets();
+        when(issueRepository.findByWalletIdAndCurrencyAndStatus(
+                10L, "KRW", WalletBalanceReconciliationIssueStatus.OPEN
+        )).thenAnswer(invocation -> Optional.ofNullable(openIssue.get()));
+        when(issueRepository.save(any(WalletBalanceReconciliationIssue.class))).thenAnswer(invocation -> {
+            WalletBalanceReconciliationIssue issue = invocation.getArgument(0);
+            openIssue.compareAndSet(null, issue);
+            return openIssue.get();
+        });
+
+        var executor = Executors.newFixedThreadPool(2);
+        executor.submit(service::reconcileAll);
+        executor.submit(service::reconcileAll);
+        executor.shutdown();
+
+        assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        verify(issueRepository, times(1)).save(any(WalletBalanceReconciliationIssue.class));
+        assertThat(openIssue.get()).isNotNull();
+        assertThat(openIssue.get().getDetectionCount()).isEqualTo(2);
+    }
+
+    @Test
     void reconciliationDoesNotMutateBalanceValue() {
         User user = user(1L);
         WalletBalance balance = balance(10L, user, "KRW", "1200.00");
@@ -382,6 +484,13 @@ class WalletBalanceReconciliationServiceTest {
                 ArgumentCaptor.forClass(WalletBalanceReconciliationIssue.class);
         verify(issueRepository).save(captor.capture());
         return captor.getValue();
+    }
+
+    private List<WalletBalanceReconciliationIssue> savedIssues() {
+        ArgumentCaptor<WalletBalanceReconciliationIssue> captor =
+                ArgumentCaptor.forClass(WalletBalanceReconciliationIssue.class);
+        verify(issueRepository, times(2)).save(captor.capture());
+        return captor.getAllValues();
     }
 
     private WalletBalance balance(Long walletId, User user, String currency, String balanceAmount) {
