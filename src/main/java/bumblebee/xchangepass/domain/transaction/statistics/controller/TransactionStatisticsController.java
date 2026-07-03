@@ -1,6 +1,7 @@
 package bumblebee.xchangepass.domain.transaction.statistics.controller;
 
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionMonthlyStatisticsResponse;
+import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsMode;
 import bumblebee.xchangepass.domain.transaction.statistics.service.TransactionStatisticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
@@ -19,18 +20,20 @@ public class TransactionStatisticsController {
 
     private final TransactionStatisticsService statisticsService;
 
-    @Operation(summary = "사용자별 월별 거래 통계 조회", description = "원본 거래 테이블을 직접 GROUP BY하여 월별 거래 금액과 건수를 조회합니다.")
+    @Operation(summary = "사용자별 월별 거래 통계 조회", description = "조회 모드에 따라 원본 거래 GROUP BY 또는 Materialized View로 월별 거래 금액과 건수를 조회합니다.")
     @GetMapping("/api/v1/transactions/statistics/monthly")
     @ResponseStatus(HttpStatus.OK)
     public List<TransactionMonthlyStatisticsResponse> monthlyStatistics(
             @RequestParam Long userId,
             @RequestParam String fromMonth,
-            @RequestParam String toMonth
+            @RequestParam String toMonth,
+            @RequestParam(defaultValue = "GROUP_BY") TransactionStatisticsMode mode
     ) {
         return statisticsService.findMonthlyStatistics(
                 userId,
                 YearMonth.parse(fromMonth),
-                YearMonth.parse(toMonth)
+                YearMonth.parse(toMonth),
+                mode
         );
     }
 }

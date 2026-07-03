@@ -1,6 +1,8 @@
 package bumblebee.xchangepass.domain.transaction.statistics.service;
 
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionMonthlyStatisticsResponse;
+import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsMode;
+import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsRow;
 import bumblebee.xchangepass.domain.transaction.statistics.repository.TransactionStatisticsQueryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -20,11 +22,38 @@ public class TransactionStatisticsService {
     public List<TransactionMonthlyStatisticsResponse> findMonthlyStatistics(
             Long userId, YearMonth fromMonth, YearMonth toMonth
     ) {
+        return findMonthlyStatistics(userId, fromMonth, toMonth, TransactionStatisticsMode.GROUP_BY);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TransactionMonthlyStatisticsResponse> findMonthlyStatistics(
+            Long userId, YearMonth fromMonth, YearMonth toMonth, TransactionStatisticsMode mode
+    ) {
         validate(userId, fromMonth, toMonth);
+        TransactionStatisticsMode queryMode = mode == null ? TransactionStatisticsMode.GROUP_BY : mode;
         LocalDateTime dataAsOf = LocalDateTime.now();
-        return queryRepository.findMonthlyStatistics(userId, fromMonth, toMonth).stream()
+        return findRows(userId, fromMonth, toMonth, queryMode).stream()
                 .map(row -> row.toResponse(dataAsOf))
                 .toList();
+    }
+
+    public void refreshMaterializedView() {
+        queryRepository.refreshMaterializedView();
+    }
+
+    public void refreshMaterializedViewConcurrently() {
+        queryRepository.refreshMaterializedViewConcurrently();
+    }
+
+    private List<TransactionStatisticsRow> findRows(
+            Long userId, YearMonth fromMonth, YearMonth toMonth, TransactionStatisticsMode mode
+    ) {
+        return switch (mode) {
+            case GROUP_BY -> queryRepository.findMonthlyStatistics(userId, fromMonth, toMonth);
+            case MATERIALIZED_VIEW -> queryRepository.findMonthlyStatisticsFromMaterializedView(
+                    userId, fromMonth, toMonth
+            );
+        };
     }
 
     private void validate(Long userId, YearMonth fromMonth, YearMonth toMonth) {

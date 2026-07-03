@@ -5,6 +5,7 @@ import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatis
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsSourceType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
@@ -136,27 +137,44 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
             order by bucket_month, source_type, transaction_type, currency, direction
             """;
 
+    private static final String MONTHLY_STATISTICS_MATERIALIZED_VIEW_SQL = """
+            select
+                user_id,
+                bucket_month,
+                source_type,
+                transaction_type,
+                currency,
+                direction,
+                amount_sum,
+                transaction_count
+            from mv_transaction_monthly_statistics
+            where user_id = ?
+              and bucket_month >= ?
+              and bucket_month < ?
+            order by bucket_month, source_type, transaction_type, currency, direction
+            """;
+
+    private static final RowMapper<TransactionStatisticsRow> ROW_MAPPER = (rs, rowNum) -> new TransactionStatisticsRow(
+            rs.getLong("user_id"),
+            YearMonth.from(rs.getTimestamp("bucket_month").toLocalDateTime()),
+            TransactionStatisticsSourceType.valueOf(rs.getString("source_type")),
+            rs.getString("transaction_type"),
+            rs.getString("currency"),
+            TransactionStatisticsDirection.valueOf(rs.getString("direction")),
+            rs.getBigDecimal("amount_sum"),
+            rs.getLong("transaction_count")
+    );
+
     private final JdbcTemplate jdbcTemplate;
 
     @Override
     public List<TransactionStatisticsRow> findMonthlyStatistics(Long userId, YearMonth fromMonth, YearMonth toMonth) {
-        LocalDateTime from = fromMonth.atDay(1).atStartOfDay();
-        LocalDateTime toExclusive = toMonth.plusMonths(1).atDay(1).atStartOfDay();
-        Timestamp fromTimestamp = Timestamp.valueOf(from);
-        Timestamp toTimestamp = Timestamp.valueOf(toExclusive);
+        Timestamp fromTimestamp = toStartTimestamp(fromMonth);
+        Timestamp toTimestamp = toExclusiveEndTimestamp(toMonth);
 
         return jdbcTemplate.query(
                 MONTHLY_STATISTICS_SQL,
-                (rs, rowNum) -> new TransactionStatisticsRow(
-                        rs.getLong("user_id"),
-                        YearMonth.from(rs.getTimestamp("bucket_month").toLocalDateTime()),
-                        TransactionStatisticsSourceType.valueOf(rs.getString("source_type")),
-                        rs.getString("transaction_type"),
-                        rs.getString("currency"),
-                        TransactionStatisticsDirection.valueOf(rs.getString("direction")),
-                        rs.getBigDecimal("amount_sum"),
-                        rs.getLong("transaction_count")
-                ),
+                ROW_MAPPER,
                 userId, fromTimestamp, toTimestamp,
                 userId, fromTimestamp, toTimestamp,
                 userId, fromTimestamp, toTimestamp,
@@ -164,5 +182,38 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
                 userId, fromTimestamp, toTimestamp,
                 userId, fromTimestamp, toTimestamp
         );
+    }
+
+    @Override
+    public List<TransactionStatisticsRow> findMonthlyStatisticsFromMaterializedView(
+            Long userId, YearMonth fromMonth, YearMonth toMonth
+    ) {
+        return jdbcTemplate.query(
+                MONTHLY_STATISTICS_MATERIALIZED_VIEW_SQL,
+                ROW_MAPPER,
+                userId,
+                toStartTimestamp(fromMonth),
+                toExclusiveEndTimestamp(toMonth)
+        );
+    }
+
+    @Override
+    public void refreshMaterializedView() {
+        jdbcTemplate.execute("REFRESH MATERIALIZED VIEW mv_transaction_monthly_statistics");
+    }
+
+    @Override
+    public void refreshMaterializedViewConcurrently() {
+        jdbcTemplate.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_transaction_monthly_statistics");
+    }
+
+    private Timestamp toStartTimestamp(YearMonth month) {
+        LocalDateTime start = month.atDay(1).atStartOfDay();
+        return Timestamp.valueOf(start);
+    }
+
+    private Timestamp toExclusiveEndTimestamp(YearMonth month) {
+        LocalDateTime endExclusive = month.plusMonths(1).atDay(1).atStartOfDay();
+        return Timestamp.valueOf(endExclusive);
     }
 }

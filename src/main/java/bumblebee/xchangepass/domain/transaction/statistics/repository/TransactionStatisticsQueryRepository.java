@@ -8,4 +8,12 @@ import java.util.List;
 public interface TransactionStatisticsQueryRepository {
 
     List<TransactionStatisticsRow> findMonthlyStatistics(Long userId, YearMonth fromMonth, YearMonth toMonth);
+
+    List<TransactionStatisticsRow> findMonthlyStatisticsFromMaterializedView(
+            Long userId, YearMonth fromMonth, YearMonth toMonth
+    );
+
+    void refreshMaterializedView();
+
+    void refreshMaterializedViewConcurrently();
 }
