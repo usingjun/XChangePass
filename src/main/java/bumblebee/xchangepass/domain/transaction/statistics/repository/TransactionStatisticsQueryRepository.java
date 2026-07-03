@@ -13,7 +13,11 @@ public interface TransactionStatisticsQueryRepository {
             Long userId, YearMonth fromMonth, YearMonth toMonth
     );
 
+    List<TransactionStatisticsRow> findMonthlyStatisticsFromSummary(Long userId, YearMonth fromMonth, YearMonth toMonth);
+
     void refreshMaterializedView();
 
     void refreshMaterializedViewConcurrently();
+
+    void refreshMonthlySummary(YearMonth fromMonth, YearMonth toMonth);
 }

@@ -12,8 +12,22 @@ public record TransactionStatisticsRow(
         String currency,
         TransactionStatisticsDirection direction,
         BigDecimal amountSum,
-        long transactionCount
+        long transactionCount,
+        LocalDateTime dataAsOf
 ) {
+
+    public TransactionStatisticsRow(
+            Long userId,
+            YearMonth bucketMonth,
+            TransactionStatisticsSourceType sourceType,
+            String transactionType,
+            String currency,
+            TransactionStatisticsDirection direction,
+            BigDecimal amountSum,
+            long transactionCount
+    ) {
+        this(userId, bucketMonth, sourceType, transactionType, currency, direction, amountSum, transactionCount, null);
+    }
 
     public TransactionMonthlyStatisticsResponse toResponse(LocalDateTime dataAsOf) {
         return new TransactionMonthlyStatisticsResponse(
@@ -25,7 +39,7 @@ public record TransactionStatisticsRow(
                 direction,
                 amountSum,
                 transactionCount,
-                dataAsOf
+                this.dataAsOf == null ? dataAsOf : this.dataAsOf
         );
     }
 }

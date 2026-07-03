@@ -74,11 +74,9 @@ class TransactionStatisticsJdbcRepositoryTest {
     @BeforeEach
     void setUp() throws Exception {
         jdbcTemplate.execute("DROP MATERIALIZED VIEW IF EXISTS mv_transaction_monthly_statistics");
-        ClassPathResource resource = new ClassPathResource(
-                "db/migration/postgresql/V3__add_transaction_monthly_statistics_materialized_view.sql"
-        );
-        String sql = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        jdbcTemplate.execute(sql);
+        executeSqlResource("db/migration/postgresql/V3__add_transaction_monthly_statistics_materialized_view.sql");
+        executeSqlResource("db/migration/postgresql/V4__add_transaction_monthly_summary.sql");
+        jdbcTemplate.update("delete from transaction_monthly_summary");
     }
 
     @Test
@@ -161,6 +159,47 @@ class TransactionStatisticsJdbcRepositoryTest {
     }
 
     @Test
+    void summaryStatisticsMatchDirectGroupByAndMaterializedViewAfterRefresh() {
+        User user = persistUser("summary-user@example.com", "summaryuser", "010-7000-7000");
+        User receiver = persistUser("summary-receiver@example.com", "summaryrecv", "010-8000-8000");
+        LocalDateTime inRange = LocalDateTime.of(2026, 1, 15, 12, 0);
+        LocalDateTime outsideRange = LocalDateTime.of(2025, 12, 31, 23, 59);
+
+        persistWalletTransactions(user, receiver, inRange, outsideRange);
+        persistCardTransactions(user, inRange);
+        persistExchangeTransactions(user, inRange);
+        flushAndClear();
+        markExchangeTransactionFailed();
+
+        repository.refreshMaterializedView();
+        repository.refreshMonthlySummary(YearMonth.of(2026, 1), YearMonth.of(2026, 1));
+
+        List<TransactionStatisticsRow> groupByRows = repository.findMonthlyStatistics(
+                user.getUserId(), YearMonth.of(2026, 1), YearMonth.of(2026, 1)
+        );
+        List<TransactionStatisticsRow> materializedViewRows = repository.findMonthlyStatisticsFromMaterializedView(
+                user.getUserId(), YearMonth.of(2026, 1), YearMonth.of(2026, 1)
+        );
+        List<TransactionStatisticsRow> summaryRows = repository.findMonthlyStatisticsFromSummary(
+                user.getUserId(), YearMonth.of(2026, 1), YearMonth.of(2026, 1)
+        );
+
+        assertThat(materializedViewRows).containsExactlyElementsOf(groupByRows);
+        assertThat(toComparableRows(summaryRows)).containsExactlyElementsOf(toComparableRows(groupByRows));
+        assertThat(summaryRows).allSatisfy(row -> assertThat(row.dataAsOf()).isNotNull());
+        assertThat(summaryRows).hasSize(9);
+        assertThat(summaryRows)
+                .anySatisfy(row -> assertThat(StatisticsKey.from(row)).isEqualTo(new StatisticsKey(
+                        TransactionStatisticsSourceType.CARD,
+                        "DEPOSIT",
+                        "JPY",
+                        TransactionStatisticsDirection.INCOMING
+                )));
+        assertThat(summaryRows).noneMatch(row -> row.amountSum().compareTo(BigDecimal.valueOf(8000)) == 0);
+        assertThat(summaryRows).noneMatch(row -> row.amountSum().compareTo(BigDecimal.valueOf(9000)) == 0);
+    }
+
+    @Test
     void materializedViewDoesNotReflectNewRowsUntilRefresh() {
         User user = persistUser("mv-refresh-user@example.com", "mvrefreshuser", "010-5000-5000");
         User receiver = persistUser("mv-refresh-receiver@example.com", "mvrefreshrecv", "010-6000-6000");
@@ -200,6 +239,49 @@ class TransactionStatisticsJdbcRepositoryTest {
         );
 
         assertThat(refreshedMaterializedViewRows).containsExactlyElementsOf(groupByRows);
+    }
+
+    @Test
+    void summaryDoesNotReflectNewRowsUntilRefresh() {
+        User user = persistUser("summary-refresh-user@example.com", "summaryrefresh", "010-9000-9000");
+        User receiver = persistUser("summary-refresh-receiver@example.com", "summaryrecv2", "010-9100-9100");
+        LocalDateTime inRange = LocalDateTime.of(2026, 1, 15, 12, 0);
+        LocalDateTime outsideRange = LocalDateTime.of(2025, 12, 31, 23, 59);
+
+        persistWalletTransactions(user, receiver, inRange, outsideRange);
+        persistCardTransactions(user, inRange);
+        persistExchangeTransactions(user, inRange);
+        flushAndClear();
+        markExchangeTransactionFailed();
+        repository.refreshMonthlySummary(YearMonth.of(2026, 1), YearMonth.of(2026, 1));
+
+        entityManager.persist(new CardTransaction(
+                user, "BOOKSTORE", BigDecimal.valueOf(300), "JPY",
+                BigDecimal.valueOf(3000), BigDecimal.valueOf(9800), "CARD-SUMMARY-NEW",
+                CardTransactionType.PAYMENT, inRange.plusMinutes(2)
+        ));
+        flushAndClear();
+
+        List<TransactionStatisticsRow> groupByRows = repository.findMonthlyStatistics(
+                user.getUserId(), YearMonth.of(2026, 1), YearMonth.of(2026, 1)
+        );
+        List<TransactionStatisticsRow> staleSummaryRows = repository.findMonthlyStatisticsFromSummary(
+                user.getUserId(), YearMonth.of(2026, 1), YearMonth.of(2026, 1)
+        );
+
+        assertRow(toMap(groupByRows), TransactionStatisticsSourceType.CARD, "PAYMENT", "JPY",
+                TransactionStatisticsDirection.OUTGOING, "800.0000", 2);
+        assertRow(toMap(staleSummaryRows), TransactionStatisticsSourceType.CARD, "PAYMENT", "JPY",
+                TransactionStatisticsDirection.OUTGOING, "500.0000", 1);
+
+        repository.refreshMonthlySummary(YearMonth.of(2026, 1), YearMonth.of(2026, 1));
+
+        List<TransactionStatisticsRow> refreshedSummaryRows = repository.findMonthlyStatisticsFromSummary(
+                user.getUserId(), YearMonth.of(2026, 1), YearMonth.of(2026, 1)
+        );
+
+        assertThat(toComparableRows(refreshedSummaryRows)).containsExactlyElementsOf(toComparableRows(groupByRows));
+        assertThat(refreshedSummaryRows).allSatisfy(row -> assertThat(row.dataAsOf()).isNotNull());
     }
 
     private void persistWalletTransactions(User user, User receiver, LocalDateTime inRange, LocalDateTime outsideRange) {
@@ -288,6 +370,18 @@ class TransactionStatisticsJdbcRepositoryTest {
         return rows.stream().collect(Collectors.toMap(StatisticsKey::from, Function.identity()));
     }
 
+    private List<ComparableStatisticsRow> toComparableRows(List<TransactionStatisticsRow> rows) {
+        return rows.stream()
+                .map(ComparableStatisticsRow::from)
+                .toList();
+    }
+
+    private void executeSqlResource(String location) throws Exception {
+        ClassPathResource resource = new ClassPathResource(location);
+        String sql = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        jdbcTemplate.execute(sql);
+    }
+
     private User persistUser(String email, String nickname, String phoneNumber) {
         User user = User.builder()
                 .userEmail(email)
@@ -315,6 +409,30 @@ class TransactionStatisticsJdbcRepositoryTest {
     ) {
         private static StatisticsKey from(TransactionStatisticsRow row) {
             return new StatisticsKey(row.sourceType(), row.transactionType(), row.currency(), row.direction());
+        }
+    }
+
+    private record ComparableStatisticsRow(
+            Long userId,
+            YearMonth bucketMonth,
+            TransactionStatisticsSourceType sourceType,
+            String transactionType,
+            String currency,
+            TransactionStatisticsDirection direction,
+            BigDecimal amountSum,
+            long transactionCount
+    ) {
+        private static ComparableStatisticsRow from(TransactionStatisticsRow row) {
+            return new ComparableStatisticsRow(
+                    row.userId(),
+                    row.bucketMonth(),
+                    row.sourceType(),
+                    row.transactionType(),
+                    row.currency(),
+                    row.direction(),
+                    row.amountSum(),
+                    row.transactionCount()
+            );
         }
     }
 }

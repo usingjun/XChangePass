@@ -45,6 +45,12 @@ public class TransactionStatisticsService {
         queryRepository.refreshMaterializedViewConcurrently();
     }
 
+    @Transactional
+    public void refreshMonthlySummary(YearMonth fromMonth, YearMonth toMonth) {
+        validateMonthRange(fromMonth, toMonth);
+        queryRepository.refreshMonthlySummary(fromMonth, toMonth);
+    }
+
     private List<TransactionStatisticsRow> findRows(
             Long userId, YearMonth fromMonth, YearMonth toMonth, TransactionStatisticsMode mode
     ) {
@@ -53,6 +59,7 @@ public class TransactionStatisticsService {
             case MATERIALIZED_VIEW -> queryRepository.findMonthlyStatisticsFromMaterializedView(
                     userId, fromMonth, toMonth
             );
+            case SUMMARY -> queryRepository.findMonthlyStatisticsFromSummary(userId, fromMonth, toMonth);
         };
     }
 
@@ -60,6 +67,10 @@ public class TransactionStatisticsService {
         if (userId == null) {
             throw new IllegalArgumentException("userId is required");
         }
+        validateMonthRange(fromMonth, toMonth);
+    }
+
+    private void validateMonthRange(YearMonth fromMonth, YearMonth toMonth) {
         if (fromMonth == null) {
             throw new IllegalArgumentException("fromMonth is required");
         }
