@@ -183,7 +183,74 @@ build/perf/k6/transaction-statistics-read-summary.txt
 
 실제 mode별 성능 비교를 위해서는 XChangePass 서버를 `BASE_URL`에서 실행하고, 인증 토큰과 통계 데이터 및 refresh 상태를 준비한 뒤 다시 실행해야 한다.
 
-## 8. 기존 결과와 연결
+## 8. XChangePass 서버 재확인 결과
+
+2026-07-05 재확인 결과, `localhost:8080`은 여전히 XChangePass 서버가 아니었다.
+
+확인 명령:
+
+```bash
+curl -i http://localhost:8080
+curl -i http://localhost:8080/actuator/health
+lsof -i :8080
+```
+
+확인 결과:
+
+* `localhost:8080` 응답 header의 `server` 값은 `uvicorn`이었다.
+* `/`와 `/actuator/health` 모두 `HTTP 404`와 `{"detail":"Not Found"}`를 반환했다.
+* `lsof -i :8080` 기준 8080 포트는 `BlueStack` 프로세스가 점유하고 있었다.
+* 따라서 8080 기준 k6 결과는 XChangePass 통계 API 결과로 볼 수 없다.
+
+Docker compose 기준으로는 Spring Boot app이 container 내부 `8080`을 host `8081`에 매핑한다.
+
+확인한 설정:
+
+```yaml
+ports:
+  - "8081:8080"
+```
+
+다만 `localhost:8081`에도 현재 응답하는 XChangePass 서버는 없었다.
+
+따라서 다음 k6 read test는 아래 중 하나로 실행해야 한다.
+
+* `BlueStack`이 점유 중인 8080을 건드리지 않고 XChangePass를 다른 포트로 실행한 뒤 `BASE_URL`을 해당 포트로 지정
+* Docker compose로 XChangePass app을 실행한 뒤 `BASE_URL=http://localhost:8081` 사용
+* 기존 실행 중인 XChangePass 서버가 있다면 그 실제 host/port를 `BASE_URL`로 지정
+
+프로세스는 임의로 종료하지 않았다.
+
+## 9. API 및 데이터 준비 확인
+
+통계 API mapping은 현재 k6 스크립트와 일치한다.
+
+확인한 endpoint:
+
+```http
+GET /api/v1/transactions/statistics/monthly?userId={userId}&fromMonth={fromMonth}&toMonth={toMonth}&mode={mode}
+```
+
+확인한 mode enum:
+
+* `GROUP_BY`
+* `MATERIALIZED_VIEW`
+* `SUMMARY`
+
+현재 `SecurityConfig` 기준으로 이 endpoint는 `permitAll` 대상이 아니므로 인증이 필요하다. k6 스크립트는 `AUTH_TOKEN`, `ACCESS_TOKEN`, `JWT_TOKEN`, `ACCESS_TOKEN_COOKIE`, `LOGIN_EMAIL`, `LOGIN_PASSWORD` 기반 인증을 지원한다.
+
+데이터 준비 측면에서는 100,000건 benchmark 데이터 생성기가 `src/test` 하위 테스트 전용 코드에 있다. 이 factory는 JUnit/Testcontainers benchmark 용도로 사용되고 있으며, 현재 확인한 범위에서는 실행 중인 HTTP 서버 DB에 같은 데이터를 직접 주입하는 운영/로컬 실행 스크립트는 없다.
+
+따라서 유효한 100k HTTP k6 결과를 만들려면 아래 준비가 먼저 필요하다.
+
+1. XChangePass 서버가 바라보는 PostgreSQL에 통계용 거래 데이터 준비
+2. heavy user와 regular user id 확인
+3. `mv_transaction_monthly_statistics` refresh 완료
+4. `transaction_monthly_summary` refresh 완료
+5. 통계 API 접근 가능한 인증 토큰 준비
+6. 실제 XChangePass 서버의 `BASE_URL` 확정
+
+## 10. 기존 결과와 연결
 
 각 관측의 역할은 아래처럼 분리한다.
 
@@ -195,7 +262,7 @@ build/perf/k6/transaction-statistics-read-summary.txt
 
 k6 read test 결과가 준비되면 `GROUP_BY`, `MATERIALIZED_VIEW`, `SUMMARY`의 HTTP 기준 avg, p95, p99, throughput, error rate를 비교한다.
 
-## 9. Primary/Replica 판단
+## 11. Primary/Replica 판단
 
 이번 k6 read test만으로 Primary/Replica를 결정하지 않는다.
 
@@ -214,7 +281,34 @@ Primary 유지 대상은 아래 흐름이다.
 
 Primary/Replica 필요성은 통계 API 단독 부하 이후, 송금 API + 통계 API 혼합 부하에서 송금 API p95/p99 영향을 확인한 뒤 판단한다.
 
-## 10. 후속 작업
+## 12. 다음 실행 절차
+
+Docker compose 기반으로 실행한다면 후보 절차는 아래와 같다.
+
+```bash
+docker compose -f infra/docker-compose.yml up -d postgres redis app
+```
+
+그 다음 XChangePass 서버 응답을 확인한다.
+
+```bash
+curl -i http://localhost:8081/actuator/health
+```
+
+통계 API가 인증을 통과하고 데이터가 준비된 뒤 아래처럼 실행한다.
+
+```bash
+BASE_URL=http://localhost:8081 \
+AUTH_TOKEN={accessToken} \
+USER_IDS={heavyUserId},{regularUserId} \
+K6_VUS=10 \
+K6_DURATION=30s \
+tools/perf/run-transaction-statistics-k6-read.sh
+```
+
+raw 결과는 `build/perf/k6/`에 생성되며 커밋하지 않는다.
+
+## 13. 후속 작업
 
 1. 테스트용 서버와 인증 토큰을 준비한다.
 2. `GROUP_BY`, `MATERIALIZED_VIEW`, `SUMMARY` mode별 k6 read test를 실행한다.
