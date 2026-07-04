@@ -249,6 +249,51 @@ curl -i "http://localhost:8080/api/v1/transactions/statistics/monthly?userId=1&f
 
 첫 번째 명령에서 Spring Boot 응답이 오고, 두 번째 명령에서 인증 실패 또는 정상 API 응답이 와야 k6 재실행 단계로 넘어갈 수 있다.
 
+IntelliJ로 XChangePass를 실행한 뒤 다시 확인한 결과, `localhost:8080`은 XChangePass Spring Boot 서버로 확인됐다.
+
+재확인 결과:
+
+* `lsof -i :8080`에서 `java` 프로세스가 `*:http-alt`를 listen하고 있었다.
+* `curl -i http://localhost:8080`은 XChangePass Spring Security의 `401` JSON을 반환했다.
+* `curl -i http://localhost:8080/actuator/health`도 동일하게 인증 실패 응답을 반환했다.
+* 이전처럼 `uvicorn` 또는 `BlueStack` 응답은 나오지 않았다.
+
+응답 예시:
+
+```json
+{"errorCode":"E0002","errorMsg":"인증되지 않은 사용자입니다."}
+```
+
+따라서 서버 포트 문제는 해결됐지만, k6 read test를 진행하려면 인증 가능한 사용자가 필요하다.
+
+이번 재시도에서 인증 준비도 확인했다.
+
+* `/api/v1/user/signup`으로 임시 사용자를 생성하려 했으나 `ENC006` 오류로 실패했다.
+* 오류 메시지는 `AES 키 암호화에 실패했습니다.`였다.
+* 기존 k6 스크립트에서 사용하던 `testuser_1@gmail.com` 로그인도 시도했으나 `U001` 오류로 실패했다.
+* 오류 메시지는 `존재 하지 않는 회원입니다.`였다.
+
+따라서 이번 실행에서는 통계 API 인증을 통과하지 못했고, `GROUP_BY`, `MATERIALIZED_VIEW`, `SUMMARY` mode별 유효 k6 결과를 수집하지 않았다.
+
+다음 재실행 전 추가로 필요한 준비:
+
+1. XChangePass 서버가 사용하는 DB에 로그인 가능한 테스트 사용자 준비
+2. accessToken cookie 또는 JWT 확보
+3. 통계 조회 대상 userId 확정
+4. 거래 통계 데이터 준비
+5. MV/Summary refresh 완료
+
+인증 토큰이 준비되면 아래처럼 실행한다.
+
+```bash
+BASE_URL=http://localhost:8080 \
+ACCESS_TOKEN_COOKIE={accessTokenCookieValue} \
+USER_IDS={targetUserIds} \
+K6_VUS=10 \
+K6_DURATION=30s \
+tools/perf/run-transaction-statistics-k6-read.sh
+```
+
 ## 9. API 및 데이터 준비 확인
 
 통계 API mapping은 현재 k6 스크립트와 일치한다.
