@@ -8,10 +8,11 @@ const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const MODE = __ENV.MODE || 'GROUP_BY';
 const FROM_MONTH = __ENV.FROM_MONTH || '2026-01';
 const TO_MONTH = __ENV.TO_MONTH || '2026-12';
-const USER_IDS = parseUserIds(__ENV.USER_IDS || '1');
+const USER_IDS = parseUserIds(__ENV.USER_IDS || __ENV.TEST_USER_ID || '1');
 const REQUEST_SLEEP_SECONDS = Number(__ENV.K6_SLEEP || '0.1');
 const LOGIN_EMAIL = __ENV.LOGIN_EMAIL || '';
 const LOGIN_PASSWORD = __ENV.LOGIN_PASSWORD || '';
+const DEBUG_STATUS = (__ENV.DEBUG_STATUS || 'false') === 'true';
 
 export const options = {
     vus: Number(__ENV.K6_VUS || '10'),
@@ -65,6 +66,7 @@ export default function (auth) {
 
     const res = http.get(url, {
         headers: authHeaders(auth),
+        cookies: authCookies(auth),
         tags: {
             endpoint: 'transaction_statistics_monthly',
             mode: MODE,
@@ -74,6 +76,10 @@ export default function (auth) {
     const ok = check(res, {
         'statistics status is 200': (response) => response.status === 200,
     });
+
+    if (!ok && DEBUG_STATUS && __VU === 1 && __ITER === 0) {
+        console.log(`statistics debug status=${res.status} body=${String(res.body).slice(0, 200)}`);
+    }
 
     statisticsReadErrorRate.add(!ok);
     sleep(REQUEST_SLEEP_SECONDS);
@@ -88,11 +94,17 @@ function authHeaders(auth) {
         headers.Authorization = `Bearer ${auth.token}`;
     }
 
-    if (auth && auth.cookie) {
-        headers.Cookie = `accessToken=${auth.cookie}`;
+    return headers;
+}
+
+function authCookies(auth) {
+    if (!auth || (!auth.cookie && !auth.token)) {
+        return {};
     }
 
-    return headers;
+    return {
+        accessToken: auth.cookie || auth.token,
+    };
 }
 
 function parseUserIds(value) {
