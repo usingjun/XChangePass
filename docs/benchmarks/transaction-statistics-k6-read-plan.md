@@ -221,6 +221,34 @@ ports:
 
 프로세스는 임의로 종료하지 않았다.
 
+BlueStack 종료 후 다시 확인한 결과, `localhost:8080`은 더 이상 다른 프로세스가 점유하지 않는 상태가 됐다.
+
+재확인 명령:
+
+```bash
+curl -i http://localhost:8080
+curl -i http://localhost:8080/actuator/health
+lsof -i :8080
+```
+
+재확인 결과:
+
+* `curl`은 connection 실패로 종료됐다.
+* `lsof -i :8080`은 점유 프로세스를 반환하지 않았다.
+* 즉 BlueStack 충돌은 해소됐지만, XChangePass Spring Boot 서버도 아직 `localhost:8080`에서 실행 중이 아니다.
+* `localhost:8081` 역시 응답하는 서버가 없었다.
+
+따라서 IntelliJ에서 XChangePass를 실행한 뒤 `localhost:8080`에 Spring Boot 서버가 실제로 떠 있는지 먼저 확인해야 한다.
+
+확인 후보:
+
+```bash
+curl -i http://localhost:8080/actuator/health
+curl -i "http://localhost:8080/api/v1/transactions/statistics/monthly?userId=1&fromMonth=2026-01&toMonth=2026-12&mode=GROUP_BY"
+```
+
+첫 번째 명령에서 Spring Boot 응답이 오고, 두 번째 명령에서 인증 실패 또는 정상 API 응답이 와야 k6 재실행 단계로 넘어갈 수 있다.
+
 ## 9. API 및 데이터 준비 확인
 
 통계 API mapping은 현재 k6 스크립트와 일치한다.
