@@ -56,27 +56,35 @@ build/perf/k6/mixed-repeat/transaction-transfer-statistics-k6-mixed-repeat-summa
 
 원시 k6 결과와 인증 파일은 커밋 대상에서 제외한다.
 
+## 해석 주의
+
+이번 스크립트는 송금 요청과 통계 요청을 같은 k6 실행 안에서 함께 발생시키는 혼합 부하 확인용이다.
+
+따라서 이 문서에서는 송금 API의 `avg`, `p95`, `p99`를 mode별 성능 비교 근거로 사용하지 않는다. 통계 API 응답 시간이 mode마다 다르면 k6 요청 루프의 진행 속도와 요청 발생 타이밍도 함께 달라질 수 있기 때문이다.
+
+송금 API 응답 속도를 mode별로 정확히 비교하려면 송금 scenario와 통계 scenario를 분리하고, 송금 요청은 `constant-arrival-rate`로 고정한 별도 실험이 필요하다.
+
 ## 반복 측정 원자료 요약
 
-| Run | Mode | Transfer avg | Transfer p95 | Transfer p99 | Transfer err | Statistics avg | Statistics p95 | Statistics p99 | Statistics err |
-| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | GROUP_BY | 15.871ms | 37.563ms | 63.927ms | 0.00% | 10.623ms | 37.320ms | 38.878ms | 0.00% |
-| 1 | MATERIALIZED_VIEW | 18.975ms | 24.221ms | 25.776ms | 0.00% | 6.800ms | 7.930ms | 11.367ms | 0.00% |
-| 1 | SUMMARY | 18.935ms | 24.303ms | 24.859ms | 0.00% | 7.265ms | 8.698ms | 9.253ms | 0.00% |
-| 2 | GROUP_BY | 11.948ms | 18.355ms | 19.394ms | 0.00% | 10.747ms | 40.556ms | 41.303ms | 0.00% |
-| 2 | MATERIALIZED_VIEW | 19.081ms | 22.853ms | 24.917ms | 0.00% | 6.902ms | 7.939ms | 8.186ms | 0.00% |
-| 2 | SUMMARY | 18.625ms | 21.482ms | 22.184ms | 0.00% | 6.971ms | 8.391ms | 8.998ms | 0.00% |
-| 3 | GROUP_BY | 13.085ms | 20.079ms | 22.163ms | 0.00% | 10.818ms | 40.228ms | 41.847ms | 0.00% |
-| 3 | MATERIALIZED_VIEW | 18.917ms | 23.596ms | 24.286ms | 0.00% | 6.859ms | 7.992ms | 8.502ms | 0.00% |
-| 3 | SUMMARY | 18.841ms | 23.011ms | 23.460ms | 0.00% | 7.078ms | 8.475ms | 9.069ms | 0.00% |
+| Run | Mode | Statistics avg | Statistics p95 | Statistics p99 | Statistics err | Transfer err |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | GROUP_BY | 10.623ms | 37.320ms | 38.878ms | 0.00% | 0.00% |
+| 1 | MATERIALIZED_VIEW | 6.800ms | 7.930ms | 11.367ms | 0.00% | 0.00% |
+| 1 | SUMMARY | 7.265ms | 8.698ms | 9.253ms | 0.00% | 0.00% |
+| 2 | GROUP_BY | 10.747ms | 40.556ms | 41.303ms | 0.00% | 0.00% |
+| 2 | MATERIALIZED_VIEW | 6.902ms | 7.939ms | 8.186ms | 0.00% | 0.00% |
+| 2 | SUMMARY | 6.971ms | 8.391ms | 8.998ms | 0.00% | 0.00% |
+| 3 | GROUP_BY | 10.818ms | 40.228ms | 41.847ms | 0.00% | 0.00% |
+| 3 | MATERIALIZED_VIEW | 6.859ms | 7.992ms | 8.502ms | 0.00% | 0.00% |
+| 3 | SUMMARY | 7.078ms | 8.475ms | 9.069ms | 0.00% | 0.00% |
 
 ## 반복 평균 집계
 
-| Mode | Transfer avg 평균 | Transfer avg 범위 | Transfer p95 평균 | Transfer p99 평균 | Statistics avg 평균 | Statistics avg 범위 | Statistics p95 평균 | Statistics p99 평균 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| GROUP_BY | 13.635ms | 11.948~15.871ms | 25.332ms | 35.161ms | 10.729ms | 10.623~10.818ms | 39.368ms | 40.676ms |
-| MATERIALIZED_VIEW | 18.991ms | 18.917~19.081ms | 23.557ms | 24.993ms | 6.854ms | 6.800~6.902ms | 7.954ms | 9.352ms |
-| SUMMARY | 18.801ms | 18.625~18.935ms | 22.932ms | 23.501ms | 7.105ms | 6.971~7.265ms | 8.521ms | 9.106ms |
+| Mode | Statistics avg 평균 | Statistics avg 범위 | Statistics p95 평균 | Statistics p99 평균 | Statistics max 평균 | Statistics error |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| GROUP_BY | 10.729ms | 10.623~10.818ms | 39.368ms | 40.676ms | 41.960ms | 0.00% |
+| MATERIALIZED_VIEW | 6.854ms | 6.800~6.902ms | 7.954ms | 9.352ms | 10.092ms | 0.00% |
+| SUMMARY | 7.105ms | 6.971~7.265ms | 8.521ms | 9.106ms | 9.662ms | 0.00% |
 
 모든 반복에서 송금 API와 통계 API의 k6 에러율은 0.00%였다.
 
@@ -86,7 +94,7 @@ build/perf/k6/mixed-repeat/transaction-transfer-statistics-k6-mixed-repeat-summa
 
 `MATERIALIZED_VIEW`와 `SUMMARY`는 통계 조회 p95가 각각 약 8.0ms, 8.5ms로 안정적이었다. 100,000 rows 기준에서는 파생 조회 구조가 원본 테이블 직접 집계보다 통계 API 꼬리 지연을 낮추는 효과가 확인된다.
 
-송금 API는 이번 반복 측정에서 세 mode 모두 에러율 0.00%였다. 다만 mode별 송금 p95/p99 차이는 이 로컬 k6 측정만으로 통계 조회 방식이 송금 성능에 직접 영향을 줬다고 단정하기 어렵다. 송금 API 영향 판단에는 더 긴 duration, 더 높은 VUs, DB 관측 지표, lock wait, connection 사용량 확인이 필요하다.
+송금 API는 이번 반복 측정에서 세 mode 모두 에러율 0.00%였다. 다만 이 스크립트 구조에서는 mode별 송금 응답 시간을 비교하지 않는다. 통계 요청 지연이 송금 요청 발생 간격에 영향을 줄 수 있어, 송금 latency를 mode별 영향 지표로 해석하면 안 된다.
 
 이 결과만으로 Primary/Replica 도입 여부를 판단하지 않는다. 현재 단계에서는 PostgreSQL 내부 최적화 방식별 조회 지연 차이를 확인한 결과로만 사용한다.
 
@@ -100,13 +108,15 @@ build/perf/k6/mixed-repeat/transaction-transfer-statistics-k6-mixed-repeat-summa
 
 * 이 결과는 Java benchmark runner가 아니라 k6 기반 로컬 HTTP 측정이다.
 * 운영 환경 결과가 아니다.
-* 송금 API p95/p99에 대한 최종 판단 자료가 아니다.
+* 송금 API avg, p95, p99에 대한 mode별 비교 자료가 아니다.
+* 송금 API latency 영향은 송금 요청 발생률을 고정한 별도 `constant-arrival-rate` 실험으로 다시 측정해야 한다.
 * `pg_stat_statements`, `EXPLAIN (ANALYZE, BUFFERS)`, DB CPU/IO, lock wait, connection pool 지표는 함께 측정하지 않았다.
 * Fraud 야간 정책은 런타임 인자로만 우회했으며, 기본 Fraud Fail-Closed 정책을 변경하지 않았다.
 
 ## 다음 단계
 
-1. 같은 혼합 부하에서 `EXPLAIN (ANALYZE, BUFFERS)` 또는 `pg_stat_statements`로 통계 쿼리의 buffer 사용량과 실행 시간을 확인한다.
-2. k6 VUs와 duration을 늘려 송금 API p95/p99가 통계 mode별로 의미 있게 달라지는지 확인한다.
+1. 송금 scenario와 통계 scenario를 분리하고, 송금 요청은 `constant-arrival-rate`로 고정한 k6 혼합 부하 스크립트를 새로 구성한다.
+2. 새 스크립트에서 송금 단독 baseline과 송금 + 통계 mode별 p95/p99를 비교한다.
 3. PostgreSQL connection 사용량, lock wait, active query duration을 함께 수집한다.
-4. Summary refresh와 Materialized View refresh가 송금 API와 동시에 실행될 때의 영향을 별도 측정한다.
+4. 같은 혼합 부하에서 `EXPLAIN (ANALYZE, BUFFERS)` 또는 `pg_stat_statements`로 통계 쿼리의 buffer 사용량과 실행 시간을 확인한다.
+5. Summary refresh와 Materialized View refresh가 송금 API와 동시에 실행될 때의 영향을 별도 측정한다.
