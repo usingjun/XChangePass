@@ -235,9 +235,11 @@ public class TransactionTransferK6Seed {
     }
 
     private static String phoneNumber(int sequence, String runId, boolean sender) {
-        int group = sender ? 7100 : 7200;
-        int runSuffix = Math.abs(runId.hashCode()) % 10;
-        return "010-" + group + "-" + runSuffix + String.format("%03d", sequence % 1_000);
+        long runNumber = Long.parseLong(runId);
+        int groupBase = sender ? 1000 : 5000;
+        int group = groupBase + (int) (Math.abs(runNumber / 10) % 4000);
+        int last = sequence % 10_000;
+        return "010-" + group + "-" + String.format("%04d", last);
     }
 
     private static String env(String name, String defaultValue) {
