@@ -3,7 +3,8 @@ package bumblebee.xchangepass.domain.transaction.statistics.repository;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsDirection;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsRow;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsSourceType;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -14,7 +15,6 @@ import java.time.YearMonth;
 import java.util.List;
 
 @Repository
-@RequiredArgsConstructor
 public class TransactionStatisticsJdbcRepository implements TransactionStatisticsQueryRepository {
 
     private static final String MONTHLY_STATISTICS_SQL = """
@@ -332,6 +332,16 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
     );
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectProvider<JdbcTemplate> replicaJdbcTemplateProvider;
+
+    public TransactionStatisticsJdbcRepository(
+            JdbcTemplate jdbcTemplate,
+            @Qualifier("transactionStatisticsReplicaJdbcTemplate")
+            ObjectProvider<JdbcTemplate> replicaJdbcTemplateProvider
+    ) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.replicaJdbcTemplateProvider = replicaJdbcTemplateProvider;
+    }
 
     @Override
     public List<TransactionStatisticsRow> findMonthlyStatistics(Long userId, YearMonth fromMonth, YearMonth toMonth) {
@@ -354,7 +364,7 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
     public List<TransactionStatisticsRow> findMonthlyStatisticsFromMaterializedView(
             Long userId, YearMonth fromMonth, YearMonth toMonth
     ) {
-        return jdbcTemplate.query(
+        return materializedViewJdbcTemplate().query(
                 MONTHLY_STATISTICS_MATERIALIZED_VIEW_SQL,
                 ROW_MAPPER,
                 userId,
@@ -413,5 +423,9 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
     private Timestamp toExclusiveEndTimestamp(YearMonth month) {
         LocalDateTime endExclusive = month.plusMonths(1).atDay(1).atStartOfDay();
         return Timestamp.valueOf(endExclusive);
+    }
+
+    private JdbcTemplate materializedViewJdbcTemplate() {
+        return replicaJdbcTemplateProvider.getIfAvailable(() -> jdbcTemplate);
     }
 }
