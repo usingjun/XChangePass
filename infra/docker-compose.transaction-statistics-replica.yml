@@ -22,6 +22,10 @@ services:
       - "max_wal_senders=10"
       - "-c"
       - "max_replication_slots=10"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      - "-c"
+      - "pg_stat_statements.track=all"
     volumes:
       - transaction_statistics_primary_data:/var/lib/postgresql/data
       - ./postgres/primary-init:/docker-entrypoint-initdb.d:ro
@@ -71,7 +75,10 @@ services:
             -R
           chown -R postgres:postgres "$$PGDATA"
         fi
-        exec docker-entrypoint.sh postgres -c hot_standby=on
+        exec docker-entrypoint.sh postgres \
+          -c hot_standby=on \
+          -c shared_preload_libraries=pg_stat_statements \
+          -c pg_stat_statements.track=all
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${LOCAL_REPLICA_POSTGRES_USER:-postgres} -d ${LOCAL_REPLICA_POSTGRES_DB:-xchangepass}"]
       interval: 5s

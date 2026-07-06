@@ -614,3 +614,179 @@ DB 유효성:
 * DB CPU/IO와 connection pool metric 수집
 * cold start와 warm-up 이후 성능 분리
 * Replica lag와 `dataAsOf` 응답 정책 정리
+
+## 22. 고부하 A/B 재검증과 DB 내부 지표 수집
+
+이 섹션은 30초 반복 측정 이후, 같은 `MATERIALIZED_VIEW` 통계 기준으로 3분 고부하 A/B를 재실행하고 DB 내부 지표를 함께 수집한 결과다.
+
+목적은 Replica를 더 좋게 보이게 만드는 것이 아니라, 통계 조회를 Replica로 분리했을 때 Primary write path 관련 SQL과 DB 지표가 어떻게 달라지는지 확인하는 것이다.
+
+이번 실행에서도 송금, 잔액 변경, 원장 저장, idempotency, recovery, reconciliation 흐름은 수정하지 않았다. 통계 조회 경로는 `mode=MATERIALIZED_VIEW`만 비교했다.
+
+### 22.1 실행 조건
+
+| 항목 | 값 |
+| --- | --- |
+| 실행일 | 2026-07-07 |
+| 데이터셋 | 통계 seed 100,000 rows / 1,000 users / 12 months |
+| 송금 seed | 5,000 sender/receiver pairs |
+| 통계 mode | `MATERIALIZED_VIEW` |
+| duration | 3m |
+| 반복 | 조건별 3회 |
+| 실행 순서 | A1 -> B1 -> B2 -> A2 -> A3 -> B3 |
+| A | Single DB + MV |
+| B | Primary + Replica + MV |
+| 송금 rate | 5/s |
+| 통계 rate | 30/s, 50/s |
+| fraud 야간 정책 | `12:00~12:01`로 로컬 실행 인자 조정 |
+| warm-up | 각 run 전 통계 API 10회 |
+| raw 산출물 | `build/perf/replica-highload-ab-rerun-main` |
+
+5,000 pair 조건에서는 auth/token 환경 변수가 너무 길어질 수 있어, k6 실행 시 auth env 파일 경로를 전달하고 k6 스크립트가 파일을 읽도록 했다. 이는 부하 입력 전달 방식만 바꾼 것이며, 통계 SQL이나 송금 비즈니스 로직 변경이 아니다.
+
+### 22.2 수집한 DB 내부 지표
+
+이번 고부하 runner는 각 run 동안 5초 간격으로 아래 지표를 수집했다.
+
+| 지표 | 저장 파일 |
+| --- | --- |
+| Primary `pg_stat_activity` state | `activity-state-primary.csv` |
+| Primary `pg_stat_activity` wait event | `activity-wait-primary.csv` |
+| Replica `pg_stat_activity` state | `activity-state-replica.csv` |
+| Replica `pg_stat_activity` wait event | `activity-wait-replica.csv` |
+| Primary replication byte lag | `replication-primary.csv` |
+| Replica replay delay | `replay-delay-replica.csv` |
+| `pg_stat_statements` Primary | `pg-stat-statements-primary.csv` |
+| `pg_stat_statements` Replica | `pg-stat-statements-replica.csv` |
+| Docker CPU/memory snapshot | `docker-stats.csv` |
+| MV row count | `primary-mv-count.txt`, `replica-mv-count.txt` |
+| 실행 후 WAL byte lag | `wal-byte-lag-after.txt` |
+
+`pg_stat_statements`는 이번 로컬 compose 환경에서만 활성화했다. 운영 PostgreSQL 설정을 변경한 것이 아니다.
+
+### 22.3 run별 k6 결과
+
+아래 표는 raw summary 기준이다. 송금 실패가 1건이라도 있는 run은 송금 latency 해석에서 별도 표시한다.
+
+| 조건 | Run | Scenario | Transfer avg | Transfer p95 | Transfer p99 | Transfer error | Statistics avg | Statistics p95 | Statistics p99 | Statistics error |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| t5/s30 | 1 | Single DB + MV | 25.244ms | 31.864ms | 37.317ms | 0 | 7.742ms | 10.503ms | 12.020ms | 0 |
+| t5/s30 | 1 | Primary + Replica + MV | 17.389ms | 22.747ms | 26.363ms | 0 | 16.738ms | 19.748ms | 21.207ms | 0 |
+| t5/s30 | 2 | Primary + Replica + MV | 15.794ms | 18.509ms | 24.938ms | 1/900 | 16.472ms | 19.538ms | 20.648ms | 0 |
+| t5/s30 | 2 | Single DB + MV | 27.050ms | 34.230ms | 37.157ms | 0 | 8.082ms | 10.546ms | 11.943ms | 0 |
+| t5/s30 | 3 | Single DB + MV | 25.981ms | 31.967ms | 38.371ms | 0 | 7.841ms | 10.534ms | 11.595ms | 0 |
+| t5/s30 | 3 | Primary + Replica + MV | 15.948ms | 19.011ms | 25.008ms | 0 | 16.848ms | 20.064ms | 21.297ms | 0 |
+| t5/s50 | 1 | Single DB + MV | 24.456ms | 30.021ms | 33.915ms | 0 | 6.762ms | 9.495ms | 10.794ms | 0 |
+| t5/s50 | 1 | Primary + Replica + MV | 13.440ms | 17.496ms | 22.212ms | 0 | 13.094ms | 15.104ms | 16.942ms | 0 |
+| t5/s50 | 2 | Primary + Replica + MV | 13.502ms | 17.954ms | 22.048ms | 0 | 13.244ms | 15.217ms | 16.903ms | 0 |
+| t5/s50 | 2 | Single DB + MV | 24.373ms | 29.254ms | 33.863ms | 1/900 | 6.648ms | 9.452ms | 10.562ms | 0 |
+| t5/s50 | 3 | Single DB + MV | 24.637ms | 30.175ms | 33.824ms | 0 | 6.672ms | 9.399ms | 10.616ms | 0 |
+| t5/s50 | 3 | Primary + Replica + MV | 14.035ms | 18.739ms | 21.655ms | 0 | 13.315ms | 15.442ms | 17.211ms | 0 |
+
+통계 API 실패는 모든 run에서 0건이었다.
+
+송금 실패가 있었던 run은 아래 2개다.
+
+| 조건 | Scenario | 실패 |
+| --- | --- | ---: |
+| t5/s30 | Primary + Replica + MV run 2 | 1/900 |
+| t5/s50 | Single DB + MV run 2 | 1/900 |
+
+애플리케이션 로그에서 서버 예외는 확인되지 않았고, k6 기준으로는 송금 HTTP 200/`COMPLETED` 체크 실패 1건으로 집계됐다. 실패 1건이 섞인 run은 송금 응답속도 비교 근거로 강하게 사용하지 않는다.
+
+### 22.4 실패 0건 run만 사용한 보조 집계
+
+아래 표는 송금 실패와 통계 실패가 모두 0건인 run만 평균낸 값이다. run 수가 2~3회로 작으므로 방향성 참고용이다.
+
+| 조건 | Scenario | 유효 run | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| t5/s30 | Single DB + MV | 3 | 26.092ms | 32.687ms | 37.615ms | 7.888ms | 10.528ms | 11.853ms |
+| t5/s30 | Primary + Replica + MV | 2 | 16.668ms | 20.879ms | 25.686ms | 16.793ms | 19.906ms | 21.252ms |
+| t5/s50 | Single DB + MV | 2 | 24.547ms | 30.098ms | 33.870ms | 6.717ms | 9.447ms | 10.705ms |
+| t5/s50 | Primary + Replica + MV | 3 | 13.659ms | 18.063ms | 21.972ms | 13.218ms | 15.254ms | 17.019ms |
+
+이 결과만으로 Replica가 송금 응답속도를 개선한다고 단정하지 않는다. 로컬 Docker에서 Single DB 조건은 통계 MV 조회와 송금 write query가 Primary 하나에 같이 쌓이고, Replica 조건은 통계 MV 조회가 replica 컨테이너로 이동한다. 따라서 Primary 내부 SQL 실행 시간은 낮아졌지만, HTTP latency는 로컬 컨테이너 배치, connection pool, 캐시 상태, 실행 순서의 영향을 함께 받는다.
+
+### 22.5 `pg_stat_statements` 요약
+
+`statistics_mv`는 Single DB 조건에서는 Primary에서, Primary + Replica 조건에서는 Replica에서 주로 관측됐다.
+
+| 조건 | Scenario | DB | Query group | Calls | Total exec | Mean exec |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| t5/s30 | Single DB + MV | Primary | `statistics_mv` | 5,401 | 764.935ms | 0.142ms |
+| t5/s30 | Primary + Replica + MV | Replica | `statistics_mv` | 5,401 | 492.941ms | 0.091ms |
+| t5/s50 | Single DB + MV | Primary | `statistics_mv` | 9,001 | 1,297.669ms | 0.144ms |
+| t5/s50 | Primary + Replica + MV | Replica | `statistics_mv` | 9,001 | 681.999ms | 0.076ms |
+
+Primary write path 관련 query group 평균은 Replica 조건에서 낮게 관측됐다.
+
+| 조건 | Scenario | DB | Query group | Calls | Total exec | Mean exec |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| t5/s30 | Single DB + MV | Primary | `balance` | 3,601 | 1,481.252ms | 0.411ms |
+| t5/s30 | Primary + Replica + MV | Primary | `balance` | 3,599 | 862.467ms | 0.240ms |
+| t5/s30 | Single DB + MV | Primary | `wallet_transfer_request` | 8,109 | 383.461ms | 0.047ms |
+| t5/s30 | Primary + Replica + MV | Primary | `wallet_transfer_request` | 8,105 | 249.074ms | 0.031ms |
+| t5/s50 | Single DB + MV | Primary | `balance` | 3,601 | 1,474.144ms | 0.410ms |
+| t5/s50 | Primary + Replica + MV | Primary | `balance` | 3,603 | 729.097ms | 0.202ms |
+| t5/s50 | Single DB + MV | Primary | `wallet_transfer_request` | 8,111 | 378.902ms | 0.047ms |
+| t5/s50 | Primary + Replica + MV | Primary | `wallet_transfer_request` | 8,112 | 167.429ms | 0.021ms |
+
+이 수치는 DB 내부 SQL 실행 시간 기준이다. 사용자가 보는 송금 HTTP 응답속도와 1:1로 같지 않으므로, 문서나 포트폴리오에서는 “Primary의 관련 SQL 누적 실행 시간이 낮아졌다” 정도로 표현해야 한다.
+
+### 22.6 replication lag, wait event, CPU
+
+Primary + Replica 조건에서 실행 후 WAL byte lag는 모든 run에서 0이었다.
+
+| 조건 | Max byte lag 평균 | Run별 max byte lag | 실행 후 byte lag |
+| --- | ---: | --- | --- |
+| t5/s30 | 621.3 bytes | 1,864 / 0 / 0 | 0 / 0 / 0 |
+| t5/s50 | 0 bytes | 0 / 0 / 0 | 0 / 0 / 0 |
+
+관측된 wait event는 대부분 `ClientRead` 또는 wait 없음이었다. 이 샘플만으로 lock wait 병목은 확인되지 않았다.
+
+| 조건 | Scenario | 주요 wait event |
+| --- | --- | --- |
+| t5/s30 | Single DB + MV | Primary `ClientRead`, wait 없음 |
+| t5/s30 | Primary + Replica + MV | Primary `ClientRead`, Replica wait 없음/`ClientRead` |
+| t5/s50 | Single DB + MV | Primary `ClientRead`, wait 없음 |
+| t5/s50 | Primary + Replica + MV | Primary `ClientRead`, Replica wait 없음/`ClientRead` |
+
+Docker CPU snapshot은 로컬 컨테이너 기준이다.
+
+| 조건 | Scenario | Primary CPU avg/max | Replica CPU avg/max |
+| --- | --- | ---: | ---: |
+| t5/s30 | Single DB + MV | 5.77% / 14.70% | 1.50% / 3.88% |
+| t5/s30 | Primary + Replica + MV | 2.76% / 4.92% | 15.19% / 18.11% |
+| t5/s50 | Single DB + MV | 7.20% / 17.26% | 1.13% / 3.66% |
+| t5/s50 | Primary + Replica + MV | 2.49% / 5.41% | 18.07% / 19.98% |
+
+Replica 조건에서는 통계 조회 CPU가 replica 컨테이너 쪽으로 이동한 것으로 해석할 수 있다. 다만 운영 DB CPU/IO 결과가 아니므로 운영 효과로 일반화하지 않는다.
+
+### 22.7 고부하 재검증 해석
+
+이번 고부하 재실행에서 확인한 것은 아래 범위다.
+
+* 3분 고부하 조건에서도 `MATERIALIZED_VIEW` 통계 조회만 Replica로 보내는 구조는 동작했다.
+* 통계 API 실패는 모든 run에서 0건이었다.
+* 송금 실패는 12개 run 중 2개 run에서 각 1건씩 있었다. 이 run은 송금 응답속도 비교에서 주의해서 해석한다.
+* `pg_stat_statements` 기준으로 MV 통계 조회는 Single DB에서는 Primary, Replica 조건에서는 Replica에서 관측됐다.
+* Replica 조건에서는 Primary의 `statistics_mv` query group이 사라지고, `balance`, `wallet_transfer_request` 등 write path 관련 query group의 누적 실행 시간이 낮게 관측됐다.
+* Primary + Replica 조건의 실행 후 WAL byte lag는 0이었다.
+* 샘플링된 wait event에서 lock wait 병목은 확인되지 않았다.
+* Replica 조건의 통계 HTTP latency는 Single DB보다 높게 나왔다. DB 내부 mean exec time은 낮았으므로, HTTP latency 차이는 DB 실행 계획만으로 설명하지 않는다.
+
+따라서 현재 기준 판단은 그대로 보류다.
+
+```text
+Read Replica는 거래 통계 MV 조회를 Primary write path에서 분리하는 후보로는 유효하지만,
+이번 로컬 고부하 결과만으로 도입을 확정하거나 성능 개선을 단정하지 않는다.
+```
+
+다음 검증은 아래 순서가 적절하다.
+
+* 송금 실패 0건 조건을 더 안정적으로 만들기 위한 fixture/rate 검증
+* t5/s30, t5/s50을 실패 0건으로 추가 반복
+* t5/s100 또는 t10/s50은 별도 고부하 단계로 분리
+* connection pool metric과 애플리케이션 HTTP 처리 시간 분해
+* Replica lag와 `dataAsOf` 정책 문서화
+* 필요 시 k6 결과에 실패 응답 status/body sample을 별도 로컬 raw로 남기는 디버그 모드 보강

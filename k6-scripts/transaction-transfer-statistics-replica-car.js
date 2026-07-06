@@ -9,23 +9,37 @@ export const statisticsErrorRate = new Rate('statistics_error_rate');
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const MODE = __ENV.MODE || __ENV.STATS_MODE || 'MATERIALIZED_VIEW';
-const FROM_MONTH = __ENV.FROM_MONTH || '2026-01';
-const TO_MONTH = __ENV.TO_MONTH || '2026-12';
-const STATS_USER_IDS = parseList(__ENV.STATS_USER_IDS || __ENV.USER_IDS || __ENV.TEST_USER_ID || '');
+const TRANSFER_ENV = parseEnvFile(__ENV.TRANSFER_AUTH_ENV_FILE || '');
+const STATS_ENV = parseEnvFile(__ENV.STATS_AUTH_ENV_FILE || '');
+const FROM_MONTH = __ENV.FROM_MONTH || STATS_ENV.FROM_MONTH || '2026-01';
+const TO_MONTH = __ENV.TO_MONTH || STATS_ENV.TO_MONTH || '2026-12';
+const STATS_USER_IDS = parseList(__ENV.STATS_USER_IDS || __ENV.USER_IDS || __ENV.TEST_USER_ID
+    || STATS_ENV.USER_IDS || STATS_ENV.TEST_USER_ID || '');
 const STATS_TOKEN = __ENV.ACCESS_TOKEN
     || __ENV.STATS_ACCESS_TOKEN_COOKIE
     || __ENV.STATS_AUTH_TOKEN
     || __ENV.ACCESS_TOKEN_COOKIE
+    || STATS_ENV.ACCESS_TOKEN_COOKIE
+    || STATS_ENV.AUTH_TOKEN
+    || STATS_ENV.ACCESS_TOKEN
+    || STATS_ENV.JWT_TOKEN
     || '';
 
-const SENDER_USER_IDS = parseList(__ENV.SENDER_USER_IDS || __ENV.SENDER_USER_ID || '');
-const RECEIVER_USER_IDS = parseList(__ENV.RECEIVER_USER_IDS || __ENV.RECEIVER_USER_ID || '');
-const RECEIVER_NAMES = parseList(__ENV.RECEIVER_NAMES || __ENV.RECEIVER_NAME || '');
-const RECEIVER_PHONE_NUMBERS = parseList(__ENV.RECEIVER_PHONE_NUMBERS || __ENV.RECEIVER_PHONE_NUMBER || '');
-const TRANSFER_TOKENS = parseList(__ENV.TRANSFER_AUTH_TOKENS || __ENV.AUTH_TOKENS || '');
-const FROM_CURRENCY = __ENV.FROM_CURRENCY || __ENV.CURRENCY || 'KRW';
-const TO_CURRENCY = __ENV.TO_CURRENCY || __ENV.CURRENCY || 'KRW';
-const TRANSFER_AMOUNT = __ENV.TRANSFER_AMOUNT || '1.00';
+const SENDER_USER_IDS = parseList(__ENV.SENDER_USER_IDS || __ENV.SENDER_USER_ID
+    || TRANSFER_ENV.SENDER_USER_IDS || TRANSFER_ENV.SENDER_USER_ID || '');
+const RECEIVER_USER_IDS = parseList(__ENV.RECEIVER_USER_IDS || __ENV.RECEIVER_USER_ID
+    || TRANSFER_ENV.RECEIVER_USER_IDS || TRANSFER_ENV.RECEIVER_USER_ID || '');
+const RECEIVER_NAMES = parseList(__ENV.RECEIVER_NAMES || __ENV.RECEIVER_NAME
+    || TRANSFER_ENV.RECEIVER_NAMES || TRANSFER_ENV.RECEIVER_NAME || '');
+const RECEIVER_PHONE_NUMBERS = parseList(__ENV.RECEIVER_PHONE_NUMBERS || __ENV.RECEIVER_PHONE_NUMBER
+    || TRANSFER_ENV.RECEIVER_PHONE_NUMBERS || TRANSFER_ENV.RECEIVER_PHONE_NUMBER || '');
+const TRANSFER_TOKENS = parseList(__ENV.TRANSFER_AUTH_TOKENS || __ENV.AUTH_TOKENS
+    || TRANSFER_ENV.AUTH_TOKENS || TRANSFER_ENV.AUTH_TOKEN || '');
+const FROM_CURRENCY = __ENV.FROM_CURRENCY || __ENV.CURRENCY || TRANSFER_ENV.FROM_CURRENCY
+    || TRANSFER_ENV.CURRENCY || 'KRW';
+const TO_CURRENCY = __ENV.TO_CURRENCY || __ENV.CURRENCY || TRANSFER_ENV.TO_CURRENCY
+    || TRANSFER_ENV.CURRENCY || 'KRW';
+const TRANSFER_AMOUNT = __ENV.TRANSFER_AMOUNT || TRANSFER_ENV.TRANSFER_AMOUNT || '1.00';
 const DEBUG_STATUS = (__ENV.DEBUG_STATUS || 'false') === 'true';
 
 export const options = {
@@ -164,6 +178,28 @@ function parseList(value) {
         .split(',')
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
+}
+
+function parseEnvFile(path) {
+    if (!path) {
+        return {};
+    }
+
+    const result = {};
+    const content = open(path);
+    content
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith('#'))
+        .forEach((line) => {
+            const separator = line.indexOf('=');
+            if (separator > 0) {
+                const key = line.slice(0, separator).trim();
+                const value = line.slice(separator + 1).trim();
+                result[key] = value;
+            }
+        });
+    return result;
 }
 
 function positiveLength(values) {
