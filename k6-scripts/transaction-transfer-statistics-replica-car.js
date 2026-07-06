@@ -62,7 +62,7 @@ export function transferScenario() {
     const receiverName = valueAt(RECEIVER_NAMES, pairIndex, 'receiverName');
     const receiverPhoneNumber = valueAt(RECEIVER_PHONE_NUMBERS, pairIndex, 'receiverPhoneNumber');
     const token = valueAt(TRANSFER_TOKENS, pairIndex, 'transferToken');
-    const idempotencyKey = `${Date.now()}-${__VU}-${__ITER}-${randomHex(12)}`;
+    const idempotencyKey = `${randomHex(8)}-${randomHex(4)}-4${randomHex(3)}-a${randomHex(3)}-${randomHex(12)}`;
 
     const payload = JSON.stringify({
         receiverName,
@@ -149,7 +149,7 @@ function selectPairIndex() {
         throw new Error('transfer pair env is required.');
     }
 
-    return (__ITER + __VU - 1) % pairCount;
+    return Math.floor(Math.random() * pairCount);
 }
 
 function valueAt(values, index, name) {

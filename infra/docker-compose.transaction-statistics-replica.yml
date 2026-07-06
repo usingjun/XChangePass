@@ -4,19 +4,27 @@ networks:
 
 services:
   postgres-primary:
-    image: bitnami/postgresql:15
+    image: postgres:15
     container_name: xchangepass-statistics-primary
     ports:
       - "15432:5432"
     environment:
-      POSTGRESQL_REPLICATION_MODE: master
-      POSTGRESQL_REPLICATION_USER: ${LOCAL_REPLICA_POSTGRES_REPLICATION_USER:-repl_user}
-      POSTGRESQL_REPLICATION_PASSWORD: ${LOCAL_REPLICA_POSTGRES_REPLICATION_PASSWORD:-repl_password}
-      POSTGRESQL_USERNAME: ${LOCAL_REPLICA_POSTGRES_USER:-postgres}
-      POSTGRESQL_PASSWORD: ${LOCAL_REPLICA_POSTGRES_PASSWORD:-postgres}
-      POSTGRESQL_DATABASE: ${LOCAL_REPLICA_POSTGRES_DB:-xchangepass}
+      POSTGRES_USER: ${LOCAL_REPLICA_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${LOCAL_REPLICA_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${LOCAL_REPLICA_POSTGRES_DB:-xchangepass}
+      POSTGRES_REPLICATION_USER: ${LOCAL_REPLICA_POSTGRES_REPLICATION_USER:-repl_user}
+      POSTGRES_REPLICATION_PASSWORD: ${LOCAL_REPLICA_POSTGRES_REPLICATION_PASSWORD:-repl_password}
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=replica"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_replication_slots=10"
     volumes:
-      - transaction_statistics_primary_data:/bitnami/postgresql
+      - transaction_statistics_primary_data:/var/lib/postgresql/data
+      - ./postgres/primary-init:/docker-entrypoint-initdb.d:ro
     networks:
       - transaction-statistics-replica
     healthcheck:
@@ -26,7 +34,7 @@ services:
       retries: 10
 
   postgres-replica:
-    image: bitnami/postgresql:15
+    image: postgres:15
     container_name: xchangepass-statistics-replica
     depends_on:
       postgres-primary:
@@ -34,16 +42,36 @@ services:
     ports:
       - "15433:5432"
     environment:
-      POSTGRESQL_REPLICATION_MODE: slave
-      POSTGRESQL_MASTER_HOST: postgres-primary
-      POSTGRESQL_MASTER_PORT_NUMBER: 5432
-      POSTGRESQL_REPLICATION_USER: ${LOCAL_REPLICA_POSTGRES_REPLICATION_USER:-repl_user}
-      POSTGRESQL_REPLICATION_PASSWORD: ${LOCAL_REPLICA_POSTGRES_REPLICATION_PASSWORD:-repl_password}
-      POSTGRESQL_PASSWORD: ${LOCAL_REPLICA_POSTGRES_PASSWORD:-postgres}
+      PGUSER: ${LOCAL_REPLICA_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${LOCAL_REPLICA_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_REPLICATION_USER: ${LOCAL_REPLICA_POSTGRES_REPLICATION_USER:-repl_user}
+      POSTGRES_REPLICATION_PASSWORD: ${LOCAL_REPLICA_POSTGRES_REPLICATION_PASSWORD:-repl_password}
     volumes:
-      - transaction_statistics_replica_data:/bitnami/postgresql
+      - transaction_statistics_replica_data:/var/lib/postgresql/data
     networks:
       - transaction-statistics-replica
+    entrypoint:
+      - "bash"
+      - "-c"
+      - |
+        set -e
+        if [ ! -s "$$PGDATA/PG_VERSION" ]; then
+          rm -rf "$$PGDATA"/*
+          until pg_isready -h postgres-primary -p 5432; do
+            sleep 1
+          done
+          PGPASSWORD="$$POSTGRES_REPLICATION_PASSWORD" pg_basebackup \
+            -h postgres-primary \
+            -p 5432 \
+            -D "$$PGDATA" \
+            -U "$$POSTGRES_REPLICATION_USER" \
+            -Fp \
+            -Xs \
+            -P \
+            -R
+          chown -R postgres:postgres "$$PGDATA"
+        fi
+        exec docker-entrypoint.sh postgres -c hot_standby=on
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${LOCAL_REPLICA_POSTGRES_USER:-postgres} -d ${LOCAL_REPLICA_POSTGRES_DB:-xchangepass}"]
       interval: 5s
