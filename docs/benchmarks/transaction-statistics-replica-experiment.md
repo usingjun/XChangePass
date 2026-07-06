@@ -425,3 +425,192 @@ ux_mv_transaction_monthly_statistics
 * Replica로 송금 API 영향이 사라졌다.
 * 운영 조회 부하를 분리했다.
 * Replica를 쓰면 통계 조회가 항상 빨라진다.
+
+## 18. Replica 통계 지연 추가 확인
+
+이전 유효 run에서는 `Primary + Replica + MV` 조건의 통계 API latency가 `Single DB + MV`보다 높게 관측됐다.
+
+```text
+Single DB + MV statistics avg/p95/p99: 10.843ms / 15.205ms / 17.636ms
+Primary + Replica + MV statistics avg/p95/p99: 29.016ms / 34.041ms / 36.879ms
+```
+
+이번 추가 확인의 목적은 Replica를 더 좋게 보이게 만드는 것이 아니라, 이 차이가 반복되는지와 DB 내부 지표상 설명 가능한 차이가 있는지를 확인하는 것이다.
+
+확인 항목은 아래와 같다.
+
+* Primary/Replica MV row count
+* Primary/Replica MV unique index
+* Primary/Replica `EXPLAIN (ANALYZE, BUFFERS)`
+* Primary/Replica `pg_stat_user_tables`
+* Primary/Replica `pg_stat_activity` wait event
+* `pg_stat_replication` WAL byte lag
+* 간단한 Docker container CPU/memory snapshot
+
+### 18.1 MV row count와 lag
+
+반복 측정의 `Primary + Replica + MV` 조건 3회 모두 MV row count와 WAL byte lag는 아래처럼 같았다.
+
+| Run | Primary MV rows | Replica MV rows | WAL byte lag |
+| ---: | ---: | ---: | ---: |
+| 1 | 83,510 | 83,510 | 0 |
+| 2 | 83,510 | 83,510 | 0 |
+| 3 | 83,510 | 83,510 | 0 |
+
+### 18.2 MV index와 query plan
+
+Primary와 Replica 모두 아래 unique index를 가지고 있었다.
+
+```text
+ux_mv_transaction_monthly_statistics
+(user_id, bucket_month, source_type, transaction_type, currency, direction)
+```
+
+heavy user 12개월 조회 기준 `EXPLAIN (ANALYZE, BUFFERS)` 결과도 Primary와 Replica 모두 index scan이었다.
+
+| Run | DB | Plan | Rows | Buffers | Planning Time | Execution Time |
+| ---: | --- | --- | ---: | --- | ---: | ---: |
+| 1 | Primary | Index Scan | 397 | shared hit=17 | 0.147ms | 0.071ms |
+| 1 | Replica | Index Scan | 397 | shared hit=17 | 0.160ms | 0.077ms |
+| 2 | Primary | Index Scan | 397 | shared hit=17 | 0.160ms | 0.072ms |
+| 2 | Replica | Index Scan | 397 | shared hit=17 | 0.134ms | 0.069ms |
+| 3 | Primary | Index Scan | 397 | shared hit=17 | 0.144ms | 0.083ms |
+| 3 | Replica | Index Scan | 397 | shared hit=17 | 0.154ms | 0.069ms |
+
+이 결과만 보면 Replica 통계 API가 더 느릴 이유를 SQL plan 자체에서 찾기는 어렵다.
+
+### 18.3 table stats와 wait event
+
+`pg_stat_user_tables`에서는 이전과 동일하게 Primary와 Replica의 MV 통계 관측값이 다르게 보였다.
+
+| DB | n_live_tup | n_dead_tup | last_analyze | last_autoanalyze |
+| --- | ---: | ---: | --- | --- |
+| Primary | 83,510 | 0 | 있음 | 있음 |
+| Replica | 0 | 0 | 없음 | 없음 |
+
+다만 Replica의 `n_live_tup=0`, `last_analyze=NULL` 상태에서도 `EXPLAIN`은 Primary와 같은 index scan을 사용했고, 실행 시간도 비슷했다. 따라서 이번 반복 측정에서는 이 관측값 차이가 HTTP 통계 latency 차이로 직접 이어진다고 단정하지 않는다.
+
+측정 후 `pg_stat_activity` wait event는 제한적으로만 관측됐다.
+
+| DB | wait event 요약 |
+| --- | --- |
+| Primary | `ClientRead` 2건, wait 없음 1건 |
+| Replica | wait 없음 1건 |
+
+Docker snapshot도 낮은 CPU/memory 사용량만 보였다.
+
+| Container | CPU range | Memory |
+| --- | ---: | ---: |
+| Primary | 0.04% ~ 0.07% | 약 94MiB |
+| Replica | 0.15% ~ 0.21% | 약 89MiB |
+
+`pg_stat_statements`는 이번 반복 실행에서 별도로 활성화하지 않았다. 운영 PostgreSQL 설정을 바꾸지 않는 원칙 때문에 local benchmark 환경에서 별도 준비가 필요하다.
+
+## 19. A/B 반복 측정 결과
+
+반복 측정은 이전 유효 run과 같은 기본 조건을 사용했다.
+
+| 항목 | 값 |
+| --- | --- |
+| MODE | `MATERIALIZED_VIEW` |
+| TRANSFER_RATE | 5/s |
+| STATISTICS_RATE | 10/s |
+| DURATION | 30s |
+| 통계 seed | 100,000 rows / 1,000 users / 12 months |
+| 송금 seed | 2,000 pairs |
+| warm-up | 각 run 본 측정 전 통계 API 10회 |
+| fraud 정책 | 런타임 인자로 야간 창을 `12:00~12:01`로 조정 |
+| 실행 순서 | A1 -> B1 -> B2 -> A2 -> A3 -> B3 |
+
+A/B 각 run 전에 DB volume을 초기화하고 같은 seed 규모를 다시 적재했다.
+
+### 19.1 run별 결과
+
+| Run | Scenario | Transfer avg | Transfer p95 | Transfer p99 | Transfer error | Statistics avg | Statistics p95 | Statistics p99 | Statistics error |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | Single DB + MV | 30.922ms | 39.360ms | 47.588ms | 0 | 10.259ms | 12.921ms | 16.141ms | 0 |
+| 1 | Primary + Replica + MV | 27.364ms | 34.302ms | 37.960ms | 0 | 9.164ms | 11.101ms | 15.858ms | 0 |
+| 2 | Single DB + MV | 26.396ms | 32.469ms | 38.091ms | 0 | 9.066ms | 11.417ms | 13.591ms | 0 |
+| 2 | Primary + Replica + MV | 27.009ms | 34.186ms | 39.186ms | 0 | 8.929ms | 11.657ms | 13.928ms | 0 |
+| 3 | Single DB + MV | 25.917ms | 33.470ms | 35.863ms | 0 | 8.929ms | 11.408ms | 12.501ms | 0 |
+| 3 | Primary + Replica + MV | 25.398ms | 32.668ms | 37.783ms | 0 | 8.636ms | 11.529ms | 12.585ms | 0 |
+
+요청 수:
+
+| Scenario | Transfer requests total | Statistics requests total | Transfer requests avg | Statistics requests avg |
+| --- | ---: | ---: | ---: | ---: |
+| Single DB + MV | 452 | 901 | 150.667 | 300.333 |
+| Primary + Replica + MV | 451 | 903 | 150.333 | 301.000 |
+
+DB 유효성:
+
+| Scenario | Transfer failed total | Statistics failed total | MV row count | WAL byte lag |
+| --- | ---: | ---: | --- | --- |
+| Single DB + MV | 0 | 0 | Primary 83,510 | 해당 없음 |
+| Primary + Replica + MV | 0 | 0 | Primary/Replica 83,510 / 83,510 | 0 |
+
+### 19.2 평균 집계
+
+| Scenario | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 | Error |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Single DB + MV | 27.745ms | 35.100ms | 40.514ms | 9.418ms | 11.915ms | 14.078ms | 0 |
+| Primary + Replica + MV | 26.590ms | 33.719ms | 38.309ms | 8.910ms | 11.429ms | 14.124ms | 0 |
+
+편차:
+
+| Scenario | Transfer avg stdev | Statistics avg stdev |
+| --- | ---: | ---: |
+| Single DB + MV | 2.255ms | 0.597ms |
+| Primary + Replica + MV | 0.856ms | 0.216ms |
+
+## 20. 반복 측정 해석
+
+반복 측정에서는 이전 단일 유효 run에서 보였던 `Primary + Replica + MV` 통계 API 지연 증가가 재현되지 않았다.
+
+이번 반복 측정은 각 run 본 측정 전에 통계 API warm-up 10회를 넣었다. 따라서 이전 단일 run에서 Replica 통계 API가 더 느리게 나온 현상은 Replica SQL plan 자체보다는 datasource connection pool 초기화, 캐시 warm-up, 로컬 Docker 상태, 실행 순서, 짧은 30초 단일 측정 편차의 영향을 받았을 가능성이 있다.
+
+다만 이번 반복 측정에서도 Read Replica가 성능을 개선한다고 단정하지 않는다.
+
+* 30초 단기 local run이다.
+* 송금 rate는 5/s로 낮춘 조건이다.
+* HTTP/k6 기준이며 DB CPU/IO를 정밀하게 수집하지 않았다.
+* `pg_stat_statements`를 함께 수집하지 않았다.
+* 운영 환경 결과가 아니다.
+* 통계 API warm-up을 넣은 조건이므로 cold start 성능과는 다르다.
+
+이번 결과에서 말할 수 있는 범위는 아래 정도다.
+
+* MV 기반 통계 조회만 Replica로 보내는 구조는 반복 run에서도 동작했다.
+* 송금 write path는 Primary에 유지됐고, 3회 반복 모두 송금 실패는 없었다.
+* Primary/Replica MV row count는 동일했고 WAL byte lag는 0이었다.
+* warm-up 이후 30초 반복 측정에서는 Single DB와 Primary/Replica의 통계 API latency가 비슷한 범위로 수렴했다.
+* SQL plan은 Primary/Replica 모두 index scan으로 유사했다.
+
+## 21. 현재 기준 Replica 적용 판단
+
+현재 기준으로는 Read Replica 적용을 확정하지 않는다.
+
+거래 통계 조회는 최신 잔액, 최신 원장, recovery, reconciliation, idempotency 판단에 쓰지 않는 파생 read model이므로 Replica 후보가 될 수 있다. 하지만 이번 local 반복 측정만으로 Replica가 통계 API latency를 확실히 개선하거나 송금 write path 성능을 확실히 개선한다고 말하기는 어렵다.
+
+현재 문서/포트폴리오 표현은 아래 수준이 적절하다.
+
+```text
+거래 통계 조회 검증 결과를 바탕으로 MATERIALIZED_VIEW 기반 통계 조회만 Read Replica 후보로 분리하는 로컬 시험 구조를 구성하고, Single DB 대비 A/B 성능을 비교했다.
+```
+
+피해야 할 표현은 그대로 유지한다.
+
+* Replica로 성능을 개선했다.
+* Replica로 송금 API 안정성을 높였다.
+* Read Replica 도입을 완료했다.
+* 운영 조회 부하를 분리했다.
+
+후속 검증은 아래가 필요하다.
+
+* 3분 이상 duration 반복 측정
+* 더 높은 송금/통계 rate 단계 측정
+* `pg_stat_statements` 포함 benchmark 환경 준비
+* `pg_stat_activity`를 실행 중 주기적으로 sampling
+* DB CPU/IO와 connection pool metric 수집
+* cold start와 warm-up 이후 성능 분리
+* Replica lag와 `dataAsOf` 응답 정책 정리
