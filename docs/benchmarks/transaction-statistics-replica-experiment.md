@@ -158,39 +158,82 @@ tools/perf/run-transaction-transfer-statistics-replica-car.sh
 
 auth env와 token은 로컬 산출물이며 커밋하지 않는다.
 
-## 8. 실행 조건
+## 8. 실행 조건과 유효성 기준
 
 이번 실행은 로컬 개발 장비 기준 A/B 실험이다. 운영 환경 결과가 아니며, 운영 DB 설정이나 운영 env는 변경하지 않았다.
 
-공통 조건은 아래와 같다.
+성능 비교 결과로 채택하는 기준은 아래와 같다.
 
-* 실행일: 2026-07-06
-* PostgreSQL: `postgres:15`
-* Primary port: `15432`
-* Replica port: `15433`
-* Spring Boot port: `18080`
-* 통계 seed: 100,000 rows, 1,000 users, 12 months
-* 송금 seed: 2,000 sender/receiver pairs
-* 통계 mode: `MATERIALIZED_VIEW`
-* 송금 rate: 10/s
-* 통계 rate: 10/s
-* duration: 30s
-* transfer VUs: 20, max 50
-* statistics VUs: 20, max 50
+* A/B 모두 `mode=MATERIALIZED_VIEW`
+* A/B 모두 송금 error 0
+* A/B 모두 통계 error 0
+* 송금 scenario와 통계 scenario는 각각 `constant-arrival-rate`로 분리
+* A/B 실행 전 DB fixture를 새로 생성
+* Primary + Replica 조건에서 Primary/Replica MV row count 동일
+* Primary + Replica 조건에서 WAL byte lag 0 또는 사유 명확
 
-실행 준비 명령 예시는 아래와 같다.
+송금 실패가 1건이라도 있는 run은 송금 write path 안정성 비교 근거로 사용하지 않고, 실패 원인 분석 대상으로 분리한다.
 
-```bash
-docker compose -f infra/docker-compose.transaction-statistics-replica.yml up -d
-tools/perf/run-transaction-statistics-k6-seed.sh
-TRANSACTION_TRANSFER_K6_PAIRS=2000 tools/perf/run-transaction-transfer-k6-seed.sh
+## 9. 이전 실행 실패 원인 분석
+
+2026-07-06 최초 실행과 2026-07-07 재실행에서 `Primary + Replica + MV` 조건에 송금 실패 1건이 있었다. 이 run은 아래 이유로 A/B 성능 비교 결과에서 제외한다.
+
+| 구분 | 결과 |
+| --- | --- |
+| 실패 조건 | Primary + Replica + MV |
+| 실패 수 | transfer failed 1건 |
+| statistics failed | 0건 |
+| Primary/Replica MV rows | 83,510 / 83,510 |
+| WAL byte lag | 0 |
+
+직전 실패 run의 DB 상태를 확인한 결과는 아래와 같다.
+
+```text
+status   | failure_stage   | failure_code            | count
+---------|-----------------|-------------------------|------
+COMPLETED|                 |                         | 299
+FAILED   | FRAUD_VALIDATION| SUSPICIOUS_TRANSACTION  | 1
 ```
 
-## 9. 실행 결과
+상태 이벤트도 같은 원인을 가리켰다.
 
-실제 A/B k6 실행을 완료했다.
+```text
+event_type           | current_status | failure_stage   | error_code             | count
+---------------------|----------------|-----------------|------------------------|------
+FRAUD_CHECK_BLOCKED  | VALIDATING     | FRAUD_VALIDATION| SUSPICIOUS_TRANSACTION | 1
+FAILED               | FAILED         | FRAUD_VALIDATION| SUSPICIOUS_TRANSACTION | 1
+```
 
-### 9.1 A: Single DB + MV
+따라서 이전 실패는 Replica routing이 송금 경로에 잘못 적용된 문제가 아니라, 송금 검증 단계의 Fraud 차단으로 분류한다. raw k6 결과에는 실패 response body가 남아 있지 않아 `frequency`, `repeated amount`, `night time` 중 세부 fraud rule까지는 확정하지 않는다.
+
+이번 재실행에서는 소스 코드, Lua, 기본 운영 설정을 바꾸지 않았다. 로컬 실행 인자로만 fraud 야간 시간을 현재 실행 시간과 겹치지 않게 조정하고, 송금 rate를 낮춰 같은 사용자에게 짧은 시간에 반복 요청이 몰릴 가능성을 줄였다.
+
+## 10. 유효 run 재실행 조건
+
+공통 조건은 아래와 같다.
+
+| 항목 | 값 |
+| --- | --- |
+| 실행일 | 2026-07-07 |
+| PostgreSQL | `postgres:15` |
+| Primary port | `15432` |
+| Replica port | `15433` |
+| Spring Boot port | `18080` |
+| 통계 seed | 100,000 rows, 1,000 users, 12 months |
+| 송금 seed | 2,000 sender/receiver pairs |
+| 통계 mode | `MATERIALIZED_VIEW` |
+| 송금 rate | 5/s |
+| 통계 rate | 10/s |
+| duration | 30s |
+| transfer VUs | 20, max 50 |
+| statistics VUs | 20, max 50 |
+| fraud 야간 정책 | `--fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01` |
+
+송금 rate는 최초 후보였던 10/s에서 5/s로 낮췄다. 목적은 송금 API를 빠르게 보이게 만드는 것이 아니라, 실험 목적과 무관한 Fraud 차단을 피하고 `transfer error 0`, `statistics error 0` 조건을 먼저 만족시키는 것이다. A/B는 같은 rate와 같은 fixture 규모로 실행했다.
+
+## 11. 유효 실행 결과
+
+### 11.1 A: Single DB + MV
 
 앱 설정:
 
@@ -203,20 +246,20 @@ SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:15432/xchangepass
 
 | Metric | avg | p95 | p99 | min | max | error |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| transfer_duration | 27.617ms | 33.084ms | 40.551ms | 14.476ms | 218.450ms | 0.00% |
-| statistics_duration | 10.232ms | 12.385ms | 13.728ms | 4.804ms | 112.183ms | 0.00% |
+| transfer_duration | 31.872ms | 41.588ms | 47.877ms | 16.902ms | 229.705ms | 0.00% |
+| statistics_duration | 10.843ms | 15.205ms | 17.636ms | 5.336ms | 107.098ms | 0.00% |
 
 요청 수:
 
 | 항목 | 결과 |
 | --- | ---: |
-| total http requests | 601 |
-| transfer requests | 301 |
-| statistics requests | 300 |
+| total http requests | 452 |
+| transfer requests | 151 |
+| statistics requests | 301 |
 | transfer failed | 0 |
 | statistics failed | 0 |
 
-### 9.2 B: Primary + Replica + MV
+### 11.2 B: Primary + Replica + MV
 
 앱 설정:
 
@@ -240,84 +283,111 @@ TRANSACTION_STATISTICS_REPLICA_URL=jdbc:postgresql://localhost:15433/xchangepass
 
 | Metric | avg | p95 | p99 | min | max | error |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| transfer_duration | 26.655ms | 31.730ms | 37.072ms | 14.521ms | 200.242ms | 0.33% |
-| statistics_duration | 26.794ms | 30.963ms | 33.744ms | 15.793ms | 113.851ms | 0.00% |
+| transfer_duration | 30.399ms | 35.294ms | 50.767ms | 18.603ms | 251.514ms | 0.00% |
+| statistics_duration | 29.016ms | 34.041ms | 36.879ms | 17.744ms | 132.453ms | 0.00% |
 
 요청 수:
 
 | 항목 | 결과 |
 | --- | ---: |
-| total http requests | 602 |
-| transfer requests | 301 |
-| statistics requests | 301 |
-| transfer failed | 1 |
+| total http requests | 451 |
+| transfer requests | 151 |
+| statistics requests | 300 |
+| transfer failed | 0 |
 | statistics failed | 0 |
 
 실행 후 확인:
 
 | 항목 | 결과 |
 | --- | --- |
+| wallet_transfer_request status | `COMPLETED` 151건 |
+| Primary MV rows | 83,510 |
+| Replica MV rows | 83,510 |
 | replication state | streaming |
 | sync_state | async |
 | WAL byte lag after run | 0 |
-| replica replay delay after run | 약 3분 22초 |
 
-`replay_delay`는 마지막 replay timestamp와 현재 시각의 차이다. WAL byte lag가 0이므로, 실행 종료 시점에 미적용 WAL이 남아 있다는 의미로 해석하지 않는다. 쓰기가 한동안 없으면 이 값은 시간이 지날수록 커질 수 있다.
+### 11.3 A/B 비교
 
-### 9.3 A/B 비교
+아래 표는 송금 실패가 없는 유효 run만 사용한다.
 
-| Metric | Single DB + MV | Primary + Replica + MV | 차이 |
-| --- | ---: | ---: | ---: |
-| transfer avg | 27.617ms | 26.655ms | -0.962ms |
-| transfer p95 | 33.084ms | 31.730ms | -1.354ms |
-| transfer p99 | 40.551ms | 37.072ms | -3.479ms |
-| statistics avg | 10.232ms | 26.794ms | +16.562ms |
-| statistics p95 | 12.385ms | 30.963ms | +18.578ms |
-| statistics p99 | 13.728ms | 33.744ms | +20.016ms |
+| Scenario | Transfer avg | Transfer p95 | Transfer p99 | Transfer error | Statistics avg | Statistics p95 | Statistics p99 | Statistics error |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Single DB + MV | 31.872ms | 41.588ms | 47.877ms | 0.00% | 10.843ms | 15.205ms | 17.636ms | 0.00% |
+| Primary + Replica + MV | 30.399ms | 35.294ms | 50.767ms | 0.00% | 29.016ms | 34.041ms | 36.879ms | 0.00% |
 
-이번 로컬 실행에서는 송금 지연시간이 Replica 조건에서 소폭 낮게 나왔다. 다만 차이가 작고 실행 횟수가 1회이므로, Replica가 송금 응답을 개선한다고 단정하지 않는다.
+요청 수:
 
-반대로 통계 API는 Replica 조건에서 더 느렸다. 이 결과는 로컬 Docker Primary/Replica 구성, 별도 connection pool, replica 컨테이너 상태, 캐시 warm-up 차이의 영향을 받을 수 있다. 이번 결과만으로 Replica 통계 조회가 항상 느리다고 단정하지 않는다.
+| Scenario | Transfer requests | Statistics requests |
+| --- | ---: | ---: |
+| Single DB + MV | 151 | 301 |
+| Primary + Replica + MV | 151 | 300 |
 
-## 10. 해석
+이번 유효 run에서는 Replica 조건의 transfer avg/p95가 Single DB보다 낮고 p99는 높게 나왔다. 차이가 작고 30초 단일 실행이므로, Replica가 송금 응답을 개선한다고 단정하지 않는다.
+
+반대로 통계 API는 Replica 조건에서 더 느렸다. 이 결과는 로컬 Docker Primary/Replica 구성, 별도 datasource connection pool, replica 컨테이너 상태, 캐시 warm-up 차이의 영향을 받을 수 있다. 이번 결과만으로 Replica 통계 조회가 항상 느리다고 단정하지 않는다.
+
+## 12. Replica 통계 조회 지연 확인
+
+Replica 조건에서 통계 API가 더 느리게 나온 원인을 단정하지 않기 위해 Primary/Replica의 MV 상태와 query plan을 간단히 확인했다.
+
+MV index는 Primary와 Replica 모두 동일하게 존재했다.
+
+```text
+ux_mv_transaction_monthly_statistics
+(user_id, bucket_month, source_type, transaction_type, currency, direction)
+```
+
+`pg_stat_user_tables` 기준으로 Primary는 `n_live_tup=83510`, `last_analyze` 값이 있었지만, Replica에서는 `n_live_tup=0`, `last_analyze=NULL`로 관측됐다. 이는 로컬 Replica의 planner 통계 관측이 Primary와 다르게 보인다는 점을 의미한다.
+
+다만 같은 heavy user 12개월 MV 조회를 `EXPLAIN (ANALYZE, BUFFERS)`로 확인하면 Primary와 Replica 모두 index scan을 사용했다.
+
+| DB | Plan | Rows | Buffers | Execution Time |
+| --- | --- | ---: | --- | ---: |
+| Primary | Index Scan | 397 | shared hit=11 read=6 | 0.125ms |
+| Replica | Index Scan | 397 | shared hit=17 | 0.120ms |
+
+따라서 이번 k6에서 Replica 통계 API latency가 더 높게 나온 현상을 SQL 실행 계획 자체 때문이라고 단정하기는 어렵다. 로컬 Docker 컨테이너 리소스, replica datasource connection pool, 네트워크 경로, 캐시 warm-up, 반복 실행 편차를 추가로 확인해야 한다.
+
+## 13. 해석
 
 이번 실행은 운영용 Read Replica 도입 결과가 아니라 로컬 검증용 시험 적용 결과다.
 
-송금 write path는 Primary에 유지하고, 지연 허용 가능한 `MATERIALIZED_VIEW` 기반 거래 통계 조회만 Replica 후보로 분리했다.
+송금 write path는 Primary에 유지하고, 지연 허용 가능한 `MATERIALIZED_VIEW` 기반 거래 통계 조회만 Replica 후보로 분리했다. `mode=GROUP_BY`, `mode=SUMMARY`는 이번 Replica A/B 비교의 메인 대상이 아니다.
 
-`constant-arrival-rate` 기반으로 송금 요청과 통계 요청 발생률을 분리 고정했기 때문에, 통계 요청이 느려져도 송금 요청 발생률 자체가 같이 줄어드는 구조는 피했다.
+이번 유효 run에서 확인한 것은 아래 수준이다.
 
-이번 결과에서 확인한 것은 아래 수준이다.
-
-* `mode=MATERIALIZED_VIEW` 통계 조회를 Replica로 보내는 구조는 로컬에서 동작했다.
+* `mode=MATERIALIZED_VIEW` 통계 조회만 Replica로 보내는 구조는 로컬에서 동작했다.
 * 송금 write path는 Primary에 유지됐다.
-* 통계 요청과 송금 요청을 분리한 k6 시나리오에서 A/B 모두 실행 가능했다.
-* 이번 30초 단일 실행에서는 Replica 조건이 송금 p95/p99를 악화시키지 않았다.
-* 통계 조회 latency는 Replica 조건에서 더 높게 측정됐다.
+* 송금 scenario와 통계 scenario를 분리한 `constant-arrival-rate` 조건에서 A/B 모두 error 0으로 실행됐다.
+* Primary + Replica 조건에서 MV row count는 Primary/Replica 모두 83,510으로 같았다.
+* Primary + Replica 조건에서 WAL byte lag는 실행 전후 0이었다.
+* Replica 조건의 통계 API latency는 Single DB보다 높게 관측됐다.
 
-따라서 이번 결과만으로 Primary/Replica 도입을 확정하지 않는다. 반복 실행, DB 내부 관측, 더 긴 duration, 더 높은 rate, CPU/IO/lock/connection 지표가 필요하다.
+따라서 이번 결과만으로 Primary/Replica 도입을 확정하지 않는다. 반복 실행, 더 긴 duration, 더 높은 rate, DB CPU/IO/lock/connection 지표, `pg_stat_activity`, `pg_stat_statements`가 필요하다.
 
-## 11. 한계
+## 14. 한계
 
 * 운영 환경 결과가 아니다.
 * Primary/Replica 운영 반영이 아니다.
-* 30초 단일 실행 결과다.
-* 통계/송금 rate가 각각 10/s인 제한된 부하다.
+* 30초 단일 유효 실행 결과다.
+* 송금 rate를 5/s로 낮춘 조건이다.
 * DB CPU/IO, lock wait, connection pool, `pg_stat_activity`, `pg_stat_statements`는 함께 수집하지 않았다.
-* Replica lag는 WAL byte lag 중심으로만 간단히 확인했다.
+* Replica lag는 WAL byte lag 중심으로만 확인했다.
 * `dataAsOf` 정책은 후속 검토가 필요하다.
 * Summary refresh와 송금 API 동시 실행 영향은 별도 시나리오가 필요하다.
-* B 조건에서 송금 실패 1건이 발생했다. error rate는 threshold 미만이지만, 원인은 별도 debug가 필요하다.
+* Replica 통계 API가 더 느리게 나온 원인은 아직 확정하지 않았다.
 * 로컬 Docker Primary/Replica 구성의 성능 특성이 운영 환경과 다를 수 있다.
 
-실행 중 보완한 사항:
+실험 준비 과정에서 이미 보완된 사항:
 
 * k6 `Idempotency-Key`가 UUID 형식이 아니어서 송금 API가 400을 반환하던 문제를 UUID v4 형태로 수정했다.
 * 송금 pair 선택이 앞쪽 사용자에게 몰려 Fraud Detection을 건드리던 문제를 랜덤 분산으로 수정했다.
 * Fraud frequency 조건을 피하기 위해 송금 seed pair를 400개에서 2,000개로 늘려 실행했다.
+* 이번 유효 run에서는 송금 rate를 10/s에서 5/s로 낮췄다.
 * 로컬 compose 이미지는 사용 가능한 `postgres:15` 기준으로 맞췄고, replica base backup을 위해 replication user와 `pg_hba.conf` 설정을 초기화 스크립트로 준비했다.
 
-## 12. 후속 과제
+## 15. 후속 과제
 
 * 같은 조건으로 A/B를 3회 이상 반복 실행
 * duration을 30s에서 3m 이상으로 늘려 재측정
@@ -330,10 +400,9 @@ TRANSACTION_STATISTICS_REPLICA_URL=jdbc:postgresql://localhost:15433/xchangepass
 * CPU/IO 관측
 * Replica lag를 `pg_stat_replication`, `pg_last_xact_replay_timestamp()`, `dataAsOf` 기준으로 함께 측정
 * MV refresh 주기와 `dataAsOf` 응답 정책 검토
-* B 조건 송금 실패 1건의 원인 확인
-* Replica 통계 latency가 Single DB보다 높게 나온 원인 확인
+* Replica 통계 latency가 Single DB보다 높게 나온 원인 추가 확인
 
-## 13. 포트폴리오 반영 가능 문장
+## 16. 포트폴리오 반영 가능 문장
 
 아래 문장은 운영 결과가 아니라 개발 및 검증 결과 기준으로 사용할 수 있다.
 
@@ -341,8 +410,9 @@ TRANSACTION_STATISTICS_REPLICA_URL=jdbc:postgresql://localhost:15433/xchangepass
 * 송금/잔액/원장/idempotency/recovery/reconciliation/latest state 판단은 Primary write model에 유지하고, 지연 허용 가능한 통계 read model만 Replica 후보로 제한했다.
 * k6 혼합 부하를 `constant-arrival-rate` 기반 송금 scenario와 통계 scenario로 분리해, 통계 요청 지연이 송금 요청 발생률을 흔드는 기존 loop 방식의 한계를 보완했다.
 * 로컬 100k 통계 데이터, 2,000개 송금 pair 조건에서 Single DB + MV와 Primary/Replica + MV를 비교하고, 송금 latency와 통계 latency를 분리 측정했다.
+* 송금 실패가 있는 run은 성능 비교 근거에서 제외하고, 실패 원인을 `FRAUD_VALIDATION / SUSPICIOUS_TRANSACTION`으로 분리 분석했다.
 
-## 14. 피해야 할 표현
+## 17. 피해야 할 표현
 
 아래 표현은 피한다.
 
