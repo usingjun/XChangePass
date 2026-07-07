@@ -4,6 +4,12 @@ import { Rate, Trend } from 'k6/metrics';
 
 export const transferDuration = new Trend('transfer_duration', true);
 export const statisticsDuration = new Trend('statistics_duration', true);
+export const transferBlockedDuration = new Trend('transfer_blocked_duration', true);
+export const transferWaitingDuration = new Trend('transfer_waiting_duration', true);
+export const transferReceivingDuration = new Trend('transfer_receiving_duration', true);
+export const statisticsBlockedDuration = new Trend('statistics_blocked_duration', true);
+export const statisticsWaitingDuration = new Trend('statistics_waiting_duration', true);
+export const statisticsReceivingDuration = new Trend('statistics_receiving_duration', true);
 export const transferErrorRate = new Rate('transfer_error_rate');
 export const statisticsErrorRate = new Rate('statistics_error_rate');
 
@@ -105,6 +111,9 @@ export function transferScenario() {
     });
 
     transferDuration.add(res.timings.duration);
+    transferBlockedDuration.add(res.timings.blocked);
+    transferWaitingDuration.add(res.timings.waiting);
+    transferReceivingDuration.add(res.timings.receiving);
     const ok = check(res, {
         'transfer status is 200': (response) => response.status === 200,
         'transfer completed': (response) => response.status === 200 && response.body.includes('COMPLETED'),
@@ -140,6 +149,9 @@ export function statisticsScenario() {
     });
 
     statisticsDuration.add(res.timings.duration);
+    statisticsBlockedDuration.add(res.timings.blocked);
+    statisticsWaitingDuration.add(res.timings.waiting);
+    statisticsReceivingDuration.add(res.timings.receiving);
     const ok = check(res, {
         'statistics status is 200': (response) => response.status === 200,
     });

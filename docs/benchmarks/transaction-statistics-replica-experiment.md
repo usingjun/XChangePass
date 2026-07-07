@@ -949,3 +949,236 @@ MATERIALIZED_VIEW 기반 통계 조회는 Read Replica 후보로 유지할 수 �
 ```
 
 후속 검증은 connection pool metric, 애플리케이션 처리 시간 분해, Replica lag와 `dataAsOf` 정책, 더 긴 duration 반복 측정 순서가 적절하다.
+
+## 24. 고부하 심화 검증과 HTTP latency 원인 분석
+
+### 24.1 목적
+
+이번 심화 검증의 목적은 통계 API HTTP latency를 빠르게 보이게 만드는 것이 아니다.
+
+핵심 질문은 아래다.
+
+```text
+통계 read 부하가 더 커졌을 때,
+Single DB에서는 Primary write path와 통계 read가 같은 DB 자원을 경쟁하고,
+Primary + Replica 구조에서는 통계 read 부하가 Replica 쪽으로 격리되는가?
+```
+
+보조 질문은 아래다.
+
+```text
+Replica DB의 statistics_mv SQL mean exec는 낮게 관측되는데,
+왜 통계 API HTTP latency는 Replica 조건에서 더 높게 관측되는가?
+```
+
+이번 작업에서는 아래를 추가했다.
+
+* `S200`, `S300`, `T10/S100`, `T10/S200` 조건 실행
+* k6 HTTP timing 분해 metric 추가
+  * `waiting`
+  * `blocked`
+  * `receiving`
+* high-load runner의 Hikari Actuator metric 수집 추가
+* `RUN_DEEP`, `RUN_T10_S200` 실행 옵션 추가
+
+Java controller/service/repository 단위 Micrometer timer는 이번 결과 근거에 포함하지 않는다. 로컬 sanity에서 custom timer가 Actuator metric으로 안정적으로 노출되지 않았기 때문에, 이번 문서에는 실제 수집에 성공한 k6 HTTP timing, Hikari 기본 metric, `pg_stat_statements`, `pg_stat_activity`, Docker CPU, WAL lag만 근거로 사용한다.
+
+### 24.2 실행 조건
+
+공통 조건은 아래와 같다.
+
+| 항목 | 값 |
+| --- | --- |
+| 실행일 | 2026-07-07 |
+| 통계 seed | 100,000 rows / 1,000 users / 12 months |
+| 송금 seed | 10,000 sender/receiver pairs |
+| 통계 mode | `MATERIALIZED_VIEW` |
+| duration | 3m |
+| A/B 실행 순서 | A1 -> B1 -> B2 -> A2 -> A3 -> B3 |
+| fraud 야간 정책 | `--fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01` |
+| pair 선택 | `SCENARIO_LABEL + VU + iteration` 기반 결정적 분산 |
+
+추가 조건은 아래다.
+
+| Condition | Transfer rate | Statistics rate | Runs |
+| --- | ---: | ---: | ---: |
+| `high-t5-s200` | 5/s | 200/s | A/B 각 3회 |
+| `high-t5-s300` | 5/s | 300/s | A/B 각 3회 |
+| `high-t10-s100` | 10/s | 100/s | A/B 각 3회 |
+| `high-t10-s200` | 10/s | 200/s | A/B 각 3회 |
+
+### 24.3 유효 run 기준
+
+성능 평균에는 아래 기준을 만족한 run만 포함했다.
+
+* `mode=MATERIALIZED_VIEW`
+* `transfer error 0`
+* `statistics error 0`
+* k6 `dropped_iterations = 0`
+* A/B 같은 `TRANSFER_RATE`
+* A/B 같은 `STATISTICS_RATE`
+* A/B 같은 `DURATION`
+* A/B 같은 seed 규모
+* Primary + Replica 조건에서 실행 전 Primary/Replica MV row count 동일
+* 실행 후 WAL byte lag 0
+
+`high-t10-s200 / Primary + Replica + MV / run 3`은 아래 이유로 평균에서 제외했다.
+
+| Condition | Scenario | Run | Transfer error | Statistics error | Dropped iterations | 제외 사유 |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 3m / T10 / S200 | Primary + Replica + MV | 3 | 0 | 0 | 16,914 | k6 VU 부족으로 요청 발생률 유지 실패 |
+
+나머지 23개 run은 `transfer error 0`, `statistics error 0`이었다. 모든 run의 실행 후 WAL byte lag는 0이었다.
+
+### 24.4 k6 결과 요약
+
+아래 표는 유효 run만 평균에 포함한 값이다.
+
+| Condition | Scenario | Runs | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 | Error |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3m / T5 / S200 | Single DB + MV | 3 | 18.328ms | 23.721ms | 27.565ms | 3.485ms | 4.746ms | 5.551ms | 0 |
+| 3m / T5 / S200 | Primary + Replica + MV | 3 | 13.919ms | 17.652ms | 23.297ms | 10.863ms | 12.239ms | 13.955ms | 0 |
+| 3m / T5 / S300 | Single DB + MV | 3 | 15.320ms | 19.529ms | 22.679ms | 2.627ms | 3.529ms | 4.116ms | 0 |
+| 3m / T5 / S300 | Primary + Replica + MV | 3 | 14.335ms | 18.826ms | 24.156ms | 10.321ms | 11.630ms | 13.427ms | 0 |
+| 3m / T10 / S100 | Single DB + MV | 3 | 20.659ms | 25.079ms | 29.019ms | 4.574ms | 6.232ms | 7.216ms | 0 |
+| 3m / T10 / S100 | Primary + Replica + MV | 3 | 13.089ms | 16.879ms | 21.358ms | 11.323ms | 12.548ms | 14.473ms | 0 |
+| 3m / T10 / S200 | Single DB + MV | 3 | 16.855ms | 21.484ms | 24.407ms | 3.341ms | 4.464ms | 5.303ms | 0 |
+| 3m / T10 / S200 | Primary + Replica + MV | 2 | 14.144ms | 19.197ms | 23.838ms | 11.099ms | 13.395ms | 16.177ms | 0 |
+
+이 표만 보고 Replica가 송금 HTTP latency를 개선한다고 단정하지 않는다. 같은 로컬 장비에서 반복 실행한 A/B 결과이며, HTTP latency는 DB 외부 요인의 영향을 함께 받는다.
+
+### 24.5 HTTP timing 분해
+
+k6 `duration` 중 대부분은 `waiting`으로 관측됐다. `blocked`는 모든 조건에서 매우 낮았다.
+
+| Condition | Scenario | Transfer waiting avg | Transfer waiting p95 | Statistics waiting avg | Statistics waiting p95 | Statistics blocked avg |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 3m / T5 / S200 | Single DB + MV | 18.247ms | 23.650ms | 3.313ms | 4.384ms | 0.004ms |
+| 3m / T5 / S200 | Primary + Replica + MV | 13.840ms | 17.573ms | 10.709ms | 12.014ms | 0.004ms |
+| 3m / T5 / S300 | Single DB + MV | 15.259ms | 19.474ms | 2.490ms | 3.180ms | 0.003ms |
+| 3m / T5 / S300 | Primary + Replica + MV | 14.266ms | 18.751ms | 10.182ms | 11.420ms | 0.003ms |
+| 3m / T10 / S100 | Single DB + MV | 20.541ms | 24.963ms | 4.356ms | 5.822ms | 0.006ms |
+| 3m / T10 / S100 | Primary + Replica + MV | 13.012ms | 16.797ms | 11.159ms | 12.300ms | 0.005ms |
+| 3m / T10 / S200 | Single DB + MV | 16.773ms | 21.404ms | 3.177ms | 4.141ms | 0.004ms |
+| 3m / T10 / S200 | Primary + Replica + MV | 14.066ms | 19.077ms | 10.941ms | 13.177ms | 0.004ms |
+
+Replica 조건의 통계 API HTTP latency 증가는 `blocked`가 아니라 `waiting`에 거의 그대로 반영됐다. 따라서 k6 클라이언트 큐잉보다는 서버 처리 구간, datasource routing, replica 연결 방식, 로컬 Docker network/connection 생성 비용 가능성이 더 크다.
+
+현재 Replica `JdbcTemplate`은 Hikari가 아니라 `DriverManagerDataSource` 기반이다. 따라서 Replica 조건에서는 통계 SQL 자체가 빨라도, Replica 조회마다 connection 생성 비용이 HTTP latency에 섞일 수 있다. 이 가설은 다음 단계에서 Replica datasource를 Hikari로 바꾼 별도 A/B로 확인해야 한다. 이번 문서에서는 원인 후보로만 남긴다.
+
+### 24.6 Primary write path query group
+
+`pg_stat_statements` 기준으로 `statistics_mv`는 Single DB 조건에서는 Primary에, Primary + Replica 조건에서는 Replica에 쌓였다.
+
+| Condition | Scenario | DB | `statistics_mv` calls | Total exec | Mean exec |
+| --- | --- | --- | ---: | ---: | ---: |
+| 3m / T5 / S200 | Single DB + MV | Primary | 36,001 | 3,962.634ms | 0.110ms |
+| 3m / T5 / S200 | Primary + Replica + MV | Replica | 36,000 | 2,629.375ms | 0.073ms |
+| 3m / T5 / S300 | Single DB + MV | Primary | 54,001 | 5,173.712ms | 0.096ms |
+| 3m / T5 / S300 | Primary + Replica + MV | Replica | 54,001 | 2,839.910ms | 0.053ms |
+| 3m / T10 / S100 | Single DB + MV | Primary | 18,000 | 2,200.328ms | 0.122ms |
+| 3m / T10 / S100 | Primary + Replica + MV | Replica | 18,001 | 1,160.828ms | 0.064ms |
+| 3m / T10 / S200 | Single DB + MV | Primary | 36,001 | 3,587.783ms | 0.100ms |
+| 3m / T10 / S200 | Primary + Replica + MV | Replica | 36,001 | 2,536.899ms | 0.071ms |
+
+Primary write path 관련 query group은 Replica 조건에서 낮게 관측됐다.
+
+| Condition | Scenario | Query group | Calls | Total exec | Mean exec |
+| --- | --- | --- | ---: | ---: | ---: |
+| 3m / T5 / S200 | Single DB + MV | `balance` | 3,603 | 1,810.063ms | 0.503ms |
+| 3m / T5 / S200 | Primary + Replica + MV | `balance` | 3,604 | 1,221.423ms | 0.339ms |
+| 3m / T5 / S300 | Single DB + MV | `balance` | 3,604 | 1,564.210ms | 0.434ms |
+| 3m / T5 / S300 | Primary + Replica + MV | `balance` | 3,604 | 1,245.497ms | 0.345ms |
+| 3m / T10 / S100 | Single DB + MV | `balance` | 7,204 | 4,360.887ms | 0.605ms |
+| 3m / T10 / S100 | Primary + Replica + MV | `balance` | 7,203 | 2,455.466ms | 0.341ms |
+| 3m / T10 / S200 | Single DB + MV | `balance` | 7,204 | 3,374.519ms | 0.469ms |
+| 3m / T10 / S200 | Primary + Replica + MV | `balance` | 7,204 | 2,511.619ms | 0.348ms |
+| 3m / T5 / S200 | Single DB + MV | `wallet_transfer_request` | 8,112 | 305.500ms | 0.038ms |
+| 3m / T5 / S200 | Primary + Replica + MV | `wallet_transfer_request` | 8,115 | 172.581ms | 0.021ms |
+| 3m / T5 / S300 | Single DB + MV | `wallet_transfer_request` | 8,115 | 267.067ms | 0.033ms |
+| 3m / T5 / S300 | Primary + Replica + MV | `wallet_transfer_request` | 8,115 | 165.616ms | 0.020ms |
+| 3m / T10 / S100 | Single DB + MV | `wallet_transfer_request` | 16,215 | 638.012ms | 0.039ms |
+| 3m / T10 / S100 | Primary + Replica + MV | `wallet_transfer_request` | 16,212 | 310.299ms | 0.019ms |
+| 3m / T10 / S200 | Single DB + MV | `wallet_transfer_request` | 16,215 | 566.619ms | 0.035ms |
+| 3m / T10 / S200 | Primary + Replica + MV | `wallet_transfer_request` | 16,215 | 351.108ms | 0.021ms |
+
+이 결과는 통계 read 부하가 Primary에서 Replica로 이동하면 Primary write path와 같은 DB에서 경쟁하는 SQL 누적 비용이 줄어드는 경향을 보여준다. 다만 로컬 Docker 실험이므로 운영 효과로 단정하지 않는다.
+
+### 24.7 CPU / wait / lag
+
+Docker CPU snapshot에서도 Replica 조건에서는 통계 read 부하가 Replica 컨테이너 쪽으로 이동했다.
+
+| Condition | Scenario | Primary CPU avg/max | Replica CPU avg/max |
+| --- | --- | ---: | ---: |
+| 3m / T5 / S200 | Single DB + MV | 11.68% / 27.27% | 1.09% / 3.22% |
+| 3m / T5 / S200 | Primary + Replica + MV | 3.73% / 5.94% | 56.42% / 66.96% |
+| 3m / T5 / S300 | Single DB + MV | 12.90% / 26.10% | 0.89% / 2.64% |
+| 3m / T5 / S300 | Primary + Replica + MV | 4.83% / 20.76% | 76.54% / 83.76% |
+| 3m / T10 / S100 | Single DB + MV | 11.49% / 26.33% | 1.68% / 4.21% |
+| 3m / T10 / S100 | Primary + Replica + MV | 4.65% / 29.36% | 32.08% / 48.14% |
+| 3m / T10 / S200 | Single DB + MV | 13.17% / 50.36% | 1.43% / 3.28% |
+| 3m / T10 / S200 | Primary + Replica + MV | 5.65% / 7.91% | 59.28% / 69.93% |
+
+wait event는 대부분 `ClientRead` 또는 wait 없음으로 관측됐다. 이번 샘플에서는 lock wait 병목을 확인하지 못했다.
+
+모든 run의 실행 후 WAL byte lag는 0이었다. 실행 전 catchup에서도 Primary/Replica MV row count는 동일했다.
+
+### 24.8 Hikari / datasource 지표
+
+Actuator metric에서 확인된 Hikari pool은 `HikariPool-1` 하나였다.
+
+| Condition | Scenario | Hikari active avg/max | Hikari pending max | Hikari acquire max |
+| --- | --- | ---: | ---: | ---: |
+| 3m / T5 / S200 | Single DB + MV | 0.528 / 2 | 0 | 0.006s |
+| 3m / T5 / S200 | Primary + Replica + MV | 2.114 / 4 | 0 | 0.022s |
+| 3m / T5 / S300 | Single DB + MV | 0.569 / 2 | 0 | 0.047s |
+| 3m / T5 / S300 | Primary + Replica + MV | 2.928 / 4 | 0 | 0.022s |
+| 3m / T10 / S100 | Single DB + MV | 0.403 / 2 | 0 | 0.039s |
+| 3m / T10 / S100 | Primary + Replica + MV | 1.188 / 3 | 0 | 0.005s |
+| 3m / T10 / S200 | Single DB + MV | 0.653 / 2 | 0 | 0.011s |
+| 3m / T10 / S200 | Primary + Replica + MV | 2.174 / 4 | 0 | 0.011s |
+
+현재 Replica datasource는 `DriverManagerDataSource`라서 Replica 전용 Hikari pool metric은 없다. 따라서 이번 Hikari 표는 Primary datasource pool 기준으로 해석해야 한다.
+
+이번 측정에서 Primary Hikari pending은 0이었다. 따라서 송금/통계 HTTP latency 차이를 Primary Hikari pending으로 설명하기는 어렵다.
+
+Replica 조건에서 통계 API HTTP latency가 높게 관측된 원인 후보는 아래다.
+
+* Replica `JdbcTemplate`의 `DriverManagerDataSource` 기반 연결 생성 비용
+* 로컬 Docker network 경로
+* Primary/Replica 컨테이너 CPU 경합
+* Spring datasource routing과 JDBC connection 준비 비용
+
+다음 단계에서 이 원인을 분리하려면 Replica datasource를 Hikari로 구성한 로컬 A/B가 필요하다. 이 변경은 실험 조건 자체를 바꾸므로 별도 작업으로 분리한다.
+
+### 24.9 현재 기준 해석
+
+이번 심화 검증에서 확인한 것은 아래다.
+
+* 통계 MV 조회는 Single DB 조건에서 Primary에 쌓였다.
+* 통계 MV 조회는 Primary + Replica 조건에서 Replica에 쌓였다.
+* Replica 조건에서 Primary의 `balance`, `wallet_transfer_request` query group 누적 실행 시간이 낮게 관측됐다.
+* Replica 조건에서 Primary CPU 평균은 낮고 Replica CPU 평균은 높게 관측됐다.
+* 실행 후 WAL byte lag는 0이었다.
+* 통계 API HTTP latency는 Replica 조건에서 더 높게 관측됐다.
+* 그 차이는 DB SQL mean exec보다는 HTTP `waiting` 구간에 반영됐다.
+* 현재 Replica datasource는 Hikari pool이 아니므로 connection 생성/라우팅 비용이 원인 후보로 남는다.
+
+따라서 현재 판단은 아래와 같다.
+
+```text
+MATERIALIZED_VIEW 기반 통계 조회를 Read Replica 후보로 제한 routing하는 방향은 계속 검토할 수 있다.
+고부하 통계 read 조건에서 Primary write path 관련 DB 지표가 낮아지는 경향은 확인됐다.
+다만 Replica가 통계 API HTTP latency 또는 송금 HTTP latency를 개선한다고 단정하지 않는다.
+```
+
+### 24.10 다음 검증
+
+다음 검증은 아래 순서가 적절하다.
+
+1. Replica datasource를 Hikari로 구성한 로컬 A/B
+2. Replica Hikari pool name/tag 분리
+3. 통계 API service/repository 단위 timing metric 재시도
+4. `T10/S200` 조건의 VU 상향 재측정
+5. 더 긴 duration 기준의 반복 측정
+6. `dataAsOf`와 Replica lag 허용 정책 정리

@@ -19,11 +19,13 @@ SAMPLE_INTERVAL_SECONDS="${SAMPLE_INTERVAL_SECONDS:-5}"
 RUN_LEVELS="${RUN_LEVELS:-sanity,s30,s50}"
 RUN_HIGH3="${RUN_HIGH3:-false}"
 RUN_EXTRA_WRITE="${RUN_EXTRA_WRITE:-false}"
+RUN_DEEP="${RUN_DEEP:-false}"
+RUN_T10_S200="${RUN_T10_S200:-false}"
 
 mkdir -p "$OUTPUT_DIR"
 
 if [ ! -f "$SUMMARY_CSV" ]; then
-  echo "condition,run_order,scenario,label,duration,transfer_rate,statistics_rate,replica_enabled,transfer_avg_ms,transfer_p95_ms,transfer_p99_ms,transfer_min_ms,transfer_max_ms,transfer_count,transfer_error_rate,statistics_avg_ms,statistics_p95_ms,statistics_p99_ms,statistics_min_ms,statistics_max_ms,statistics_count,statistics_error_rate,http_reqs,raw_json,raw_text,db_metrics_dir" > "$SUMMARY_CSV"
+  echo "condition,run_order,scenario,label,duration,transfer_rate,statistics_rate,replica_enabled,transfer_avg_ms,transfer_p95_ms,transfer_p99_ms,transfer_min_ms,transfer_max_ms,transfer_waiting_avg_ms,transfer_waiting_p95_ms,transfer_blocked_avg_ms,transfer_blocked_p95_ms,transfer_receiving_avg_ms,transfer_receiving_p95_ms,transfer_count,transfer_error_rate,statistics_avg_ms,statistics_p95_ms,statistics_p99_ms,statistics_min_ms,statistics_max_ms,statistics_waiting_avg_ms,statistics_waiting_p95_ms,statistics_blocked_avg_ms,statistics_blocked_p95_ms,statistics_receiving_avg_ms,statistics_receiving_p95_ms,statistics_count,statistics_error_rate,http_reqs,raw_json,raw_text,db_metrics_dir" > "$SUMMARY_CSV"
 fi
 
 app_pid=""
@@ -141,10 +143,12 @@ sample_db_metrics() {
   local metrics_dir="$1"
   local replica_enabled="$2"
   local stop_file="$3"
+  local actuator_token="$4"
   echo "collected_at,datname,state,count" > "$metrics_dir/activity-state-primary.csv"
   echo "collected_at,wait_event_type,wait_event,count" > "$metrics_dir/activity-wait-primary.csv"
   echo "collected_at,application_name,state,sync_state,byte_lag" > "$metrics_dir/replication-primary.csv"
   echo "collected_at,container,cpu_percent,memory_usage" > "$metrics_dir/docker-stats.csv"
+  echo "collected_at,metric,statistic,value,available_tags" > "$metrics_dir/app-actuator-metrics.csv"
   if [ "$replica_enabled" = "true" ]; then
     echo "collected_at,datname,state,count" > "$metrics_dir/activity-state-replica.csv"
     echo "collected_at,wait_event_type,wait_event,count" > "$metrics_dir/activity-wait-replica.csv"
@@ -161,12 +165,74 @@ sample_db_metrics() {
     fi
     local collected_at
     collected_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    sample_app_metrics "$metrics_dir" "$collected_at" "$actuator_token"
     docker stats --no-stream --format "{{.Name}},{{.CPUPerc}},{{.MemUsage}}" \
       xchangepass-statistics-primary xchangepass-statistics-replica 2>> "$metrics_dir/docker-stats.err" \
       | while IFS= read -r line; do
           echo "$collected_at,$line"
         done >> "$metrics_dir/docker-stats.csv" || true
     sleep "$SAMPLE_INTERVAL_SECONDS"
+  done
+}
+
+stats_auth_token() {
+  local stats_env="$ROOT_DIR/build/perf/k6/transaction-statistics-auth.env"
+  if [ ! -f "$stats_env" ]; then
+    return 0
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  . "$stats_env"
+  set +a
+  printf '%s' "${ACCESS_TOKEN_COOKIE:-${AUTH_TOKEN:-${ACCESS_TOKEN:-${JWT_TOKEN:-}}}}"
+}
+
+sample_app_metrics() {
+  local metrics_dir="$1"
+  local collected_at="$2"
+  local actuator_token="$3"
+  local metrics=(
+    "hikaricp.connections.active"
+    "hikaricp.connections.idle"
+    "hikaricp.connections.pending"
+    "hikaricp.connections.acquire"
+    "hikaricp.connections.usage"
+  )
+  local metric
+  for metric in "${metrics[@]}"; do
+    local body
+    body="$(curl -s --cookie "accessToken=$actuator_token" "$BASE_URL/actuator/metrics/$metric" || true)"
+    python3 - "$metrics_dir/app-actuator-metrics.csv" "$collected_at" "$metric" "$body" <<'PY'
+import csv
+import json
+import sys
+
+output_file, collected_at, metric_name, body = sys.argv[1:]
+try:
+    data = json.loads(body)
+except json.JSONDecodeError:
+    data = {}
+
+measurements = data.get("measurements", [])
+available_tags = ";".join(
+    f"{tag.get('tag', '')}={','.join(tag.get('values', []))}"
+    for tag in data.get("availableTags", [])
+)
+
+with open(output_file, "a", encoding="utf-8", newline="") as file:
+    writer = csv.writer(file)
+    if measurements:
+        for measurement in measurements:
+            writer.writerow([
+                collected_at,
+                metric_name,
+                measurement.get("statistic", ""),
+                measurement.get("value", ""),
+                available_tags,
+            ])
+    else:
+        writer.writerow([collected_at, metric_name, "", "", available_tags])
+PY
   done
 }
 
@@ -216,6 +282,12 @@ row = [
     metric("transfer_duration", "p(99)"),
     metric("transfer_duration", "min"),
     metric("transfer_duration", "max"),
+    metric("transfer_waiting_duration", "avg"),
+    metric("transfer_waiting_duration", "p(95)"),
+    metric("transfer_blocked_duration", "avg"),
+    metric("transfer_blocked_duration", "p(95)"),
+    metric("transfer_receiving_duration", "avg"),
+    metric("transfer_receiving_duration", "p(95)"),
     rate_total("transfer_error_rate"),
     metric("transfer_error_rate", "value"),
     metric("statistics_duration", "avg"),
@@ -223,6 +295,12 @@ row = [
     metric("statistics_duration", "p(99)"),
     metric("statistics_duration", "min"),
     metric("statistics_duration", "max"),
+    metric("statistics_waiting_duration", "avg"),
+    metric("statistics_waiting_duration", "p(95)"),
+    metric("statistics_blocked_duration", "avg"),
+    metric("statistics_blocked_duration", "p(95)"),
+    metric("statistics_receiving_duration", "avg"),
+    metric("statistics_receiving_duration", "p(95)"),
     rate_total("statistics_error_rate"),
     metric("statistics_error_rate", "value"),
     metric("http_reqs", "count"),
@@ -332,7 +410,7 @@ run_one() {
 
   sampler_stop_file="$metrics_dir/.stop"
   rm -f "$sampler_stop_file"
-  sample_db_metrics "$metrics_dir" "$replica_enabled" "$sampler_stop_file" &
+  sample_db_metrics "$metrics_dir" "$replica_enabled" "$sampler_stop_file" "$(stats_auth_token)" &
   sampler_pid="$!"
 
   SCENARIO_LABEL="$label" \
@@ -401,6 +479,14 @@ if [ "$RUN_HIGH3" = "true" ]; then
 fi
 if [ "$RUN_EXTRA_WRITE" = "true" ]; then
   run_condition "high-t10-s50" "3m" "10" "50" "3"
+fi
+if [ "$RUN_DEEP" = "true" ]; then
+  run_condition "high-t5-s200" "3m" "5" "200" "3"
+  run_condition "high-t5-s300" "3m" "5" "300" "3"
+  run_condition "high-t10-s100" "3m" "10" "100" "3"
+fi
+if [ "$RUN_T10_S200" = "true" ]; then
+  run_condition "high-t10-s200" "3m" "10" "200" "3"
 fi
 
 echo "high-load A/B 완료: $SUMMARY_CSV"
