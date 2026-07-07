@@ -790,3 +790,162 @@ Read Replica는 거래 통계 MV 조회를 Primary write path에서 분리하는
 * connection pool metric과 애플리케이션 HTTP 처리 시간 분해
 * Replica lag와 `dataAsOf` 정책 문서화
 * 필요 시 k6 결과에 실패 응답 status/body sample을 별도 로컬 raw로 남기는 디버그 모드 보강
+
+## 23. Fraud 차단 회피 조건 재측정
+
+이 섹션은 22장의 고부하 A/B에서 일부 run에 송금 실패가 1건씩 섞인 문제를 줄이기 위해, Fraud 소스 코드나 Lua를 수정하지 않고 로컬 벤치마크 입력 조건만 조정한 뒤 다시 실행한 결과다.
+
+목적은 송금 API를 더 빠르게 보이게 하는 것이 아니라, Replica A/B 실험 목적과 무관한 Fraud 차단을 제거하고 `transfer error 0`, `statistics error 0` 조건에서 비교 가능한 run을 확보하는 것이다.
+
+### 23.1 최근 실패 원인 분류
+
+이전 고부하 run에서 송금 실패가 있었던 조건은 아래와 같다.
+
+| Condition | Scenario | Run | Transfer failed | Statistics failed | 채택 여부 |
+| --- | --- | ---: | ---: | ---: | --- |
+| 3m / T5 / S30 | Primary + Replica + MV | 2 | 1/900 | 0 | 제외 |
+| 3m / T5 / S50 | Single DB + MV | 2 | 1/900 | 0 | 제외 |
+
+이전 실패 run은 run 종료 후 DB volume을 정리하는 실험 구조라, 해당 두 run의 최종 DB에서 `wallet_transfer_request`, `transaction_status_event`를 다시 조회할 수는 없었다. 다만 앞선 실패 분석에서는 DB 상태가 `FRAUD_VALIDATION / SUSPICIOUS_TRANSACTION`으로 확인됐고, 이번 실패도 서버 예외 없이 k6의 송금 HTTP 200/`COMPLETED` 체크 실패 1건으로만 관측됐다.
+
+따라서 이번 문서에서는 최근 실패를 Replica routing 문제나 통계 SQL 문제로 보지 않고, 로컬 벤치마크 입력 분산이 충분하지 않아 Fraud 차단을 건드렸을 가능성이 높은 run으로 분리한다. 원인을 단정하기보다, 성능 평균에는 포함하지 않고 별도 제외 대상으로 다룬다.
+
+### 23.2 조정한 실행 조건
+
+아래 조정은 모두 로컬 벤치마크 조건에만 적용했다.
+
+| 항목 | 조정 |
+| --- | --- |
+| Fraud 소스 코드 | 수정 없음 |
+| Fraud Lua script | 수정 없음 |
+| 기본 운영 설정 | 수정 없음 |
+| 야간 차단 회피 | Spring Boot runtime args로 `12:00~12:01` 사용 |
+| 송금 pair 수 | 5,000 -> 10,000 |
+| sender/receiver 선택 | 무작위 선택 -> `SCENARIO_LABEL + VU + iteration` 기반 순환 분산 |
+| 송금 rate | 5/s 유지 |
+| 통계 rate | 30/s, 50/s, 100/s |
+| duration | 3m |
+| A/B 조건 | 같은 seed 규모, 같은 rate, 같은 duration, 같은 k6 script |
+
+10,000 pair seed를 만들 때 `users.user_name` 길이 제한 때문에 기존 `s10000`, `r10000` 형태가 컬럼 길이를 초과했다. 이 문제는 도메인 스키마를 바꾸지 않고, benchmark fixture의 사용자 이름만 base36 기반 5자 이하 값으로 생성하도록 조정했다.
+
+### 23.3 유효 run 기준
+
+이번 재측정에서 성능 평균에 포함한 기준은 아래와 같다.
+
+* `mode=MATERIALIZED_VIEW`
+* `transfer error 0`
+* `statistics error 0`
+* A/B 같은 `TRANSFER_RATE`
+* A/B 같은 `STATISTICS_RATE`
+* A/B 같은 `DURATION`
+* A/B 같은 seed 규모
+* A/B 같은 fraud runtime args
+* A/B 같은 k6 script
+* Primary + Replica 조건에서 Primary/Replica MV row count 동일
+* Primary + Replica 조건에서 실행 후 WAL byte lag 0
+
+이번 재측정에서는 `s30`, `s50`, `s100` 총 18개 run 모두 위 기준을 만족했다.
+
+### 23.4 유효 run 결과
+
+| Condition | Scenario | Runs | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 | Error |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3m / T5 / S30 | Single DB + MV | 3 | 27.950ms | 34.450ms | 38.200ms | 7.917ms | 10.506ms | 11.831ms | 0 |
+| 3m / T5 / S30 | Primary + Replica + MV | 3 | 17.267ms | 22.548ms | 28.756ms | 16.642ms | 19.975ms | 21.347ms | 0 |
+| 3m / T5 / S50 | Single DB + MV | 3 | 24.591ms | 30.998ms | 35.004ms | 6.546ms | 9.012ms | 10.234ms | 0 |
+| 3m / T5 / S50 | Primary + Replica + MV | 3 | 14.621ms | 17.647ms | 24.145ms | 13.512ms | 15.276ms | 17.088ms | 0 |
+| 3m / T5 / S100 | Single DB + MV | 3 | 21.654ms | 27.506ms | 31.154ms | 4.737ms | 6.600ms | 7.709ms | 0 |
+| 3m / T5 / S100 | Primary + Replica + MV | 3 | 13.412ms | 17.287ms | 22.695ms | 10.917ms | 12.827ms | 15.346ms | 0 |
+
+요청 수는 조건별로 아래와 같았다.
+
+| Condition | Scenario | Transfer requests | Statistics requests |
+| --- | --- | ---: | ---: |
+| 3m / T5 / S30 | Single DB + MV | 2,702 | 16,202 |
+| 3m / T5 / S30 | Primary + Replica + MV | 2,702 | 16,202 |
+| 3m / T5 / S50 | Single DB + MV | 2,702 | 27,002 |
+| 3m / T5 / S50 | Primary + Replica + MV | 2,701 | 27,002 |
+| 3m / T5 / S100 | Single DB + MV | 2,701 | 54,003 |
+| 3m / T5 / S100 | Primary + Replica + MV | 2,702 | 54,001 |
+
+이번 결과에서도 Replica가 송금 HTTP 응답속도를 개선한다고 단정하지 않는다. 다만 실패 0건 조건에서 비교 가능한 A/B 데이터가 확보됐고, DB 내부 지표상 통계 MV 조회가 Primary에서 Replica로 이동한 것은 확인됐다.
+
+### 23.5 제외한 run
+
+이번 재측정에서 제외한 run은 없다.
+
+| Condition | Scenario | Run | Transfer failed | Failure stage | Failure code | 제외 사유 |
+| --- | --- | ---: | ---: | --- | --- | --- |
+| - | - | - | 0 | - | - | 제외 없음 |
+
+### 23.6 DB 내부 지표
+
+`pg_stat_statements` 기준으로 `statistics_mv` query group은 Single DB 조건에서는 Primary, Primary + Replica 조건에서는 Replica에서 관측됐다.
+
+| Condition | Scenario | DB | Query group | Calls | Total exec | Mean exec |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| 3m / T5 / S30 | Single DB + MV | Primary | `statistics_mv` | 5,401 | 746.566ms | 0.138ms |
+| 3m / T5 / S30 | Primary + Replica + MV | Replica | `statistics_mv` | 5,401 | 501.762ms | 0.093ms |
+| 3m / T5 / S50 | Single DB + MV | Primary | `statistics_mv` | 9,001 | 1,151.388ms | 0.128ms |
+| 3m / T5 / S50 | Primary + Replica + MV | Replica | `statistics_mv` | 9,001 | 667.754ms | 0.074ms |
+| 3m / T5 / S100 | Single DB + MV | Primary | `statistics_mv` | 18,001 | 2,270.620ms | 0.126ms |
+| 3m / T5 / S100 | Primary + Replica + MV | Replica | `statistics_mv` | 18,000 | 1,122.782ms | 0.062ms |
+
+Primary write path 관련 query group도 Replica 조건에서 누적 실행 시간이 낮게 관측됐다.
+
+| Condition | Scenario | DB | Query group | Calls | Total exec | Mean exec |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| 3m / T5 / S30 | Single DB + MV | Primary | `balance` | 3,603 | 2,695.106ms | 0.748ms |
+| 3m / T5 / S30 | Primary + Replica + MV | Primary | `balance` | 3,603 | 1,609.345ms | 0.447ms |
+| 3m / T5 / S50 | Single DB + MV | Primary | `balance` | 3,603 | 2,423.232ms | 0.672ms |
+| 3m / T5 / S50 | Primary + Replica + MV | Primary | `balance` | 3,601 | 1,359.050ms | 0.377ms |
+| 3m / T5 / S100 | Single DB + MV | Primary | `balance` | 3,601 | 2,296.215ms | 0.638ms |
+| 3m / T5 / S100 | Primary + Replica + MV | Primary | `balance` | 3,603 | 1,233.886ms | 0.343ms |
+| 3m / T5 / S30 | Single DB + MV | Primary | `wallet_transfer_request` | 8,112 | 385.687ms | 0.047ms |
+| 3m / T5 / S30 | Primary + Replica + MV | Primary | `wallet_transfer_request` | 8,112 | 240.456ms | 0.030ms |
+| 3m / T5 / S50 | Single DB + MV | Primary | `wallet_transfer_request` | 8,112 | 344.553ms | 0.043ms |
+| 3m / T5 / S50 | Primary + Replica + MV | Primary | `wallet_transfer_request` | 8,109 | 187.315ms | 0.023ms |
+| 3m / T5 / S100 | Single DB + MV | Primary | `wallet_transfer_request` | 8,109 | 331.311ms | 0.041ms |
+| 3m / T5 / S100 | Primary + Replica + MV | Primary | `wallet_transfer_request` | 8,112 | 157.307ms | 0.019ms |
+
+Replication lag는 실행 중 순간 byte lag가 작게 관측됐지만, 모든 Primary + Replica run의 실행 후 byte lag는 0이었다.
+
+| Condition | Run별 max byte lag | 실행 후 byte lag |
+| --- | --- | --- |
+| 3m / T5 / S30 | 808 / 0 / 1,664 bytes | 0 / 0 / 0 |
+| 3m / T5 / S50 | 0 / 264 / 240 bytes | 0 / 0 / 0 |
+| 3m / T5 / S100 | 416 / 0 / 264 bytes | 0 / 0 / 0 |
+
+Docker CPU snapshot은 아래처럼 관측됐다.
+
+| Condition | Scenario | Primary CPU avg/max | Replica CPU avg/max |
+| --- | --- | ---: | ---: |
+| 3m / T5 / S30 | Single DB + MV | 6.27% / 8.99% | 1.61% / 3.86% |
+| 3m / T5 / S30 | Primary + Replica + MV | 3.65% / 17.22% | 14.86% / 17.59% |
+| 3m / T5 / S50 | Single DB + MV | 7.19% / 10.32% | 1.07% / 3.65% |
+| 3m / T5 / S50 | Primary + Replica + MV | 2.68% / 4.56% | 18.40% / 21.72% |
+| 3m / T5 / S100 | Single DB + MV | 8.75% / 26.71% | 0.97% / 3.60% |
+| 3m / T5 / S100 | Primary + Replica + MV | 3.09% / 19.88% | 29.82% / 35.48% |
+
+wait event는 대부분 `ClientRead` 또는 wait 없음으로 관측됐다. 일부 run에서 `WALSync`가 1회 관측됐지만, 이번 샘플에서 lock wait 병목은 확인되지 않았다.
+
+### 23.7 해석
+
+이번 재측정에서는 10,000 pair와 결정적 pair 분산을 적용한 뒤 `s30`, `s50`, `s100` 총 18개 run 모두 `transfer error 0`, `statistics error 0`을 만족했다.
+
+Fraud 소스 코드, Lua, 기본 운영 설정은 수정하지 않았다. 변경한 것은 로컬 벤치마크 입력 분산과 fixture 생성 방식이다.
+
+`pg_stat_statements` 기준으로 Single DB 조건에서는 통계 MV 조회가 Primary에 쌓이고, Primary + Replica 조건에서는 통계 MV 조회가 Replica에 쌓였다. Replica 조건에서 Primary의 일부 write path 관련 query group 누적 실행 시간이 낮게 관측됐다.
+
+다만 이 결과는 로컬 Docker 기반 고부하 검증 결과다. 운영 환경 결과가 아니며, Replica가 송금 HTTP 응답속도를 개선한다고 단정하지 않는다. HTTP latency는 DB 실행 시간 외에도 애플리케이션 스레드, connection pool, 로컬 컨테이너 리소스, 캐시 상태, 실행 순서의 영향을 받는다.
+
+현재 기준 판단은 아래와 같다.
+
+```text
+MATERIALIZED_VIEW 기반 통계 조회는 Read Replica 후보로 유지할 수 있다.
+이번 재측정은 통계 read 부하가 Replica 쪽으로 이동하는 구조를 확인한 결과다.
+하지만 운영 도입이나 성능 개선 확정으로 표현하지 않는다.
+```
+
+후속 검증은 connection pool metric, 애플리케이션 처리 시간 분해, Replica lag와 `dataAsOf` 정책, 더 긴 duration 반복 측정 순서가 적절하다.

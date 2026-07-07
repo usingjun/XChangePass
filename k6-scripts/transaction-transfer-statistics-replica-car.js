@@ -9,6 +9,7 @@ export const statisticsErrorRate = new Rate('statistics_error_rate');
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const MODE = __ENV.MODE || __ENV.STATS_MODE || 'MATERIALIZED_VIEW';
+const SCENARIO_LABEL = __ENV.SCENARIO_LABEL || 'transaction-statistics-replica-car';
 const TRANSFER_ENV = parseEnvFile(__ENV.TRANSFER_AUTH_ENV_FILE || '');
 const STATS_ENV = parseEnvFile(__ENV.STATS_AUTH_ENV_FILE || '');
 const FROM_MONTH = __ENV.FROM_MONTH || STATS_ENV.FROM_MONTH || '2026-01';
@@ -163,7 +164,9 @@ function selectPairIndex() {
         throw new Error('transfer pair env is required.');
     }
 
-    return Math.floor(Math.random() * pairCount);
+    const stride = Number(__ENV.PAIR_SELECTION_STRIDE || __ENV.TRANSFER_MAX_VUS || '50');
+    const offset = hashString(SCENARIO_LABEL) % pairCount;
+    return positiveModulo(offset + (__ITER * stride) + (__VU - 1), pairCount);
 }
 
 function valueAt(values, index, name) {
@@ -213,4 +216,17 @@ function randomHex(length) {
         result += alphabet[Math.floor(Math.random() * alphabet.length)];
     }
     return result;
+}
+
+function hashString(value) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index++) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+}
+
+function positiveModulo(value, divisor) {
+    return ((value % divisor) + divisor) % divisor;
 }

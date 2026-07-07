@@ -89,7 +89,7 @@ public class TransactionTransferK6Seed {
                                       int sequence, boolean sender) throws SQLException {
         String role = sender ? "sender" : "receiver";
         String email = "transfer-k6-" + role + "-" + runId + "-" + sequence + "@example.com";
-        String name = (sender ? "s" : "r") + sequence;
+        String name = (sender ? "s" : "r") + Integer.toString(sequence, 36);
         String nickname = "t" + role.charAt(0) + runId.substring(Math.max(0, runId.length() - 6)) + sequence;
         String phoneNumber = phoneNumber(sequence, runId, sender);
 
