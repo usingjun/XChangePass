@@ -21,11 +21,12 @@ RUN_HIGH3="${RUN_HIGH3:-false}"
 RUN_EXTRA_WRITE="${RUN_EXTRA_WRITE:-false}"
 RUN_DEEP="${RUN_DEEP:-false}"
 RUN_T10_S200="${RUN_T10_S200:-false}"
+RUN_LATENCY_T5_S200="${RUN_LATENCY_T5_S200:-false}"
 
 mkdir -p "$OUTPUT_DIR"
 
 if [ ! -f "$SUMMARY_CSV" ]; then
-  echo "condition,run_order,scenario,label,duration,transfer_rate,statistics_rate,replica_enabled,transfer_avg_ms,transfer_p95_ms,transfer_p99_ms,transfer_min_ms,transfer_max_ms,transfer_waiting_avg_ms,transfer_waiting_p95_ms,transfer_blocked_avg_ms,transfer_blocked_p95_ms,transfer_receiving_avg_ms,transfer_receiving_p95_ms,transfer_count,transfer_error_rate,statistics_avg_ms,statistics_p95_ms,statistics_p99_ms,statistics_min_ms,statistics_max_ms,statistics_waiting_avg_ms,statistics_waiting_p95_ms,statistics_blocked_avg_ms,statistics_blocked_p95_ms,statistics_receiving_avg_ms,statistics_receiving_p95_ms,statistics_count,statistics_error_rate,http_reqs,raw_json,raw_text,db_metrics_dir" > "$SUMMARY_CSV"
+  echo "condition,run_order,scenario,label,duration,transfer_rate,statistics_rate,replica_enabled,transfer_avg_ms,transfer_p95_ms,transfer_p99_ms,transfer_min_ms,transfer_max_ms,transfer_waiting_avg_ms,transfer_waiting_p95_ms,transfer_blocked_avg_ms,transfer_blocked_p95_ms,transfer_receiving_avg_ms,transfer_receiving_p95_ms,transfer_count,transfer_error_rate,statistics_avg_ms,statistics_p95_ms,statistics_p99_ms,statistics_min_ms,statistics_max_ms,statistics_waiting_avg_ms,statistics_waiting_p95_ms,statistics_blocked_avg_ms,statistics_blocked_p95_ms,statistics_receiving_avg_ms,statistics_receiving_p95_ms,statistics_count,statistics_error_rate,http_reqs,raw_json,raw_text,db_metrics_dir,api_timing_csv" > "$SUMMARY_CSV"
 fi
 
 app_pid=""
@@ -248,12 +249,13 @@ append_k6_summary() {
   local raw_json="$9"
   local raw_text="${10}"
   local metrics_dir="${11}"
-  python3 - "$SUMMARY_CSV" "$condition" "$run_order" "$scenario" "$label" "$duration" "$transfer_rate" "$statistics_rate" "$replica_enabled" "$raw_json" "$raw_text" "$metrics_dir" <<'PY'
+  local api_timing_csv="${12}"
+  python3 - "$SUMMARY_CSV" "$condition" "$run_order" "$scenario" "$label" "$duration" "$transfer_rate" "$statistics_rate" "$replica_enabled" "$raw_json" "$raw_text" "$metrics_dir" "$api_timing_csv" <<'PY'
 import csv
 import json
 import sys
 
-summary_csv, condition, run_order, scenario, label, duration, transfer_rate, statistics_rate, replica_enabled, raw_json, raw_text, metrics_dir = sys.argv[1:]
+summary_csv, condition, run_order, scenario, label, duration, transfer_rate, statistics_rate, replica_enabled, raw_json, raw_text, metrics_dir, api_timing_csv = sys.argv[1:]
 with open(raw_json, encoding="utf-8") as file:
     data = json.load(file)
 
@@ -307,6 +309,7 @@ row = [
     raw_json,
     raw_text,
     metrics_dir,
+    api_timing_csv,
 ]
 with open(summary_csv, "a", encoding="utf-8", newline="") as file:
     csv.writer(file).writerow(row)
@@ -337,9 +340,19 @@ seed_database() {
 start_app() {
   local replica_enabled="$1"
   local app_log="$2"
+  local api_timing_csv="${3:-}"
+  local timing_args=""
+  local java_tool_options="${JAVA_TOOL_OPTIONS:-}"
+  local replica_args=" --transaction.statistics.replica.enabled=$replica_enabled"
+  if [ -n "$api_timing_csv" ]; then
+    timing_args=" --transaction.statistics.timing.enabled=true --transaction.statistics.timing.output=$api_timing_csv"
+    java_tool_options="$java_tool_options -Dtransaction.statistics.timing.enabled=true -Dtransaction.statistics.timing.output=$api_timing_csv"
+  fi
   cleanup_processes
   clear_fraud_redis_keys
   if [ "$replica_enabled" = "true" ]; then
+    replica_args="$replica_args --transaction.statistics.replica.url=jdbc:postgresql://localhost:15433/xchangepass --transaction.statistics.replica.username=$PG_USER --transaction.statistics.replica.password=$PG_PASSWORD"
+    java_tool_options="$java_tool_options -Dtransaction.statistics.replica.enabled=true -Dtransaction.statistics.replica.url=jdbc:postgresql://localhost:15433/xchangepass -Dtransaction.statistics.replica.username=$PG_USER -Dtransaction.statistics.replica.password=$PG_PASSWORD"
     SPRING_DATASOURCE_URL="$PG_URL" \
       SPRING_DATASOURCE_USERNAME="$PG_USER" \
       SPRING_DATASOURCE_PASSWORD="$PG_PASSWORD" \
@@ -347,15 +360,22 @@ start_app() {
       TRANSACTION_STATISTICS_REPLICA_URL=jdbc:postgresql://localhost:15433/xchangepass \
       TRANSACTION_STATISTICS_REPLICA_USERNAME="$PG_USER" \
       TRANSACTION_STATISTICS_REPLICA_PASSWORD="$PG_PASSWORD" \
+      TRANSACTION_STATISTICS_TIMING_ENABLED="$([ -n "$api_timing_csv" ] && echo true || echo false)" \
+      TRANSACTION_STATISTICS_TIMING_OUTPUT="$api_timing_csv" \
+      JAVA_TOOL_OPTIONS="$java_tool_options" \
       SERVER_PORT="$APP_PORT" \
-      "$ROOT_DIR/gradlew" bootRun --args="--server.port=$APP_PORT --fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01" > "$app_log" 2>&1 &
+      "$ROOT_DIR/gradlew" bootRun --args="--server.port=$APP_PORT --fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01$replica_args$timing_args" > "$app_log" 2>&1 &
   else
+    java_tool_options="$java_tool_options -Dtransaction.statistics.replica.enabled=false"
     SPRING_DATASOURCE_URL="$PG_URL" \
       SPRING_DATASOURCE_USERNAME="$PG_USER" \
       SPRING_DATASOURCE_PASSWORD="$PG_PASSWORD" \
       TRANSACTION_STATISTICS_REPLICA_ENABLED=false \
+      TRANSACTION_STATISTICS_TIMING_ENABLED="$([ -n "$api_timing_csv" ] && echo true || echo false)" \
+      TRANSACTION_STATISTICS_TIMING_OUTPUT="$api_timing_csv" \
+      JAVA_TOOL_OPTIONS="$java_tool_options" \
       SERVER_PORT="$APP_PORT" \
-      "$ROOT_DIR/gradlew" bootRun --args="--server.port=$APP_PORT --fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01" > "$app_log" 2>&1 &
+      "$ROOT_DIR/gradlew" bootRun --args="--server.port=$APP_PORT --fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01$replica_args$timing_args" > "$app_log" 2>&1 &
   fi
   app_pid="$!"
   wait_for_app
@@ -363,7 +383,7 @@ start_app() {
 
 prepare_schema() {
   local app_log="$1"
-  start_app "false" "$app_log"
+  start_app "false" "$app_log" ""
   sleep 5
   cleanup_processes
 }
@@ -397,6 +417,7 @@ run_one() {
   safe_label="$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9._-' '-')"
   local run_dir="$OUTPUT_DIR/$safe_label"
   local metrics_dir="$run_dir/db"
+  local api_timing_csv="$run_dir/api-timing.csv"
   mkdir -p "$metrics_dir"
 
   echo "=== $label 시작 ==="
@@ -404,7 +425,7 @@ run_one() {
   prepare_schema "$run_dir/schema-bootstrap.log"
   seed_database "$run_dir"
   wait_for_replica_catchup
-  start_app "$replica_enabled" "$run_dir/application.log"
+  start_app "$replica_enabled" "$run_dir/application.log" "$api_timing_csv"
   warmup_statistics
   reset_pg_stat_statements "$replica_enabled"
 
@@ -437,7 +458,7 @@ run_one() {
 
   local raw_json="$ROOT_DIR/build/perf/k6/replica-car/transaction-transfer-statistics-replica-car-$safe_label.json"
   local raw_text="$ROOT_DIR/build/perf/k6/replica-car/transaction-transfer-statistics-replica-car-$safe_label.txt"
-  append_k6_summary "$condition" "$run_order" "$scenario" "$label" "$duration" "$transfer_rate" "$statistics_rate" "$replica_enabled" "$raw_json" "$raw_text" "$metrics_dir"
+  append_k6_summary "$condition" "$run_order" "$scenario" "$label" "$duration" "$transfer_rate" "$statistics_rate" "$replica_enabled" "$raw_json" "$raw_text" "$metrics_dir" "$api_timing_csv"
 
   cleanup_processes
   docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" down -v --remove-orphans
@@ -487,6 +508,9 @@ if [ "$RUN_DEEP" = "true" ]; then
 fi
 if [ "$RUN_T10_S200" = "true" ]; then
   run_condition "high-t10-s200" "3m" "10" "200" "3"
+fi
+if [ "$RUN_LATENCY_T5_S200" = "true" ]; then
+  run_condition "latency-t5-s200" "3m" "5" "200" "3"
 fi
 
 echo "high-load A/B 완료: $SUMMARY_CSV"

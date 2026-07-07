@@ -2,6 +2,7 @@ package bumblebee.xchangepass.domain.transaction.statistics.controller;
 
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionMonthlyStatisticsResponse;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsMode;
+import bumblebee.xchangepass.domain.transaction.statistics.metrics.TransactionStatisticsTimingRecorder;
 import bumblebee.xchangepass.domain.transaction.statistics.service.TransactionStatisticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
@@ -29,11 +30,14 @@ public class TransactionStatisticsController {
             @RequestParam String toMonth,
             @RequestParam(defaultValue = "GROUP_BY") TransactionStatisticsMode mode
     ) {
-        return statisticsService.findMonthlyStatistics(
-                userId,
-                YearMonth.parse(fromMonth),
-                YearMonth.parse(toMonth),
-                mode
+        return TransactionStatisticsTimingRecorder.configured().recordRequest(
+                mode,
+                () -> statisticsService.findMonthlyStatistics(
+                        userId,
+                        YearMonth.parse(fromMonth),
+                        YearMonth.parse(toMonth),
+                        mode
+                )
         );
     }
 }

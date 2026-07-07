@@ -3,6 +3,7 @@ package bumblebee.xchangepass.domain.transaction.statistics.service;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionMonthlyStatisticsResponse;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsMode;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsRow;
+import bumblebee.xchangepass.domain.transaction.statistics.metrics.TransactionStatisticsTimingRecorder;
 import bumblebee.xchangepass.domain.transaction.statistics.repository.TransactionStatisticsQueryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,9 +33,25 @@ public class TransactionStatisticsService {
         validate(userId, fromMonth, toMonth);
         TransactionStatisticsMode queryMode = mode == null ? TransactionStatisticsMode.GROUP_BY : mode;
         LocalDateTime dataAsOf = LocalDateTime.now();
-        return findRows(userId, fromMonth, toMonth, queryMode).stream()
-                .map(row -> row.toResponse(dataAsOf))
-                .toList();
+        TransactionStatisticsTimingRecorder timingRecorder = TransactionStatisticsTimingRecorder.configured();
+        return timingRecorder.recordService(
+                queryMode,
+                "statistics.service.total",
+                () -> {
+                    List<TransactionStatisticsRow> rows = timingRecorder.recordService(
+                            queryMode,
+                            "statistics.service.query",
+                            () -> findRows(userId, fromMonth, toMonth, queryMode)
+                    );
+                    return timingRecorder.recordService(
+                            queryMode,
+                            "statistics.mapping",
+                            () -> rows.stream()
+                                    .map(row -> row.toResponse(dataAsOf))
+                                    .toList()
+                    );
+                }
+        );
     }
 
     public void refreshMaterializedView() {

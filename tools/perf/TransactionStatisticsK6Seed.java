@@ -295,14 +295,27 @@ public class TransactionStatisticsK6Seed {
     }
 
     private static void createStatisticsObjects(Connection connection) throws SQLException, IOException {
-        executeSqlResource(connection, "src/main/resources/db/migration/postgresql/V3__add_transaction_monthly_statistics_materialized_view.sql");
-        executeSqlResource(connection, "src/main/resources/db/migration/postgresql/V4__add_transaction_monthly_summary.sql");
+        if (!relationExists(connection, "mv_transaction_monthly_statistics")) {
+            executeSqlResource(connection, "src/main/resources/db/migration/postgresql/V3__add_transaction_monthly_statistics_materialized_view.sql");
+        }
+        if (!relationExists(connection, "transaction_monthly_summary")) {
+            executeSqlResource(connection, "src/main/resources/db/migration/postgresql/V4__add_transaction_monthly_summary.sql");
+        }
     }
 
     private static void executeSqlResource(Connection connection, String location) throws SQLException, IOException {
         String sql = Files.readString(Path.of(location), StandardCharsets.UTF_8);
         try (Statement statement = connection.createStatement()) {
             statement.execute(sql);
+        }
+    }
+
+    private static boolean relationExists(Connection connection, String relationName) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement("select to_regclass(?) is not null")) {
+            ps.setString(1, "public." + relationName);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getBoolean(1);
+            }
         }
     }
 

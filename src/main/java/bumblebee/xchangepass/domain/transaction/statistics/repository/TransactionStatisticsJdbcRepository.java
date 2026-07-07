@@ -1,14 +1,19 @@
 package bumblebee.xchangepass.domain.transaction.statistics.repository;
 
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsDirection;
+import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsMode;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsRow;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsSourceType;
+import bumblebee.xchangepass.domain.transaction.statistics.metrics.TransactionStatisticsTimingRecorder;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Repository;
+import org.springframework.util.StringUtils;
 
+import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -333,6 +338,7 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectProvider<JdbcTemplate> replicaJdbcTemplateProvider;
+    private final JdbcTemplate configuredReplicaJdbcTemplate;
 
     public TransactionStatisticsJdbcRepository(
             JdbcTemplate jdbcTemplate,
@@ -341,6 +347,7 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.replicaJdbcTemplateProvider = replicaJdbcTemplateProvider;
+        this.configuredReplicaJdbcTemplate = createConfiguredReplicaJdbcTemplate();
     }
 
     @Override
@@ -348,15 +355,19 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
         Timestamp fromTimestamp = toStartTimestamp(fromMonth);
         Timestamp toTimestamp = toExclusiveEndTimestamp(toMonth);
 
-        return jdbcTemplate.query(
-                MONTHLY_STATISTICS_SQL,
-                ROW_MAPPER,
-                userId, fromTimestamp, toTimestamp,
-                userId, fromTimestamp, toTimestamp,
-                userId, fromTimestamp, toTimestamp,
-                userId, fromTimestamp, toTimestamp,
-                userId, fromTimestamp, toTimestamp,
-                userId, fromTimestamp, toTimestamp
+        return timedQuery(
+                TransactionStatisticsMode.GROUP_BY,
+                "primary",
+                () -> jdbcTemplate.query(
+                        MONTHLY_STATISTICS_SQL,
+                        ROW_MAPPER,
+                        userId, fromTimestamp, toTimestamp,
+                        userId, fromTimestamp, toTimestamp,
+                        userId, fromTimestamp, toTimestamp,
+                        userId, fromTimestamp, toTimestamp,
+                        userId, fromTimestamp, toTimestamp,
+                        userId, fromTimestamp, toTimestamp
+                )
         );
     }
 
@@ -364,12 +375,18 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
     public List<TransactionStatisticsRow> findMonthlyStatisticsFromMaterializedView(
             Long userId, YearMonth fromMonth, YearMonth toMonth
     ) {
-        return materializedViewJdbcTemplate().query(
-                MONTHLY_STATISTICS_MATERIALIZED_VIEW_SQL,
-                ROW_MAPPER,
-                userId,
-                toStartTimestamp(fromMonth),
-                toExclusiveEndTimestamp(toMonth)
+        JdbcTemplate materializedViewJdbcTemplate = materializedViewJdbcTemplate();
+        String datasourceTarget = materializedViewJdbcTemplate == jdbcTemplate ? "primary" : "replica";
+        return timedQuery(
+                TransactionStatisticsMode.MATERIALIZED_VIEW,
+                datasourceTarget,
+                () -> materializedViewJdbcTemplate.query(
+                        MONTHLY_STATISTICS_MATERIALIZED_VIEW_SQL,
+                        ROW_MAPPER,
+                        userId,
+                        toStartTimestamp(fromMonth),
+                        toExclusiveEndTimestamp(toMonth)
+                )
         );
     }
 
@@ -377,12 +394,16 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
     public List<TransactionStatisticsRow> findMonthlyStatisticsFromSummary(
             Long userId, YearMonth fromMonth, YearMonth toMonth
     ) {
-        return jdbcTemplate.query(
-                MONTHLY_STATISTICS_SUMMARY_SQL,
-                SUMMARY_ROW_MAPPER,
-                userId,
-                toStartTimestamp(fromMonth),
-                toExclusiveEndTimestamp(toMonth)
+        return timedQuery(
+                TransactionStatisticsMode.SUMMARY,
+                "primary",
+                () -> jdbcTemplate.query(
+                        MONTHLY_STATISTICS_SUMMARY_SQL,
+                        SUMMARY_ROW_MAPPER,
+                        userId,
+                        toStartTimestamp(fromMonth),
+                        toExclusiveEndTimestamp(toMonth)
+                )
         );
     }
 
@@ -426,6 +447,83 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
     }
 
     private JdbcTemplate materializedViewJdbcTemplate() {
-        return replicaJdbcTemplateProvider.getIfAvailable(() -> jdbcTemplate);
+        JdbcTemplate replicaJdbcTemplate = replicaJdbcTemplateProvider.getIfAvailable();
+        if (replicaJdbcTemplate != null && replicaJdbcTemplate != jdbcTemplate) {
+            return replicaJdbcTemplate;
+        }
+        if (configuredReplicaJdbcTemplate != null) {
+            return configuredReplicaJdbcTemplate;
+        }
+        return jdbcTemplate;
+    }
+
+    private JdbcTemplate createConfiguredReplicaJdbcTemplate() {
+        if (!Boolean.parseBoolean(replicaProperty("enabled"))) {
+            return null;
+        }
+
+        String url = replicaProperty("url");
+        if (!StringUtils.hasText(url)) {
+            return null;
+        }
+
+        return new JdbcTemplate(replicaDataSource(
+                url,
+                replicaProperty("username"),
+                replicaProperty("password"),
+                replicaProperty("driver-class-name", "org.postgresql.Driver")
+        ));
+    }
+
+    private DataSource replicaDataSource(String url, String username, String password, String driverClassName) {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource();
+        dataSource.setDriverClassName(driverClassName);
+        dataSource.setUrl(url);
+        dataSource.setUsername(username);
+        dataSource.setPassword(password);
+        return dataSource;
+    }
+
+    private String replicaProperty(String name) {
+        return replicaProperty(name, "");
+    }
+
+    private String replicaProperty(String name, String defaultValue) {
+        String property = System.getProperty("transaction.statistics.replica." + name);
+        if (StringUtils.hasText(property)) {
+            return property;
+        }
+        String envName = "TRANSACTION_STATISTICS_REPLICA_" + name.toUpperCase().replace("-", "_");
+        String env = System.getenv(envName);
+        return StringUtils.hasText(env) ? env : defaultValue;
+    }
+
+    private List<TransactionStatisticsRow> timedQuery(
+            TransactionStatisticsMode mode,
+            String datasourceTarget,
+            QuerySupplier supplier
+    ) {
+        long startedAt = System.nanoTime();
+        TransactionStatisticsTimingRecorder timingRecorder = TransactionStatisticsTimingRecorder.configured();
+        List<TransactionStatisticsRow> rows = timingRecorder.recordRepository(
+                mode,
+                "statistics.repository.jdbc",
+                datasourceTarget,
+                supplier::get
+        );
+        long durationNanos = System.nanoTime() - startedAt;
+        timingRecorder.recordCompleted(
+                "statistics.repository.total",
+                mode,
+                datasourceTarget,
+                durationNanos,
+                rows.size()
+        );
+        return rows;
+    }
+
+    @FunctionalInterface
+    private interface QuerySupplier {
+        List<TransactionStatisticsRow> get();
     }
 }

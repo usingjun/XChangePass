@@ -1182,3 +1182,173 @@ MATERIALIZED_VIEW 기반 통계 조회를 Read Replica 후보로 제한 routing�
 4. `T10/S200` 조건의 VU 상향 재측정
 5. 더 긴 duration 기준의 반복 측정
 6. `dataAsOf`와 Replica lag 허용 정책 정리
+
+## 25. HTTP latency 계층별 원인 분석 지표 보강
+
+### 25.1 작업 목적
+
+이전 고부하 A/B에서는 `pg_stat_statements` 기준 `statistics_mv` SQL 평균 실행 시간이 Replica에서 더 낮거나 비슷했지만, k6 기준 통계 API HTTP latency는 Replica 조건에서 더 높게 관측됐다.
+
+이번 보강의 목적은 이 차이가 DB SQL 실행 시간 때문인지, 애플리케이션 API 계층, repository/JDBC 호출, DTO mapping, 또는 로컬 Replica datasource 연결 방식 때문인지 분리해서 보기 위한 지표를 추가하는 것이다.
+
+이번 변경은 성능 관측용이며 아래 흐름은 변경하지 않았다.
+
+* 송금/지갑/잔액/원장/recovery/reconciliation 비즈니스 로직
+* 통계 SQL 의미
+* Primary/Replica routing 대상
+* Replica datasource의 Hikari 전환
+* PostgreSQL 설정
+
+### 25.2 추가한 지표
+
+`RUN_TRANSACTION_STATISTICS_TIMING_ENABLED=true` 또는 runner 내부 timing 옵션이 켜진 경우에만 통계 API 계층별 timing CSV를 생성한다.
+
+생성 위치는 각 run 디렉터리의 `api-timing.csv`다.
+
+```text
+build/perf/replica-latency-breakdown-t5-s200/{run}/api-timing.csv
+```
+
+CSV 컬럼은 아래와 같다.
+
+| Column | 의미 |
+| --- | --- |
+| `recorded_at` | 계측 row 기록 시각 |
+| `request_id` | 통계 API 요청 단위 식별자 |
+| `metric` | 계측 구간 |
+| `mode` | 통계 조회 모드 |
+| `datasource_target` | repository가 사용한 datasource 대상 |
+| `duration_ms` | 구간 소요 시간 |
+| `row_count` | repository 결과 row 수 |
+
+계측 metric은 아래다.
+
+| Metric | 의미 |
+| --- | --- |
+| `statistics.api.total` | Controller 진입부터 응답 객체 반환까지 |
+| `statistics.service.total` | Service 전체 처리 |
+| `statistics.service.query` | Repository 조회 호출 |
+| `statistics.repository.jdbc` | JdbcTemplate query 호출 |
+| `statistics.repository.total` | Repository 조회 + row count 기록 |
+| `statistics.mapping` | `TransactionStatisticsRow` -> response DTO 변환 |
+
+### 25.3 실행 조건
+
+이번 재측정은 계층별 timing이 정상 기록되고, `primary-replica-mv` 조건에서 `datasource_target=replica`가 찍히는 것을 확인한 뒤 실행했다.
+
+| 항목 | 값 |
+| --- | --- |
+| 조건 | `latency-t5-s200` |
+| Duration | 3m |
+| Transfer rate | 5/s |
+| Statistics rate | 200/s |
+| 반복 | Single DB 3회, Primary + Replica 3회 |
+| 통계 mode | `MATERIALIZED_VIEW` |
+| 통계 seed | 100,000 rows / 1,000 users / 12 months |
+| 송금 seed | 10,000 pairs |
+| 결과 위치 | `build/perf/replica-latency-breakdown-t5-s200` |
+
+모든 run에서 k6 error rate는 0이었고 dropped iteration도 0이었다.
+
+### 25.4 k6 / HTTP timing 결과
+
+| Scenario | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 | Statistics waiting avg | Statistics blocked avg |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Single DB + MV | 18.011ms | 23.669ms | 27.963ms | 3.483ms | 4.912ms | 6.355ms | 3.313ms | 0.004ms |
+| Primary + Replica + MV | 12.297ms | 15.755ms | 24.516ms | 10.036ms | 11.238ms | 13.163ms | 9.902ms | 0.003ms |
+
+이번 run에서는 Replica 조건에서 송금 HTTP latency가 낮게 관측됐다. 다만 이 값은 “Replica를 쓰면 송금 API가 항상 빨라진다”는 의미가 아니다. 같은 로컬 장비에서 Docker 컨테이너 CPU 배치, JVM 상태, run 순서의 영향을 받는 A/B 결과이며, 송금 응답 속도 개선 여부는 별도 반복 조건으로 판단해야 한다.
+
+통계 API의 차이는 `blocked`가 아니라 `waiting`에 거의 그대로 반영됐다. 따라서 k6 클라이언트 큐잉보다는 서버 처리, JDBC 호출, connection 준비, Docker network 구간 쪽을 봐야 한다.
+
+### 25.5 API 계층 timing 결과
+
+| Scenario | Metric | Count | Avg | P95 | P99 | Min | Max |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Single DB + MV | `statistics.api.total` | 108,033 | 1.364ms | 2.189ms | 2.675ms | 0.552ms | 38.231ms |
+| Single DB + MV | `statistics.service.query` | 108,033 | 0.963ms | 1.691ms | 2.115ms | 0.389ms | 37.268ms |
+| Single DB + MV | `statistics.repository.jdbc` | 108,033 | 0.837ms | 1.553ms | 1.914ms | 0.310ms | 20.257ms |
+| Single DB + MV | `statistics.mapping` | 108,033 | 0.006ms | 0.013ms | 0.016ms | 0.001ms | 1.569ms |
+| Primary + Replica + MV | `statistics.api.total` | 108,031 | 8.371ms | 9.117ms | 10.906ms | 7.686ms | 35.734ms |
+| Primary + Replica + MV | `statistics.service.query` | 108,031 | 8.250ms | 8.966ms | 10.697ms | 7.578ms | 35.323ms |
+| Primary + Replica + MV | `statistics.repository.jdbc` | 108,031 | 8.115ms | 8.774ms | 10.316ms | 7.457ms | 23.432ms |
+| Primary + Replica + MV | `statistics.mapping` | 108,031 | 0.006ms | 0.011ms | 0.013ms | 0.002ms | 3.401ms |
+
+계층별 timing 기준으로 통계 API 증가분은 대부분 `statistics.repository.jdbc`에 있다.
+
+DTO mapping은 양쪽 모두 평균 0.006ms 수준이라 원인이 아니다.
+
+`datasource_target`은 아래처럼 기록됐다.
+
+| Scenario | `datasource_target` | Repository query count |
+| --- | --- | ---: |
+| Single DB + MV | `primary` | 108,033 |
+| Primary + Replica + MV | `replica` | 108,031 |
+
+따라서 이번 결과는 “Replica 조건에서 통계 API HTTP latency가 높은 이유가 Java DTO mapping이 아니라 Replica JDBC 호출 구간에 있다”는 쪽으로 좁혀준다.
+
+### 25.6 pg_stat_statements 비교
+
+반대로 PostgreSQL 내부의 `statistics_mv` 실행 시간은 Replica 조건이 더 낮았다.
+
+| Scenario | DB | Calls avg | Mean exec avg | Total exec avg |
+| --- | --- | ---: | ---: | ---: |
+| Single DB + MV | Primary | 36,001 | 0.121ms | 4,364.6ms |
+| Primary + Replica + MV | Replica | 36,000.3 | 0.067ms | 2,395.8ms |
+
+Primary write path 관련 query group도 Replica 조건에서 낮게 관측됐다.
+
+| Query group | Single DB mean avg | Primary + Replica mean avg |
+| --- | ---: | ---: |
+| `balance` | 0.536ms | 0.328ms |
+| `wallet_transfer_request` | 0.040ms | 0.018ms |
+| `wallet_transaction` | 0.079ms | 0.048ms |
+
+즉 DB 내부 SQL 실행 시간만 보면 Replica로 통계 read를 분리하는 효과는 있다. 그러나 HTTP 통계 API latency는 이 DB 실행 시간과 반대로 증가했다.
+
+### 25.7 CPU / wait / lag
+
+Docker CPU snapshot은 통계 read 부하가 Replica 컨테이너로 이동했음을 보여준다.
+
+| Scenario | Primary CPU avg/max | Replica CPU avg/max |
+| --- | ---: | ---: |
+| Single DB + MV | 10.82% / 13.08% | 1.06% / 3.32% |
+| Primary + Replica + MV | 3.51% / 19.69% | 48.22% / 65.04% |
+
+실행 후 WAL byte lag는 대부분 0이었다. 단일 DB 3회차의 종료 시점 샘플에서 4,648 bytes가 한 번 관측됐지만, 이 run은 Replica 조회 조건이 아니며 실행 중 catchup과 MV row count는 맞춰진 상태에서 시작했다.
+
+Hikari pending은 모든 run에서 0이었다. 현재 Replica datasource는 Hikari가 아니라 `DriverManagerDataSource` 기반이므로 Replica 전용 Hikari 지표는 없다.
+
+### 25.8 해석
+
+이번 계층별 timing으로 원인 후보가 더 좁혀졌다.
+
+* PostgreSQL 내부 `statistics_mv` SQL 실행은 Replica에서 더 빠르다.
+* Primary의 write path query group 평균 실행 시간도 Replica 조건에서 낮아진다.
+* 그러나 통계 API HTTP latency는 Replica 조건에서 더 높다.
+* 증가분은 거의 `statistics.repository.jdbc`에 있다.
+* DTO mapping, controller/service 순수 처리 시간은 원인이 아니다.
+* k6 `blocked`가 아니라 `waiting`에 반영되므로 클라이언트 큐잉보다는 서버/JDBC/네트워크 대기 구간이다.
+
+현재 가장 유력한 원인 후보는 Replica datasource가 `DriverManagerDataSource`라서 조회마다 connection 준비 비용이 HTTP latency에 포함되는 것이다. Single DB 조건은 Primary Hikari pool을 쓰고, Replica 조건은 별도 pool이 없는 DriverManager 기반이라 비교 조건이 완전히 같지 않다.
+
+따라서 현재 결론은 아래다.
+
+```text
+Read Replica는 Primary DB의 통계 read 부하를 분리하는 효과가 있다.
+하지만 현재 구현 상태에서는 Replica 통계 API HTTP latency가 더 높게 관측된다.
+그 원인은 DB SQL 실행 시간이 아니라 Replica JDBC 호출/연결 계층일 가능성이 높다.
+```
+
+이 결과만으로 “Replica 도입” 또는 “Replica 불필요”를 최종 판단하지 않는다.
+
+### 25.9 다음 단계
+
+다음 검증은 아래 순서가 적절하다.
+
+1. Replica datasource를 Hikari로 구성한 A/B 실험
+2. Replica Hikari pool name/tag를 분리해 Actuator metric에서 Primary/Replica pool을 따로 확인
+3. 동일한 T5/S200 조건으로 API timing 재측정
+4. 통계 API 단독 부하와 송금 + 통계 혼합 부하를 분리해 재측정
+5. `EXPLAIN (ANALYZE, BUFFERS)`와 `pg_stat_statements`를 같은 run id 기준으로 연결
+6. Replica lag 허용 범위와 `dataAsOf` 응답 정책 정리
