@@ -22,6 +22,8 @@ RUN_EXTRA_WRITE="${RUN_EXTRA_WRITE:-false}"
 RUN_DEEP="${RUN_DEEP:-false}"
 RUN_T10_S200="${RUN_T10_S200:-false}"
 RUN_LATENCY_T5_S200="${RUN_LATENCY_T5_S200:-false}"
+RUN_OPS_STEADY="${RUN_OPS_STEADY:-false}"
+RUN_OPS_BURST="${RUN_OPS_BURST:-false}"
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -127,7 +129,7 @@ reset_pg_stat_statements() {
 collect_pg_stat_statements() {
   local metrics_dir="$1"
   local replica_enabled="$2"
-  local sql="select case when query ilike '%mv_transaction_monthly_statistics%' then 'statistics_mv' when query ilike '%wallet_transfer_request%' then 'wallet_transfer_request' when query ilike '%wallet_transaction%' then 'wallet_transaction' when query ilike '%balance%' then 'balance' when query ilike '%wallet%' then 'wallet_other' else 'other' end as query_group, sum(calls) as calls, round(sum(total_exec_time)::numeric, 3) as total_exec_time_ms, round((sum(total_exec_time) / nullif(sum(calls), 0))::numeric, 3) as mean_exec_time_ms, sum(rows) as rows, sum(shared_blks_hit) as shared_blks_hit, sum(shared_blks_read) as shared_blks_read, sum(temp_blks_read) as temp_blks_read, sum(temp_blks_written) as temp_blks_written from pg_stat_statements where query ilike '%mv_transaction_monthly_statistics%' or query ilike '%wallet_transfer_request%' or query ilike '%wallet%' or query ilike '%balance%' group by 1 order by total_exec_time_ms desc;"
+  local sql="select case when query ilike '%mv_transaction_monthly_statistics%' then 'statistics_mv' when query ilike '%wallet_transfer_request%' then 'wallet_transfer_request' when query ilike '%wallet_transaction%' then 'wallet_transaction' when query ilike '%idempotency%' then 'idempotency' when query ilike '%fraud%' then 'fraud' when query ilike '%balance%' then 'balance' when query ilike '%wallet%' then 'wallet_other' else 'other' end as query_group, sum(calls) as calls, round(sum(total_exec_time)::numeric, 3) as total_exec_time_ms, round((sum(total_exec_time) / nullif(sum(calls), 0))::numeric, 3) as mean_exec_time_ms, sum(rows) as rows, sum(shared_blks_hit) as shared_blks_hit, sum(shared_blks_read) as shared_blks_read, sum(temp_blks_read) as temp_blks_read, sum(temp_blks_written) as temp_blks_written from pg_stat_statements where query ilike '%mv_transaction_monthly_statistics%' or query ilike '%wallet_transfer_request%' or query ilike '%wallet_transaction%' or query ilike '%idempotency%' or query ilike '%fraud%' or query ilike '%wallet%' or query ilike '%balance%' group by 1 order by total_exec_time_ms desc;"
   {
     echo "query_group,calls,total_exec_time_ms,mean_exec_time_ms,rows,shared_blks_hit,shared_blks_read,temp_blks_read,temp_blks_written"
     run_sql xchangepass-statistics-primary "$sql"
@@ -444,6 +446,7 @@ run_one() {
   local transfer_rate="$5"
   local statistics_rate="$6"
   local replica_enabled="$7"
+  local burst_enabled="${8:-false}"
   local label="$condition-$scenario-$run_order"
   local safe_label
   safe_label="$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9._-' '-')"
@@ -471,6 +474,15 @@ run_one() {
     MODE=MATERIALIZED_VIEW \
     TRANSFER_RATE="$transfer_rate" \
     STATISTICS_RATE="$statistics_rate" \
+    STATISTICS_BURST_ENABLED="$burst_enabled" \
+    STATISTICS_PRE_RATE="${STATISTICS_PRE_RATE:-50}" \
+    STATISTICS_BURST_RATE="${STATISTICS_BURST_RATE:-300}" \
+    STATISTICS_POST_RATE="${STATISTICS_POST_RATE:-50}" \
+    STATISTICS_PRE_DURATION="${STATISTICS_PRE_DURATION:-4m}" \
+    STATISTICS_BURST_DURATION="${STATISTICS_BURST_DURATION:-2m}" \
+    STATISTICS_POST_DURATION="${STATISTICS_POST_DURATION:-4m}" \
+    STATISTICS_BURST_VUS="${STATISTICS_BURST_VUS:-80}" \
+    STATISTICS_BURST_MAX_VUS="${STATISTICS_BURST_MAX_VUS:-160}" \
     DURATION="$duration" \
     TRANSFER_VUS=20 \
     STATISTICS_VUS=20 \
@@ -518,6 +530,46 @@ run_condition() {
   run_one "$condition" "3" "primary-replica-mv" "$duration" "$transfer_rate" "$statistics_rate" "true"
 }
 
+run_burst_condition() {
+  local condition="$1"
+  local duration="$2"
+  local transfer_rate="$3"
+  local pre_rate="$4"
+  local burst_rate="$5"
+  local post_rate="$6"
+  local repeats="$7"
+  local statistics_rate="$pre_rate-$burst_rate-$post_rate"
+
+  STATISTICS_PRE_RATE="$pre_rate" \
+    STATISTICS_BURST_RATE="$burst_rate" \
+    STATISTICS_POST_RATE="$post_rate" \
+    run_one "$condition" "1" "single-db-mv" "$duration" "$transfer_rate" "$statistics_rate" "false" "true"
+  STATISTICS_PRE_RATE="$pre_rate" \
+    STATISTICS_BURST_RATE="$burst_rate" \
+    STATISTICS_POST_RATE="$post_rate" \
+    run_one "$condition" "1" "primary-replica-mv" "$duration" "$transfer_rate" "$statistics_rate" "true" "true"
+  if [ "$repeats" = "1" ]; then
+    return
+  fi
+
+  STATISTICS_PRE_RATE="$pre_rate" \
+    STATISTICS_BURST_RATE="$burst_rate" \
+    STATISTICS_POST_RATE="$post_rate" \
+    run_one "$condition" "2" "primary-replica-mv" "$duration" "$transfer_rate" "$statistics_rate" "true" "true"
+  STATISTICS_PRE_RATE="$pre_rate" \
+    STATISTICS_BURST_RATE="$burst_rate" \
+    STATISTICS_POST_RATE="$post_rate" \
+    run_one "$condition" "2" "single-db-mv" "$duration" "$transfer_rate" "$statistics_rate" "false" "true"
+  STATISTICS_PRE_RATE="$pre_rate" \
+    STATISTICS_BURST_RATE="$burst_rate" \
+    STATISTICS_POST_RATE="$post_rate" \
+    run_one "$condition" "3" "single-db-mv" "$duration" "$transfer_rate" "$statistics_rate" "false" "true"
+  STATISTICS_PRE_RATE="$pre_rate" \
+    STATISTICS_BURST_RATE="$burst_rate" \
+    STATISTICS_POST_RATE="$post_rate" \
+    run_one "$condition" "3" "primary-replica-mv" "$duration" "$transfer_rate" "$statistics_rate" "true" "true"
+}
+
 if [[ ",$RUN_LEVELS," == *",sanity,"* ]]; then
   run_condition "sanity-t5-s10" "30s" "5" "10" "1"
 fi
@@ -543,6 +595,12 @@ if [ "$RUN_T10_S200" = "true" ]; then
 fi
 if [ "$RUN_LATENCY_T5_S200" = "true" ]; then
   run_condition "latency-t5-s200-hikari" "3m" "5" "200" "3"
+fi
+if [ "$RUN_OPS_STEADY" = "true" ]; then
+  run_condition "ops-steady-t10-s100-hikari" "10m" "10" "100" "3"
+fi
+if [ "$RUN_OPS_BURST" = "true" ]; then
+  run_burst_condition "ops-burst-t10-s50-s300-hikari" "10m" "10" "50" "300" "50" "3"
 fi
 
 echo "high-load A/B 완료: $SUMMARY_CSV"

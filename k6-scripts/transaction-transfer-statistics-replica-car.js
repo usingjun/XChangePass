@@ -12,6 +12,18 @@ export const statisticsWaitingDuration = new Trend('statistics_waiting_duration'
 export const statisticsReceivingDuration = new Trend('statistics_receiving_duration', true);
 export const transferErrorRate = new Rate('transfer_error_rate');
 export const statisticsErrorRate = new Rate('statistics_error_rate');
+export const transferDurationPreBurst = new Trend('transfer_duration_pre_burst', true);
+export const transferDurationBurst = new Trend('transfer_duration_burst', true);
+export const transferDurationPostBurst = new Trend('transfer_duration_post_burst', true);
+export const statisticsDurationPreBurst = new Trend('statistics_duration_pre_burst', true);
+export const statisticsDurationBurst = new Trend('statistics_duration_burst', true);
+export const statisticsDurationPostBurst = new Trend('statistics_duration_post_burst', true);
+export const statisticsWaitingPreBurst = new Trend('statistics_waiting_pre_burst', true);
+export const statisticsWaitingBurst = new Trend('statistics_waiting_burst', true);
+export const statisticsWaitingPostBurst = new Trend('statistics_waiting_post_burst', true);
+export const statisticsBlockedPreBurst = new Trend('statistics_blocked_pre_burst', true);
+export const statisticsBlockedBurst = new Trend('statistics_blocked_burst', true);
+export const statisticsBlockedPostBurst = new Trend('statistics_blocked_post_burst', true);
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const MODE = __ENV.MODE || __ENV.STATS_MODE || 'MATERIALIZED_VIEW';
@@ -48,28 +60,23 @@ const TO_CURRENCY = __ENV.TO_CURRENCY || __ENV.CURRENCY || TRANSFER_ENV.TO_CURRE
     || TRANSFER_ENV.CURRENCY || 'KRW';
 const TRANSFER_AMOUNT = __ENV.TRANSFER_AMOUNT || TRANSFER_ENV.TRANSFER_AMOUNT || '1.00';
 const DEBUG_STATUS = (__ENV.DEBUG_STATUS || 'false') === 'true';
+const STARTED_AT = Date.now();
+const STATISTICS_BURST_ENABLED = (__ENV.STATISTICS_BURST_ENABLED || 'false') === 'true';
+const STATISTICS_PRE_DURATION = __ENV.STATISTICS_PRE_DURATION || '4m';
+const STATISTICS_BURST_DURATION = __ENV.STATISTICS_BURST_DURATION || '2m';
+const STATISTICS_POST_DURATION = __ENV.STATISTICS_POST_DURATION || '4m';
+const STATISTICS_PRE_RATE = Number(__ENV.STATISTICS_PRE_RATE || '50');
+const STATISTICS_BURST_RATE = Number(__ENV.STATISTICS_BURST_RATE || '300');
+const STATISTICS_POST_RATE = Number(__ENV.STATISTICS_POST_RATE || '50');
+const STATISTICS_PRE_ALLOCATED_VUS = Number(__ENV.STATISTICS_PRE_VUS || __ENV.STATISTICS_VUS || '20');
+const STATISTICS_BURST_ALLOCATED_VUS = Number(__ENV.STATISTICS_BURST_VUS || __ENV.STATISTICS_VUS || '60');
+const STATISTICS_POST_ALLOCATED_VUS = Number(__ENV.STATISTICS_POST_VUS || __ENV.STATISTICS_VUS || '20');
+const STATISTICS_PRE_MAX_VUS = Number(__ENV.STATISTICS_PRE_MAX_VUS || __ENV.STATISTICS_MAX_VUS || '50');
+const STATISTICS_BURST_MAX_VUS = Number(__ENV.STATISTICS_BURST_MAX_VUS || __ENV.STATISTICS_MAX_VUS || '120');
+const STATISTICS_POST_MAX_VUS = Number(__ENV.STATISTICS_POST_MAX_VUS || __ENV.STATISTICS_MAX_VUS || '50');
 
 export const options = {
-    scenarios: {
-        transfers: {
-            executor: 'constant-arrival-rate',
-            rate: Number(__ENV.TRANSFER_RATE || '10'),
-            timeUnit: '1s',
-            duration: __ENV.DURATION || '30s',
-            preAllocatedVUs: Number(__ENV.TRANSFER_VUS || '20'),
-            maxVUs: Number(__ENV.TRANSFER_MAX_VUS || '50'),
-            exec: 'transferScenario',
-        },
-        statistics: {
-            executor: 'constant-arrival-rate',
-            rate: Number(__ENV.STATISTICS_RATE || '10'),
-            timeUnit: '1s',
-            duration: __ENV.DURATION || '30s',
-            preAllocatedVUs: Number(__ENV.STATISTICS_VUS || '20'),
-            maxVUs: Number(__ENV.STATISTICS_MAX_VUS || '50'),
-            exec: 'statisticsScenario',
-        },
-    },
+    scenarios: buildScenarios(),
     summaryTrendStats: ['avg', 'min', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
     thresholds: {
         http_req_failed: ['rate<0.05'],
@@ -114,6 +121,7 @@ export function transferScenario() {
     transferBlockedDuration.add(res.timings.blocked);
     transferWaitingDuration.add(res.timings.waiting);
     transferReceivingDuration.add(res.timings.receiving);
+    recordTransferPhase(res);
     const ok = check(res, {
         'transfer status is 200': (response) => response.status === 200,
         'transfer completed': (response) => response.status === 200 && response.body.includes('COMPLETED'),
@@ -127,6 +135,22 @@ export function transferScenario() {
 }
 
 export function statisticsScenario() {
+    requestStatistics('all');
+}
+
+export function statisticsPreBurstScenario() {
+    requestStatistics('pre-burst');
+}
+
+export function statisticsBurstScenario() {
+    requestStatistics('burst');
+}
+
+export function statisticsPostBurstScenario() {
+    requestStatistics('post-burst');
+}
+
+function requestStatistics(phase) {
     const userId = valueAt(STATS_USER_IDS, __ITER + __VU - 1, 'statsUserId');
     const url = `${BASE_URL}/api/v1/transactions/statistics/monthly`
         + `?userId=${encodeURIComponent(userId)}`
@@ -152,6 +176,7 @@ export function statisticsScenario() {
     statisticsBlockedDuration.add(res.timings.blocked);
     statisticsWaitingDuration.add(res.timings.waiting);
     statisticsReceivingDuration.add(res.timings.receiving);
+    recordStatisticsPhase(res, phase);
     const ok = check(res, {
         'statistics status is 200': (response) => response.status === 200,
     });
@@ -161,6 +186,138 @@ export function statisticsScenario() {
     }
 
     statisticsErrorRate.add(!ok);
+}
+
+function buildScenarios() {
+    const transfers = {
+        executor: 'constant-arrival-rate',
+        rate: Number(__ENV.TRANSFER_RATE || '10'),
+        timeUnit: '1s',
+        duration: __ENV.DURATION || '30s',
+        preAllocatedVUs: Number(__ENV.TRANSFER_VUS || '20'),
+        maxVUs: Number(__ENV.TRANSFER_MAX_VUS || '50'),
+        exec: 'transferScenario',
+    };
+
+    if (!STATISTICS_BURST_ENABLED) {
+        return {
+            transfers,
+            statistics: {
+                executor: 'constant-arrival-rate',
+                rate: Number(__ENV.STATISTICS_RATE || '10'),
+                timeUnit: '1s',
+                duration: __ENV.DURATION || '30s',
+                preAllocatedVUs: Number(__ENV.STATISTICS_VUS || '20'),
+                maxVUs: Number(__ENV.STATISTICS_MAX_VUS || '50'),
+                exec: 'statisticsScenario',
+            },
+        };
+    }
+
+    return {
+        transfers,
+        statistics_pre_burst: {
+            executor: 'constant-arrival-rate',
+            rate: STATISTICS_PRE_RATE,
+            timeUnit: '1s',
+            duration: STATISTICS_PRE_DURATION,
+            preAllocatedVUs: STATISTICS_PRE_ALLOCATED_VUS,
+            maxVUs: STATISTICS_PRE_MAX_VUS,
+            exec: 'statisticsPreBurstScenario',
+        },
+        statistics_burst: {
+            executor: 'constant-arrival-rate',
+            rate: STATISTICS_BURST_RATE,
+            timeUnit: '1s',
+            startTime: STATISTICS_PRE_DURATION,
+            duration: STATISTICS_BURST_DURATION,
+            preAllocatedVUs: STATISTICS_BURST_ALLOCATED_VUS,
+            maxVUs: STATISTICS_BURST_MAX_VUS,
+            exec: 'statisticsBurstScenario',
+        },
+        statistics_post_burst: {
+            executor: 'constant-arrival-rate',
+            rate: STATISTICS_POST_RATE,
+            timeUnit: '1s',
+            startTime: addDurationStrings(STATISTICS_PRE_DURATION, STATISTICS_BURST_DURATION),
+            duration: STATISTICS_POST_DURATION,
+            preAllocatedVUs: STATISTICS_POST_ALLOCATED_VUS,
+            maxVUs: STATISTICS_POST_MAX_VUS,
+            exec: 'statisticsPostBurstScenario',
+        },
+    };
+}
+
+function recordTransferPhase(response) {
+    const phase = currentPhase();
+    if (phase === 'all') {
+        return;
+    }
+    if (phase === 'pre-burst') {
+        transferDurationPreBurst.add(response.timings.duration);
+    } else if (phase === 'burst') {
+        transferDurationBurst.add(response.timings.duration);
+    } else {
+        transferDurationPostBurst.add(response.timings.duration);
+    }
+}
+
+function recordStatisticsPhase(response, phase) {
+    if (phase === 'all') {
+        return;
+    }
+    if (phase === 'pre-burst') {
+        statisticsDurationPreBurst.add(response.timings.duration);
+        statisticsWaitingPreBurst.add(response.timings.waiting);
+        statisticsBlockedPreBurst.add(response.timings.blocked);
+    } else if (phase === 'burst') {
+        statisticsDurationBurst.add(response.timings.duration);
+        statisticsWaitingBurst.add(response.timings.waiting);
+        statisticsBlockedBurst.add(response.timings.blocked);
+    } else {
+        statisticsDurationPostBurst.add(response.timings.duration);
+        statisticsWaitingPostBurst.add(response.timings.waiting);
+        statisticsBlockedPostBurst.add(response.timings.blocked);
+    }
+}
+
+function currentPhase() {
+    if (!STATISTICS_BURST_ENABLED) {
+        return 'all';
+    }
+    const elapsedSeconds = (Date.now() - STARTED_AT) / 1000;
+    const preSeconds = durationSeconds(STATISTICS_PRE_DURATION);
+    const burstSeconds = durationSeconds(STATISTICS_BURST_DURATION);
+    if (elapsedSeconds < preSeconds) {
+        return 'pre-burst';
+    }
+    if (elapsedSeconds < preSeconds + burstSeconds) {
+        return 'burst';
+    }
+    return 'post-burst';
+}
+
+function addDurationStrings(left, right) {
+    return `${durationSeconds(left) + durationSeconds(right)}s`;
+}
+
+function durationSeconds(value) {
+    const match = String(value).trim().match(/^([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)$/);
+    if (!match) {
+        throw new Error(`Unsupported duration: ${value}`);
+    }
+    const amount = Number(match[1]);
+    const unit = match[2];
+    if (unit === 'ms') {
+        return amount / 1000;
+    }
+    if (unit === 's') {
+        return amount;
+    }
+    if (unit === 'm') {
+        return amount * 60;
+    }
+    return amount * 3600;
 }
 
 function selectPairIndex() {

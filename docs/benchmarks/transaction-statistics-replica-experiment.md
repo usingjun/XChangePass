@@ -1681,3 +1681,208 @@ Hikari 전환 후 Replica 통계 조회의 JDBC 호출 비용 감소가 T5/S200 
 3. T10/S100 결과와 `EXPLAIN (ANALYZE, BUFFERS)` 결과 연결
 4. `pg_stat_statements` 기준 query group별 buffer/exec time 문서화
 5. Primary/Replica 최종 판단 기준에 `dataAsOf`, lag 허용치, 운영 pool sizing 반영
+
+## 28. Hikari 기반 운영형 혼합 부하 검증
+
+### 28.1 목적
+
+이번 단계는 Hikari 기반 Read Replica 구조가 통계 read burst를 Replica로 분리하면서도 송금 API와 Primary write path 지표를 큰 악화 없이 유지하는지 확인하기 위한 로컬 Docker 기반 검증이다.
+
+최종 성능 비교에는 DriverManager 기반 결과를 사용하지 않는다. 비교 대상은 아래 두 조건으로 제한한다.
+
+| 조건 | 설명 |
+| --- | --- |
+| Single DB + MV | 송금 API와 `MATERIALIZED_VIEW` 통계 조회가 모두 Primary DB 사용 |
+| Primary + Replica + MV Hikari | 송금 API는 Primary DB, `MATERIALIZED_VIEW` 통계 조회만 Replica DB 사용 |
+
+이번 작업에서도 아래는 수정하지 않았다.
+
+* 송금/지갑/잔액/원장/recovery/reconciliation/idempotency 비즈니스 로직
+* fraud 정책 소스 코드와 Lua
+* 통계 SQL 의미
+* Replica routing 범위
+* `SUMMARY` / `GROUP_BY` 역할
+* PostgreSQL 설정
+
+### 28.2 실행 조건
+
+| 항목 | Steady | Burst |
+| --- | --- | --- |
+| Condition | `ops-steady-t10-s100-hikari` | `ops-burst-t10-s50-s300-hikari` |
+| Duration | 10m | 10m |
+| Transfer rate | 10/s | 10/s |
+| Statistics rate | 100/s | 0~4m: 50/s, 4~6m: 300/s, 6~10m: 50/s |
+| 반복 | Single DB 3회, Primary + Replica 3회 | Single DB 3회, Primary + Replica 3회 |
+| 통계 mode | `MATERIALIZED_VIEW` | `MATERIALIZED_VIEW` |
+| 통계 seed | 100,000 rows / 1,000 users / 12 months | 100,000 rows / 1,000 users / 12 months |
+| 송금 seed | 10,000 pairs | 10,000 pairs |
+| 결과 위치 | `build/perf/replica-hikari-ops-steady-final-20260708` | `build/perf/replica-hikari-ops-burst-final-20260708` |
+
+중단 전 partial 결과인 `build/perf/replica-hikari-ops-steady`는 최종 비교에서 제외했다.
+
+유효 run 기준은 아래처럼 확인했다.
+
+| 항목 | Steady | Burst |
+| --- | --- | --- |
+| transfer error | 0 | 0 |
+| statistics error | 0 | 0 |
+| dropped iterations | 0 | 0 |
+| Primary + Replica `datasource_target` | `replica` | `replica` |
+| Replica Hikari metric | pool tag 확인 | pool tag 확인 |
+| Primary/Replica MV row count | 83,510 / 83,510 | 83,510 / 83,510 |
+| 종료 시점 WAL byte lag | 0 | 0 |
+
+### 28.3 Steady T10/S100 10분 결과
+
+| Condition | Scenario | Runs | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 | Error | Dropped |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10m / T10 / S100 | Single DB + MV | 3 | 19.663ms | 24.920ms | 28.094ms | 4.923ms | 6.649ms | 8.148ms | 0 | 0 |
+| 10m / T10 / S100 | Primary + Replica + MV Hikari | 3 | 20.162ms | 26.155ms | 29.415ms | 4.553ms | 6.524ms | 8.025ms | 0 | 0 |
+
+Steady 조건에서는 Replica 조건의 통계 API 평균 latency가 Single DB보다 낮았고, p95/p99는 비슷했다.
+
+송금 latency는 Replica 조건이 소폭 높게 관측됐다. 이 차이만으로 성능 악화로 단정하지 않고, Primary write path query group, CPU, Hikari pending, WAL lag를 함께 본다.
+
+### 28.4 Statistics burst 혼합 부하 결과
+
+| Condition | Scenario | Runs | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 | Error | Dropped |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10m / T10 / S50-S300-S50 | Single DB + MV | 3 | 20.696ms | 28.360ms | 32.206ms | 4.108ms | 7.942ms | 9.722ms | 0 | 0 |
+| 10m / T10 / S50-S300-S50 | Primary + Replica + MV Hikari | 3 | 20.830ms | 29.034ms | 32.369ms | 3.826ms | 7.851ms | 9.721ms | 0 | 0 |
+
+Burst 조건에서도 통계 read는 Replica 조건에서 Replica datasource로 라우팅됐고, 통계 API latency는 Single DB와 유사하거나 약간 낮았다.
+
+송금 latency는 두 조건이 비슷한 수준으로 관측됐다.
+
+### 28.5 Burst 구간별 latency 분석
+
+| Scenario | Phase | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Single DB + MV | pre-burst | 22.314ms | 28.709ms | 32.386ms | 5.979ms | 8.784ms | 10.507ms |
+| Single DB + MV | burst | 13.715ms | 17.981ms | 20.620ms | 2.820ms | 3.720ms | 4.746ms |
+| Single DB + MV | post-burst | 22.569ms | 29.194ms | 32.518ms | 6.100ms | 9.087ms | 10.706ms |
+| Primary + Replica + MV Hikari | pre-burst | 22.636ms | 29.391ms | 32.868ms | 5.785ms | 8.996ms | 10.676ms |
+| Primary + Replica + MV Hikari | burst | 13.714ms | 17.359ms | 20.498ms | 2.519ms | 3.408ms | 4.306ms |
+| Primary + Replica + MV Hikari | post-burst | 22.584ms | 29.502ms | 32.591ms | 5.789ms | 8.958ms | 10.692ms |
+
+이번 로컬 run에서는 burst 구간 자체가 pre/post보다 낮게 관측됐다. 이는 k6 scenario phase, JVM/connection warmup, 로컬 스케줄링 영향이 섞였을 가능성이 있어 “burst에서 항상 빨라진다”로 해석하지 않는다.
+
+중요한 점은 burst 구간에서도 Replica 조건의 통계 API latency가 Single DB보다 나빠지지 않았고, 송금 latency도 큰 차이 없이 유지됐다는 것이다.
+
+### 28.6 API timing 결과
+
+| Condition | Scenario | Metric | Avg | P95 | P99 |
+| --- | --- | --- | ---: | ---: | ---: |
+| Steady | Single DB + MV | `statistics.api.total` | 1.632ms | 2.487ms | 3.223ms |
+| Steady | Single DB + MV | `statistics.repository.jdbc` | 0.902ms | 1.563ms | 2.010ms |
+| Steady | Primary + Replica + MV Hikari | `statistics.api.total` | 1.358ms | 2.155ms | 2.942ms |
+| Steady | Primary + Replica + MV Hikari | `statistics.repository.jdbc` | 0.935ms | 1.624ms | 2.140ms |
+| Burst | Single DB + MV | `statistics.api.total` | 1.375ms | 2.516ms | 3.247ms |
+| Burst | Single DB + MV | `statistics.repository.jdbc` | 0.765ms | 1.445ms | 1.955ms |
+| Burst | Primary + Replica + MV Hikari | `statistics.api.total` | 1.158ms | 2.247ms | 2.934ms |
+| Burst | Primary + Replica + MV Hikari | `statistics.repository.jdbc` | 0.812ms | 1.555ms | 2.081ms |
+
+`datasource_target`은 아래처럼 기록됐다.
+
+| Condition | Scenario | `datasource_target` | Repository query count |
+| --- | --- | --- | ---: |
+| Steady | Single DB + MV | `primary` | 180,033 |
+| Steady | Primary + Replica + MV Hikari | `replica` | 180,032 |
+| Burst | Single DB + MV | `primary` | 180,038 |
+| Burst | Primary + Replica + MV Hikari | `replica` | 180,037 |
+
+DriverManager 기반에서 보였던 8ms대 Replica JDBC 병목은 운영형 steady/burst 조건에서도 재현되지 않았다.
+
+### 28.7 Hikari pool metric
+
+| Condition | Scenario | Pool | Active avg/max | Idle avg/max | Pending avg/max | Acquire max avg/max |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| Steady | Single DB + MV | `transaction-statistics-primary` | 0.478 / 2 | 4.283 / 6 | 0 / 0 | 0.008s / 0.061s |
+| Steady | Primary + Replica + MV Hikari | `transaction-statistics-primary` | 0.454 / 2 | 3.777 / 5 | 0 / 0 | 0.003s / 0.012s |
+| Steady | Primary + Replica + MV Hikari | `transaction-statistics-replica` | 0.109 / 1 | 2.498 / 4 | 0 / 0 | 0.003s / 0.014s |
+| Burst | Single DB + MV | `transaction-statistics-primary` | 0.315 / 2 | 3.819 / 5 | 0 / 0 | 0.001s / 0.004s |
+| Burst | Primary + Replica + MV Hikari | `transaction-statistics-primary` | 0.342 / 3 | 4.531 / 6 | 0 / 0 | 0.002s / 0.011s |
+| Burst | Primary + Replica + MV Hikari | `transaction-statistics-replica` | 0.092 / 1 | 3.623 / 5 | 0 / 0 | 0.003s / 0.013s |
+
+모든 조건에서 Hikari pending은 0이었다.
+
+### 28.8 pg_stat_statements query group 비교
+
+| Condition | Scenario | DB | Query group | Calls | Mean exec | Total exec | Shared hit | Shared read |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Steady | Single DB + MV | Primary | `statistics_mv` | 60,001.0 | 0.126ms | 7,544.234ms | 396,005.0 | 2.0 |
+| Steady | Primary + Replica + MV Hikari | Replica | `statistics_mv` | 60,000.7 | 0.128ms | 7,657.727ms | 396,004.0 | 0 |
+| Burst | Single DB + MV | Primary | `statistics_mv` | 60,002.7 | 0.101ms | 6,043.666ms | 396,016.0 | 2.0 |
+| Burst | Primary + Replica + MV Hikari | Replica | `statistics_mv` | 60,002.3 | 0.108ms | 6,459.615ms | 396,012.3 | 0 |
+
+통계 read 위치는 의도대로 분리됐다.
+
+| Condition | Query group | Single DB Primary mean | Primary + Replica Primary mean |
+| --- | --- | ---: | ---: |
+| Steady | `balance` | 0.579ms | 0.600ms |
+| Steady | `wallet_transfer_request` | 0.042ms | 0.041ms |
+| Steady | `wallet_transaction` | 0.091ms | 0.092ms |
+| Steady | `idempotency` | 0.083ms | 0.086ms |
+| Burst | `balance` | 0.635ms | 0.641ms |
+| Burst | `wallet_transfer_request` | 0.040ms | 0.042ms |
+| Burst | `wallet_transaction` | 0.099ms | 0.099ms |
+| Burst | `idempotency` | 0.087ms | 0.088ms |
+
+Primary write path query group은 Replica 조건에서 큰 악화 없이 비슷한 수준으로 유지됐다.
+
+`fraud` query group은 `pg_stat_statements`에서 별도 SQL group으로 잡히지 않았다. 현재 fraud 판정의 핵심은 Redis/Lua 경로라 PostgreSQL query group으로 직접 나타나지 않는 것으로 해석한다.
+
+### 28.9 CPU / WAL lag / wait event
+
+| Scenario | Primary CPU avg/max | Replica CPU avg/max | WAL lag during max | WAL lag after |
+| --- | ---: | ---: | ---: | ---: |
+| Steady Single DB + MV | 11.94% / 37.26% | 1.82% / 4.85% | 728 bytes | 0 |
+| Steady Primary + Replica + MV Hikari | 9.00% / 13.80% | 4.56% / 6.63% | 728 bytes | 0 |
+| Burst Single DB + MV | 10.84% / 49.04% | 1.77% / 4.58% | 1,576 bytes | 0 |
+| Burst Primary + Replica + MV Hikari | 8.62% / 12.10% | 3.98% / 7.46% | 808 bytes | 0 |
+
+Replica 조건에서는 통계 read 부하가 Replica 컨테이너로 이동했고, Primary CPU 평균/최대가 Single DB보다 낮게 관측됐다.
+
+실행 중 WAL byte lag는 일시적으로 발생했지만 종료 시점에는 모두 0이었다. 운영형 적용을 검토한다면 통계 응답의 `dataAsOf`와 replica lag 허용 기준은 별도로 둬야 한다.
+
+### 28.10 해석
+
+이번 로컬 Docker 기반 운영형 steady/burst A/B에서 확인한 내용은 아래다.
+
+* Hikari 기반 Replica 구조에서 `MATERIALIZED_VIEW` 통계 조회는 Replica로 라우팅됐다.
+* Single DB 조건에서는 `statistics_mv` query group이 Primary에 누적됐다.
+* Primary + Replica 조건에서는 `statistics_mv` query group이 Replica에 누적됐다.
+* 통계 API latency는 Replica 조건에서 Single DB와 유사하거나 약간 낮은 수준으로 유지됐다.
+* 송금 API latency는 Replica 조건에서 큰 차이 없이 유지됐다.
+* Primary write path query group은 큰 악화 없이 비슷한 수준으로 유지됐다.
+* Hikari pending은 Primary/Replica 모두 0이었다.
+* WAL lag는 실행 중 일시적으로 발생했지만 종료 시점에는 0이었다.
+
+따라서 보수적으로는 아래처럼 정리할 수 있다.
+
+```text
+Hikari 기반 동일 조건 A/B에서 Read Replica 구조는 통계 read burst를 Replica로 분리하면서,
+송금 API latency와 Primary write path 지표를 큰 악화 없이 유지하는지 확인했다.
+```
+
+이 결과는 “Read Replica 도입으로 송금 API 성능을 개선했다”는 의미가 아니다. 또한 로컬 Docker 기반 결과이므로 운영 환경 검증 완료로 표현하지 않는다.
+
+### 28.11 클라우드 재현 필요성 판단
+
+이번 run에서는 dropped iterations가 없고, 10분 steady/burst run이 모두 완료됐다. 따라서 로컬 환경에서 이번 시나리오 자체는 재현 가능했다.
+
+다만 아래 이유로 클라우드 또는 분리된 서버 환경의 후속 검증은 여전히 가치가 있다.
+
+* Primary/Replica가 같은 로컬 Docker 자원을 공유한다.
+* CPU scheduling과 컨테이너 배치가 run별 latency에 영향을 줄 수 있다.
+* 운영형 pool sizing, network round-trip, 실제 replication lag는 로컬과 다를 수 있다.
+
+따라서 다음 단계에서 클라우드 검증을 진행한다면 “로컬에서 확인한 경향을 분리된 자원 환경에서 재현하는 검증”으로 한정하는 것이 맞다.
+
+### 28.12 다음 단계
+
+1. Section 28 raw 결과와 `EXPLAIN (ANALYZE, BUFFERS)` 결과 연결
+2. 통계 read 단독 S300/S500 Replica A/B runner 준비
+3. `dataAsOf`와 replica lag 허용 기준 문서화
+4. Primary/Replica pool sizing 후보 정리
+5. 클라우드 또는 별도 서버 환경에서 동일 Hikari A/B 재현
