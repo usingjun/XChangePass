@@ -1352,3 +1352,173 @@ Read Replica는 Primary DB의 통계 read 부하를 분리하는 효과가 있�
 4. 통계 API 단독 부하와 송금 + 통계 혼합 부하를 분리해 재측정
 5. `EXPLAIN (ANALYZE, BUFFERS)`와 `pg_stat_statements`를 같은 run id 기준으로 연결
 6. Replica lag 허용 범위와 `dataAsOf` 응답 정책 정리
+
+## 26. Replica Hikari datasource 전환 A/B
+
+### 26.1 목적
+
+25장에서는 Replica 조건의 PostgreSQL `statistics_mv` SQL 실행 시간이 Single DB보다 낮거나 유사했지만, 통계 API HTTP latency는 더 높게 관측됐다.
+
+계층별 timing에서 증가분 대부분은 `statistics.repository.jdbc`에 있었고, 당시 Replica datasource는 `DriverManagerDataSource` 기반이었다.
+
+이번 검증의 목적은 아래 가설을 확인하는 것이다.
+
+```text
+Replica 통계 API HTTP latency 증가는 DB SQL 실행 시간이 아니라,
+DriverManagerDataSource 기반 connection 준비/JDBC 호출 비용의 영향이 컸을 수 있다.
+```
+
+### 26.2 변경 내용
+
+Replica 통계 조회용 datasource를 Hikari 기반으로 전환했다.
+
+| 항목 | 변경 |
+| --- | --- |
+| Replica datasource | `DriverManagerDataSource` -> `HikariDataSource` |
+| Primary pool name | `transaction-statistics-primary` |
+| Replica pool name | `transaction-statistics-replica` |
+| Replica pool size | maximum 10 / minimum idle 2 |
+| Actuator metric | `pool` tag별 Hikari metric 수집 |
+| Routing 범위 | 기존과 동일하게 `MATERIALIZED_VIEW` 통계 조회만 Replica 후보 |
+
+주의할 점은 Replica Hikari를 일반 `DataSource` Bean으로 노출하지 않았다는 것이다.
+
+Replica `DataSource` Bean이 Spring Boot의 기본 datasource 후보가 되면 JPA write path가 Replica를 잡을 수 있고, 이 경우 송금 중 INSERT가 read-only replica로 향할 위험이 있다. 따라서 이번 변경은 통계 전용 `JdbcTemplate` 또는 repository 내부 fallback Hikari에만 Replica datasource를 붙였다.
+
+이번 변경에서도 아래 흐름은 수정하지 않았다.
+
+* 송금/지갑/잔액/원장/recovery/reconciliation 비즈니스 로직
+* 통계 SQL 의미
+* Primary/Replica routing 범위
+* PostgreSQL 설정
+
+### 26.3 실행 조건
+
+| 항목 | 값 |
+| --- | --- |
+| 조건 | `latency-t5-s200-hikari` |
+| Duration | 3m |
+| Transfer rate | 5/s |
+| Statistics rate | 200/s |
+| 반복 | Single DB 3회, Primary + Replica 3회 |
+| 통계 mode | `MATERIALIZED_VIEW` |
+| 통계 seed | 100,000 rows / 1,000 users / 12 months |
+| 송금 seed | 10,000 pairs |
+| 결과 위치 | `build/perf/replica-hikari-t5-s200` |
+
+본실행 전 30초 sanity run을 먼저 수행했고, Single DB와 Primary + Replica 모두 transfer/statistics error rate 0을 확인했다.
+
+본실행 6개 run도 모두 k6 error rate 0이었다.
+
+### 26.4 k6 / HTTP timing 결과
+
+| Scenario | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 | Statistics waiting avg | Statistics blocked avg |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Single DB + MV | 17.169ms | 21.966ms | 26.246ms | 3.432ms | 4.720ms | 6.364ms | 3.270ms | 0.004ms |
+| Primary + Replica + MV | 16.978ms | 21.921ms | 27.330ms | 3.235ms | 4.461ms | 5.838ms | 3.074ms | 0.004ms |
+
+Hikari 전환 후 Replica 조건의 통계 API HTTP latency는 DriverManager 기반 25장 결과와 달리 Single DB와 거의 같거나 약간 낮아졌다.
+
+송금 latency는 두 조건이 비슷한 수준이다. 이 표의 송금 값은 같은 혼합 부하에서 관측된 A/B 결과이며, 특정 통계 조회 모드가 송금 응답 시간을 직접 빠르게 만든다는 의미로 해석하지 않는다. 송금 API 영향은 별도의 반복 조건과 primary write path 지표를 함께 봐야 한다.
+
+### 26.5 API 계층 timing 결과
+
+| Scenario | Metric | Count | Avg | P95 |
+| --- | --- | ---: | ---: | ---: |
+| Single DB + MV | `statistics.api.total` | 108,032 | 1.298ms | 1.992ms |
+| Single DB + MV | `statistics.service.query` | 108,032 | 0.916ms | 1.527ms |
+| Single DB + MV | `statistics.repository.jdbc` | 108,032 | 0.784ms | 1.373ms |
+| Single DB + MV | `statistics.mapping` | 108,032 | 0.006ms | 0.013ms |
+| Primary + Replica + MV | `statistics.api.total` | 108,032 | 1.069ms | 1.692ms |
+| Primary + Replica + MV | `statistics.service.query` | 108,032 | 0.939ms | 1.548ms |
+| Primary + Replica + MV | `statistics.repository.jdbc` | 108,032 | 0.802ms | 1.390ms |
+| Primary + Replica + MV | `statistics.mapping` | 108,032 | 0.007ms | 0.014ms |
+
+`datasource_target`은 아래처럼 기록됐다.
+
+| Scenario | `datasource_target` | Repository query count |
+| --- | --- | ---: |
+| Single DB + MV | `primary` | 108,032 |
+| Primary + Replica + MV | `replica` | 108,032 |
+
+Hikari 전환 후 Replica 조건의 `statistics.repository.jdbc` 평균은 8.115ms에서 0.802ms로 내려갔다.
+
+이는 25장에서 관측된 HTTP latency 증가가 PostgreSQL SQL 실행 시간보다는 DriverManager 기반 connection 준비/JDBC 호출 비용의 영향을 크게 받았다는 해석을 강하게 지지한다.
+
+### 26.6 Hikari pool metric
+
+Actuator Hikari metric에서 Primary/Replica pool tag가 분리되어 수집됐다.
+
+| Scenario | Pool | Active avg/max | Idle avg/max | Pending avg/max | Acquire max avg/max |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Single DB + MV | `transaction-statistics-primary` | 0.429 / 2 | 3.186 / 4 | 0 / 0 | 0.001286s / 0.003s |
+| Primary + Replica + MV | `transaction-statistics-primary` | 0.529 / 2 | 3.357 / 5 | 0 / 0 | 0.007557s / 0.017s |
+| Primary + Replica + MV | `transaction-statistics-replica` | 0.329 / 1 | 2.614 / 4 | 0 / 0 | 0.003900s / 0.014s |
+
+두 조건 모두 Hikari pending은 0이었다.
+
+Replica pool도 별도 tag로 보이므로 이후에는 connection acquire, active, pending을 Primary/Replica별로 분리해서 추적할 수 있다.
+
+### 26.7 pg_stat_statements 비교
+
+| Scenario | DB | Calls avg | Mean exec avg | Total exec avg |
+| --- | --- | ---: | ---: | ---: |
+| Single DB + MV | Primary | 36,000.7 | 0.111ms | 4,003.8ms |
+| Primary + Replica + MV | Replica | 36,000.7 | 0.115ms | 4,143.4ms |
+
+Hikari 전환 후에는 DB 내부 `statistics_mv` 평균 실행 시간이 양쪽 모두 약 0.11ms 수준으로 비슷했다.
+
+Primary write path 관련 query group은 아래와 같다.
+
+| Query group | Single DB mean avg | Primary + Replica mean avg |
+| --- | ---: | ---: |
+| `balance` | 0.484ms | 0.488ms |
+| `wallet_transfer_request` | 0.038ms | 0.036ms |
+| `wallet_transaction` | 0.067ms | 0.071ms |
+
+이번 run에서는 write path query group 평균도 두 조건이 거의 비슷했다. 따라서 이 결과만으로 송금 성능 개선이나 악화를 단정하지 않는다.
+
+### 26.8 DriverManager 기반 결과와 비교
+
+| Replica datasource | Statistics avg | Statistics waiting avg | Repository jdbc avg | DB mean exec |
+| --- | ---: | ---: | ---: | ---: |
+| `DriverManagerDataSource` | 10.036ms | 9.902ms | 8.115ms | 0.067ms |
+| `HikariDataSource` | 3.235ms | 3.074ms | 0.802ms | 0.115ms |
+
+DriverManager 기반 결과와 비교하면 Hikari 전환 후 통계 API HTTP latency와 `statistics.repository.jdbc`가 크게 줄었다.
+
+반대로 DB 내부 SQL 평균 실행 시간은 DriverManager 때보다 낮아진 것이 아니라 약간 높게 측정됐다. 그럼에도 HTTP latency가 크게 줄었으므로, 기존 병목은 SQL 실행 시간보다 JDBC connection 준비/호출 계층에 가까웠다고 보는 것이 자연스럽다.
+
+### 26.9 CPU / WAL lag
+
+Docker CPU snapshot은 아래와 같다.
+
+| Scenario | Primary CPU avg/max | Replica CPU avg/max |
+| --- | ---: | ---: |
+| Single DB + MV | 11.12% / 13.52% | 0.97% / 3.22% |
+| Primary + Replica + MV | 6.36% / 9.30% | 5.50% / 7.60% |
+
+Hikari 전환 후 Replica CPU는 DriverManager 기반 25장의 48.22% / 65.04%보다 크게 낮아졌다.
+
+실행 후 WAL byte lag는 0이었다.
+
+### 26.10 해석
+
+이번 결과는 아래 해석을 지지한다.
+
+```text
+기존 Replica 통계 API HTTP latency 증가는 PostgreSQL SQL 실행 시간이 아니라,
+DriverManagerDataSource 기반 connection 준비/JDBC 호출 비용의 영향이 컸을 가능성이 높다.
+```
+
+Hikari 전환 후에는 Replica 조건의 통계 API HTTP latency, waiting, repository JDBC 시간이 Single DB와 유사한 수준으로 내려왔다.
+
+다만 이 결과는 로컬 Docker 기반 T5/S200 혼합 부하 A/B 결과다. 이 결과만으로 운영 Primary/Replica 도입을 최종 결정하지 않는다.
+
+다음 단계는 아래가 적절하다.
+
+1. 같은 Hikari 조건에서 T10/S100 또는 통계 단독 부하를 추가로 측정
+2. `EXPLAIN (ANALYZE, BUFFERS)` 결과와 Hikari A/B run을 연결
+3. `pg_stat_statements` query group을 run별로 더 안정적으로 비교
+4. k6 송금 API 혼합 부하에서 송금 latency와 write path query group을 반복 측정
+5. Replica lag와 `dataAsOf` 응답 정책을 문서화

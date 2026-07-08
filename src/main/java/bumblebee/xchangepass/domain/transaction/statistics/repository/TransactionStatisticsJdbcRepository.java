@@ -5,11 +5,13 @@ import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatis
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsRow;
 import bumblebee.xchangepass.domain.transaction.statistics.dto.TransactionStatisticsSourceType;
 import bumblebee.xchangepass.domain.transaction.statistics.metrics.TransactionStatisticsTimingRecorder;
+import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.metrics.micrometer.MicrometerMetricsTrackerFactory;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
@@ -338,15 +340,18 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectProvider<JdbcTemplate> replicaJdbcTemplateProvider;
+    private final ObjectProvider<MeterRegistry> meterRegistryProvider;
     private final JdbcTemplate configuredReplicaJdbcTemplate;
 
     public TransactionStatisticsJdbcRepository(
             JdbcTemplate jdbcTemplate,
             @Qualifier("transactionStatisticsReplicaJdbcTemplate")
-            ObjectProvider<JdbcTemplate> replicaJdbcTemplateProvider
+            ObjectProvider<JdbcTemplate> replicaJdbcTemplateProvider,
+            ObjectProvider<MeterRegistry> meterRegistryProvider
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.replicaJdbcTemplateProvider = replicaJdbcTemplateProvider;
+        this.meterRegistryProvider = meterRegistryProvider;
         this.configuredReplicaJdbcTemplate = createConfiguredReplicaJdbcTemplate();
     }
 
@@ -471,16 +476,37 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
                 url,
                 replicaProperty("username"),
                 replicaProperty("password"),
-                replicaProperty("driver-class-name", "org.postgresql.Driver")
+                replicaProperty("driver-class-name", "org.postgresql.Driver"),
+                replicaProperty("pool-name", "transaction-statistics-replica"),
+                replicaIntProperty("maximum-pool-size", 10),
+                replicaIntProperty("minimum-idle", 2),
+                replicaLongProperty("connection-timeout", 30000)
         ));
     }
 
-    private DataSource replicaDataSource(String url, String username, String password, String driverClassName) {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
+    private DataSource replicaDataSource(
+            String url,
+            String username,
+            String password,
+            String driverClassName,
+            String poolName,
+            int maximumPoolSize,
+            int minimumIdle,
+            long connectionTimeout
+    ) {
+        HikariDataSource dataSource = new HikariDataSource();
         dataSource.setDriverClassName(driverClassName);
-        dataSource.setUrl(url);
+        dataSource.setJdbcUrl(url);
         dataSource.setUsername(username);
         dataSource.setPassword(password);
+        dataSource.setPoolName(poolName);
+        dataSource.setMaximumPoolSize(maximumPoolSize);
+        dataSource.setMinimumIdle(minimumIdle);
+        dataSource.setConnectionTimeout(connectionTimeout);
+        MeterRegistry meterRegistry = meterRegistryProvider.getIfAvailable();
+        if (meterRegistry != null) {
+            dataSource.setMetricsTrackerFactory(new MicrometerMetricsTrackerFactory(meterRegistry));
+        }
         return dataSource;
     }
 
@@ -496,6 +522,16 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
         String envName = "TRANSACTION_STATISTICS_REPLICA_" + name.toUpperCase().replace("-", "_");
         String env = System.getenv(envName);
         return StringUtils.hasText(env) ? env : defaultValue;
+    }
+
+    private int replicaIntProperty(String name, int defaultValue) {
+        String value = replicaProperty(name);
+        return StringUtils.hasText(value) ? Integer.parseInt(value) : defaultValue;
+    }
+
+    private long replicaLongProperty(String name, long defaultValue) {
+        String value = replicaProperty(name);
+        return StringUtils.hasText(value) ? Long.parseLong(value) : defaultValue;
     }
 
     private List<TransactionStatisticsRow> timedQuery(

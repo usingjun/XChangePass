@@ -203,25 +203,29 @@ sample_app_metrics() {
   for metric in "${metrics[@]}"; do
     local body
     body="$(curl -s --cookie "accessToken=$actuator_token" "$BASE_URL/actuator/metrics/$metric" || true)"
-    python3 - "$metrics_dir/app-actuator-metrics.csv" "$collected_at" "$metric" "$body" <<'PY'
+    python3 - "$metrics_dir/app-actuator-metrics.csv" "$collected_at" "$metric" "$body" "$BASE_URL" "$actuator_token" <<'PY'
 import csv
 import json
 import sys
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
-output_file, collected_at, metric_name, body = sys.argv[1:]
-try:
-    data = json.loads(body)
-except json.JSONDecodeError:
-    data = {}
+output_file, collected_at, metric_name, body, base_url, actuator_token = sys.argv[1:]
 
-measurements = data.get("measurements", [])
-available_tags = ";".join(
-    f"{tag.get('tag', '')}={','.join(tag.get('values', []))}"
-    for tag in data.get("availableTags", [])
-)
+def parse_json(raw_body):
+    try:
+        return json.loads(raw_body)
+    except json.JSONDecodeError:
+        return {}
 
-with open(output_file, "a", encoding="utf-8", newline="") as file:
-    writer = csv.writer(file)
+def write_measurements(writer, data, tag_detail):
+    measurements = data.get("measurements", [])
+    available_tags = ";".join(
+        f"{tag.get('tag', '')}={','.join(tag.get('values', []))}"
+        for tag in data.get("availableTags", [])
+    )
+    detail = tag_detail or available_tags
+
     if measurements:
         for measurement in measurements:
             writer.writerow([
@@ -229,10 +233,32 @@ with open(output_file, "a", encoding="utf-8", newline="") as file:
                 metric_name,
                 measurement.get("statistic", ""),
                 measurement.get("value", ""),
-                available_tags,
+                detail,
             ])
     else:
-        writer.writerow([collected_at, metric_name, "", "", available_tags])
+        writer.writerow([collected_at, metric_name, "", "", detail])
+
+def fetch_metric_for_pool(pool):
+    url = f"{base_url}/actuator/metrics/{metric_name}?tag=pool:{quote(pool)}"
+    request = Request(url, headers={"Cookie": f"accessToken={actuator_token}"})
+    try:
+        with urlopen(request, timeout=2) as response:
+            return parse_json(response.read().decode("utf-8"))
+    except Exception:
+        return {}
+
+data = parse_json(body)
+pools = []
+for tag in data.get("availableTags", []):
+    if tag.get("tag") == "pool":
+        pools = tag.get("values", [])
+        break
+
+with open(output_file, "a", encoding="utf-8", newline="") as file:
+    writer = csv.writer(file)
+    write_measurements(writer, data, "")
+    for pool in pools:
+        write_measurements(writer, fetch_metric_for_pool(pool), f"pool={pool}")
 PY
   done
 }
@@ -348,34 +374,40 @@ start_app() {
     timing_args=" --transaction.statistics.timing.enabled=true --transaction.statistics.timing.output=$api_timing_csv"
     java_tool_options="$java_tool_options -Dtransaction.statistics.timing.enabled=true -Dtransaction.statistics.timing.output=$api_timing_csv"
   fi
+  java_tool_options="$java_tool_options -Dspring.datasource.hikari.pool-name=transaction-statistics-primary"
   cleanup_processes
   clear_fraud_redis_keys
   if [ "$replica_enabled" = "true" ]; then
-    replica_args="$replica_args --transaction.statistics.replica.url=jdbc:postgresql://localhost:15433/xchangepass --transaction.statistics.replica.username=$PG_USER --transaction.statistics.replica.password=$PG_PASSWORD"
-    java_tool_options="$java_tool_options -Dtransaction.statistics.replica.enabled=true -Dtransaction.statistics.replica.url=jdbc:postgresql://localhost:15433/xchangepass -Dtransaction.statistics.replica.username=$PG_USER -Dtransaction.statistics.replica.password=$PG_PASSWORD"
+    replica_args="$replica_args --transaction.statistics.replica.url=jdbc:postgresql://localhost:15433/xchangepass --transaction.statistics.replica.username=$PG_USER --transaction.statistics.replica.password=$PG_PASSWORD --transaction.statistics.replica.pool-name=transaction-statistics-replica --transaction.statistics.replica.maximum-pool-size=10 --transaction.statistics.replica.minimum-idle=2"
+    java_tool_options="$java_tool_options -Dtransaction.statistics.replica.enabled=true -Dtransaction.statistics.replica.url=jdbc:postgresql://localhost:15433/xchangepass -Dtransaction.statistics.replica.username=$PG_USER -Dtransaction.statistics.replica.password=$PG_PASSWORD -Dtransaction.statistics.replica.pool-name=transaction-statistics-replica -Dtransaction.statistics.replica.maximum-pool-size=10 -Dtransaction.statistics.replica.minimum-idle=2"
     SPRING_DATASOURCE_URL="$PG_URL" \
       SPRING_DATASOURCE_USERNAME="$PG_USER" \
       SPRING_DATASOURCE_PASSWORD="$PG_PASSWORD" \
+      SPRING_DATASOURCE_HIKARI_POOL_NAME=transaction-statistics-primary \
       TRANSACTION_STATISTICS_REPLICA_ENABLED=true \
       TRANSACTION_STATISTICS_REPLICA_URL=jdbc:postgresql://localhost:15433/xchangepass \
       TRANSACTION_STATISTICS_REPLICA_USERNAME="$PG_USER" \
       TRANSACTION_STATISTICS_REPLICA_PASSWORD="$PG_PASSWORD" \
+      TRANSACTION_STATISTICS_REPLICA_POOL_NAME=transaction-statistics-replica \
+      TRANSACTION_STATISTICS_REPLICA_MAXIMUM_POOL_SIZE=10 \
+      TRANSACTION_STATISTICS_REPLICA_MINIMUM_IDLE=2 \
       TRANSACTION_STATISTICS_TIMING_ENABLED="$([ -n "$api_timing_csv" ] && echo true || echo false)" \
       TRANSACTION_STATISTICS_TIMING_OUTPUT="$api_timing_csv" \
       JAVA_TOOL_OPTIONS="$java_tool_options" \
       SERVER_PORT="$APP_PORT" \
-      "$ROOT_DIR/gradlew" bootRun --args="--server.port=$APP_PORT --fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01$replica_args$timing_args" > "$app_log" 2>&1 &
+      "$ROOT_DIR/gradlew" bootRun --args="--server.port=$APP_PORT --spring.datasource.hikari.pool-name=transaction-statistics-primary --fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01$replica_args$timing_args" > "$app_log" 2>&1 &
   else
     java_tool_options="$java_tool_options -Dtransaction.statistics.replica.enabled=false"
     SPRING_DATASOURCE_URL="$PG_URL" \
       SPRING_DATASOURCE_USERNAME="$PG_USER" \
       SPRING_DATASOURCE_PASSWORD="$PG_PASSWORD" \
+      SPRING_DATASOURCE_HIKARI_POOL_NAME=transaction-statistics-primary \
       TRANSACTION_STATISTICS_REPLICA_ENABLED=false \
       TRANSACTION_STATISTICS_TIMING_ENABLED="$([ -n "$api_timing_csv" ] && echo true || echo false)" \
       TRANSACTION_STATISTICS_TIMING_OUTPUT="$api_timing_csv" \
       JAVA_TOOL_OPTIONS="$java_tool_options" \
       SERVER_PORT="$APP_PORT" \
-      "$ROOT_DIR/gradlew" bootRun --args="--server.port=$APP_PORT --fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01$replica_args$timing_args" > "$app_log" 2>&1 &
+      "$ROOT_DIR/gradlew" bootRun --args="--server.port=$APP_PORT --spring.datasource.hikari.pool-name=transaction-statistics-primary --fraud.policy.night-start=12:00 --fraud.policy.night-end=12:01$replica_args$timing_args" > "$app_log" 2>&1 &
   fi
   app_pid="$!"
   wait_for_app
@@ -510,7 +542,7 @@ if [ "$RUN_T10_S200" = "true" ]; then
   run_condition "high-t10-s200" "3m" "10" "200" "3"
 fi
 if [ "$RUN_LATENCY_T5_S200" = "true" ]; then
-  run_condition "latency-t5-s200" "3m" "5" "200" "3"
+  run_condition "latency-t5-s200-hikari" "3m" "5" "200" "3"
 fi
 
 echo "high-load A/B 완료: $SUMMARY_CSV"

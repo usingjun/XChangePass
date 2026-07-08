@@ -10,6 +10,10 @@ public class TransactionStatisticsReplicaProperties {
     private String username;
     private String password;
     private String driverClassName = "org.postgresql.Driver";
+    private String poolName = "transaction-statistics-replica";
+    private int maximumPoolSize = 10;
+    private int minimumIdle = 2;
+    private long connectionTimeout = 30000;
 
     public boolean isEnabled() {
         return enabled;
@@ -49,5 +53,37 @@ public class TransactionStatisticsReplicaProperties {
 
     public void setDriverClassName(String driverClassName) {
         this.driverClassName = driverClassName;
+    }
+
+    public String getPoolName() {
+        return poolName;
+    }
+
+    public void setPoolName(String poolName) {
+        this.poolName = poolName;
+    }
+
+    public int getMaximumPoolSize() {
+        return maximumPoolSize;
+    }
+
+    public void setMaximumPoolSize(int maximumPoolSize) {
+        this.maximumPoolSize = maximumPoolSize;
+    }
+
+    public int getMinimumIdle() {
+        return minimumIdle;
+    }
+
+    public void setMinimumIdle(int minimumIdle) {
+        this.minimumIdle = minimumIdle;
+    }
+
+    public long getConnectionTimeout() {
+        return connectionTimeout;
+    }
+
+    public void setConnectionTimeout(long connectionTimeout) {
+        this.connectionTimeout = connectionTimeout;
     }
 }
