@@ -1522,3 +1522,162 @@ Hikari 전환 후에는 Replica 조건의 통계 API HTTP latency, waiting, repo
 3. `pg_stat_statements` query group을 run별로 더 안정적으로 비교
 4. k6 송금 API 혼합 부하에서 송금 latency와 write path query group을 반복 측정
 5. Replica lag와 `dataAsOf` 응답 정책을 문서화
+
+## 27. Replica Hikari 조건 추가 재측정
+
+### 27.1 목적
+
+26장에서는 Replica datasource를 Hikari로 전환한 뒤 T5/S200 조건에서 `statistics.repository.jdbc`, 통계 API HTTP latency, waiting이 크게 줄어드는 것을 확인했다.
+
+이번 재측정의 목적은 이 결과가 대표 조건 하나의 우연이 아닌지 확인하는 것이다. 따라서 송금 rate를 더 높이고 통계 rate를 낮춘 T10/S100 혼합 부하에서 같은 패턴이 유지되는지 확인했다.
+
+이번 작업에서도 아래는 변경하지 않았다.
+
+* Replica datasource 구조
+* 송금/지갑/잔액/원장/recovery/reconciliation/idempotency 비즈니스 로직
+* fraud 정책 소스 코드와 Lua
+* 통계 SQL 의미
+* Replica routing 범위
+* SUMMARY/GROUP_BY 역할
+* PostgreSQL 설정
+
+### 27.2 실행 조건
+
+| 항목 | 값 |
+| --- | --- |
+| 조건 | `latency-t10-s100-hikari` |
+| Duration | 3m |
+| Transfer rate | 10/s |
+| Statistics rate | 100/s |
+| 반복 | Single DB 3회, Primary + Replica 3회 |
+| 통계 mode | `MATERIALIZED_VIEW` |
+| 통계 seed | 100,000 rows / 1,000 users / 12 months |
+| 송금 seed | 10,000 pairs |
+| 결과 위치 | `build/perf/replica-hikari-t10-s100` |
+
+현재 runner에는 T10/S100만 단독 선택하는 플래그가 없어, repo 파일은 수정하지 않고 `/tmp`에 임시 runner 복사본을 만들어 `run_condition "latency-t10-s100-hikari" "3m" "10" "100" "3"`만 호출했다.
+
+raw k6 결과와 `build/perf` 산출물은 커밋하지 않는다.
+
+유효 run 기준은 아래처럼 확인했다.
+
+| 항목 | 결과 |
+| --- | --- |
+| `mode` | `MATERIALIZED_VIEW` |
+| transfer error | 0 |
+| statistics error | 0 |
+| dropped iterations | 0 |
+| A/B rate/duration/seed | 동일 |
+| Primary + Replica `datasource_target` | `replica` |
+| Replica Hikari metric | `transaction-statistics-replica` pool tag 확인 |
+| Primary/Replica MV row count | 83,510 / 83,510 |
+| Primary + Replica WAL byte lag | 0 |
+
+Single DB 조건의 종료 시점 WAL byte lag 샘플에서는 4,080 / 552 / 1,944 bytes가 관측됐다. 이 조건은 통계 조회를 Replica로 보내는 조건이 아니며, Primary/Replica MV row count는 동일했다. Primary + Replica 조건의 종료 시점 WAL byte lag는 모두 0이었다.
+
+### 27.3 T10/S100 혼합 부하 결과
+
+| Condition | Scenario | Runs | Transfer avg | Transfer p95 | Statistics avg | Statistics p95 | Statistics p99 | Error | Dropped |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3m / T10 / S100 | Single DB + MV | 3 | 19.551ms | 25.560ms | 4.760ms | 6.821ms | 8.963ms | 0 | 0 |
+| 3m / T10 / S100 | Primary + Replica + MV Hikari | 3 | 20.036ms | 25.815ms | 4.396ms | 6.360ms | 7.886ms | 0 | 0 |
+
+T10/S100에서도 Replica 조건의 통계 API HTTP latency는 Single DB와 비슷하거나 약간 낮게 유지됐다.
+
+송금 latency는 두 조건이 비슷하다. 이 값은 같은 혼합 부하에서 관측된 결과일 뿐이며, Read Replica가 송금 API latency를 직접 개선한다고 해석하지 않는다. 송금 영향은 transfer latency, Primary write path query group, CPU, WAL lag를 함께 보는 보조 지표로만 사용한다.
+
+### 27.4 통계 단독 부하 결과
+
+통계 단독 S300/S500은 이번 단계에서 실행하지 않았다.
+
+이유는 현재 Replica A/B highload runner가 `transaction-transfer-statistics-replica-car.js` 기반의 송금 + 통계 혼합 시나리오를 전제로 하기 때문이다. `tools/perf/run-transaction-statistics-k6-read.sh`와 `k6-scripts/transaction-statistics-read.js`는 통계 read 단독 스크립트로 존재하지만, Replica DB lifecycle, app boot, Replica Hikari 설정, pg_stat_statements, Hikari metric, WAL lag 수집을 한 번에 묶는 A/B runner는 아직 없다.
+
+이번 작업은 새 runner 구현 단계가 아니므로, 통계 단독 부하는 후속 작업으로 분리한다.
+
+### 27.5 API 계층 timing 결과
+
+| Condition | Scenario | Metric | Avg | P95 | P99 |
+| --- | --- | --- | ---: | ---: | ---: |
+| 3m / T10 / S100 | Single DB + MV | `statistics.api.total` | 1.617ms | 2.538ms | 3.628ms |
+| 3m / T10 / S100 | Single DB + MV | `statistics.repository.jdbc` | 0.911ms | 1.618ms | 2.191ms |
+| 3m / T10 / S100 | Primary + Replica + MV Hikari | `statistics.api.total` | 1.328ms | 2.122ms | 2.951ms |
+| 3m / T10 / S100 | Primary + Replica + MV Hikari | `statistics.repository.jdbc` | 0.918ms | 1.602ms | 2.215ms |
+
+Repository JDBC 평균은 양쪽 모두 1ms 안팎으로 유지됐다.
+
+`datasource_target`은 아래처럼 기록됐다.
+
+| Scenario | `datasource_target` | Repository query count |
+| --- | --- | ---: |
+| Single DB + MV | `primary` | 54,032 |
+| Primary + Replica + MV Hikari | `replica` | 54,033 |
+
+### 27.6 Hikari pool metric
+
+| Condition | Scenario | Pool | Active avg/max | Idle avg/max | Pending avg/max | Acquire avg/max |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| T10/S100 | Single DB + MV | `transaction-statistics-primary` | 0.493 / 2 | 3.958 / 6 | 0 / 0 | 0.000004s / 0.003s |
+| T10/S100 | Primary + Replica + MV Hikari | `transaction-statistics-primary` | 0.300 / 2 | 3.814 / 5 | 0 / 0 | 0.000002s / 0.007s |
+| T10/S100 | Primary + Replica + MV Hikari | `transaction-statistics-replica` | 0.129 / 1 | 2.414 / 3 | 0 / 0 | 0.000002s / 0.014s |
+
+Replica Hikari pool pending은 0이었다.
+
+Acquire avg는 Hikari `TOTAL_TIME / COUNT` 샘플 평균이고, max는 Hikari `MAX` statistic의 최대값이다.
+
+### 27.7 pg_stat_statements 비교
+
+| Scenario | DB | Calls avg | Mean exec avg | Total exec avg |
+| --- | --- | ---: | ---: | ---: |
+| Single DB + MV | Primary | 18,000.7 | 0.122ms | 2,193.5ms |
+| Primary + Replica + MV Hikari | Replica | 18,001.0 | 0.126ms | 2,271.8ms |
+
+Primary write path 관련 query group은 아래와 같다.
+
+| Query group | Single DB mean avg | Primary + Replica mean avg |
+| --- | ---: | ---: |
+| `balance` | 0.546ms | 0.568ms |
+| `wallet_transfer_request` | 0.039ms | 0.041ms |
+| `wallet_transaction` | 0.085ms | 0.092ms |
+
+T10/S100에서는 Replica 조건의 write path query group 평균이 Single DB보다 약간 높게 관측됐다. 차이는 작지만, 이 결과만으로 송금 latency 개선을 주장하지 않는다.
+
+### 27.8 T5/S200 결과와 비교
+
+| Condition | Scenario | Statistics avg | Waiting avg | Repository jdbc avg | DB mean exec |
+| --- | --- | ---: | ---: | ---: | ---: |
+| T5/S200 | Primary + Replica + MV Hikari | 3.235ms | 3.074ms | 0.802ms | 0.115ms |
+| T10/S100 | Primary + Replica + MV Hikari | 4.396ms | 4.192ms | 0.918ms | 0.126ms |
+
+T10/S100은 송금 rate가 2배이고 통계 rate는 절반인 조건이다. 이 조건에서도 Replica `statistics.repository.jdbc`는 1ms 안팎으로 유지됐다.
+
+Hikari 전환 전 DriverManager 기반 T5/S200의 Replica `statistics.repository.jdbc` 평균은 8.115ms였다. T10/S100에서도 이 병목은 재현되지 않았다.
+
+### 27.9 CPU / WAL lag
+
+| Scenario | Primary CPU avg/max | Replica CPU avg/max |
+| --- | ---: | ---: |
+| Single DB + MV | 11.10% / 16.72% | 1.71% / 4.09% |
+| Primary + Replica + MV Hikari | 8.70% / 12.29% | 4.43% / 6.73% |
+
+Primary + Replica 조건의 종료 시점 WAL byte lag는 모두 0이었다.
+
+### 27.10 해석
+
+T10/S100에서도 Hikari 기반 Replica 통계 조회의 JDBC 호출 비용 감소는 유지됐다.
+
+```text
+Hikari 전환 후 Replica 통계 조회의 JDBC 호출 비용 감소가 T5/S200 단일 조건에만 국한되지 않고,
+더 높은 송금 혼합 부하 조건에서도 유지됐다.
+```
+
+다만 통계 단독 부하는 아직 같은 관측 체계로 실행하지 못했다. 송금 혼합 부하가 없는 상태에서도 같은 경향이 유지되는지는 후속 A/B runner를 만들어 확인해야 한다.
+
+이번 결과만으로 Read Replica가 송금 API latency를 개선한다고 단정하지 않는다. 송금 영향은 별도 반복 측정과 Primary write path query group, CPU, WAL lag를 함께 보고 보수적으로 판단한다.
+
+다음 단계는 아래가 적절하다.
+
+1. 통계 단독 Replica A/B runner 준비
+2. Hikari 조건에서 S300 또는 S500 통계 단독 부하 측정
+3. T10/S100 결과와 `EXPLAIN (ANALYZE, BUFFERS)` 결과 연결
+4. `pg_stat_statements` 기준 query group별 buffer/exec time 문서화
+5. Primary/Replica 최종 판단 기준에 `dataAsOf`, lag 허용치, 운영 pool sizing 반영
