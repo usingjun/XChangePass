@@ -24,6 +24,75 @@
 | App -> Replica | `172.31.31.228:5432` |
 | Replica -> Primary replication | `172.31.19.209:5432` |
 
+### 2.1 EC2 AMI 확인
+
+세 서버에서 먼저 OS 계열을 확인한다.
+
+```bash
+cat /etc/os-release
+```
+
+Ubuntu 계열이면 `apt-get` 기준 명령을 사용하고, Amazon Linux 계열이면 `dnf` 기준 명령을 사용한다. 현재 runbook은 AMI가 확정되지 않은 상태를 기준으로 하므로 두 계열 명령을 모두 문서화한다.
+
+### 2.2 세 서버 공통 준비 명령
+
+아래 명령은 App 서버, Primary DB 서버, Replica DB 서버에서 공통으로 확인한다.
+
+Ubuntu 계열:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-plugin git curl
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+docker --version
+docker compose version
+```
+
+Amazon Linux 계열:
+
+```bash
+sudo dnf update -y
+sudo dnf install -y docker git curl
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+docker --version
+docker compose version
+```
+
+`usermod -aG docker` 적용 후 현재 shell에 바로 반영되지 않을 수 있다. 이 경우 재접속하거나 아래처럼 group을 갱신한다.
+
+```bash
+newgrp docker
+```
+
+### 2.3 보안 그룹과 Private IP 통신 확인
+
+AWS Security Group은 최소 아래 통신을 허용해야 한다.
+
+| Source | Destination | Port | 목적 |
+| --- | --- | ---: | --- |
+| App `172.31.28.10/32` | Primary `172.31.19.209/32` | 5432 | App Primary datasource |
+| App `172.31.28.10/32` | Replica `172.31.31.228/32` | 5432 | App Replica datasource |
+| Replica `172.31.31.228/32` | Primary `172.31.19.209/32` | 5432 | PostgreSQL streaming replication |
+
+DB 포트를 Public IP 전체에 열지 않는다. 특히 `0.0.0.0/0:5432`는 사용하지 않는다.
+
+서버 간 Private IP 통신은 각 서버에서 아래처럼 확인한다.
+
+```bash
+ping -c 3 172.31.19.209
+ping -c 3 172.31.31.228
+ping -c 3 172.31.28.10
+```
+
+`ping`이 차단된 보안 그룹이라면 TCP 기준으로 확인한다.
+
+```bash
+nc -vz 172.31.19.209 5432
+nc -vz 172.31.31.228 5432
+```
+
 ## 3. 중요한 원칙
 
 이번 검증의 비교 대상은 아래 두 조건이다.
@@ -45,6 +114,15 @@ Replica routing 범위는 기존 로컬 검증과 동일하게 제한한다.
 
 ## 4. Primary DB 서버 구성 절차
 
+대상 서버:
+
+| 항목 | 값 |
+| --- | --- |
+| Public IP | `15.165.209.25` |
+| Private IP | `172.31.19.209` |
+| PostgreSQL port | `5432` |
+| Database | `xchangepass` |
+
 ### 4.1 기본 준비
 
 Primary DB 서버에서 Docker와 Docker Compose를 설치한다.
@@ -55,6 +133,33 @@ docker compose version
 ```
 
 검증용 PostgreSQL은 로컬 compose와 같은 PostgreSQL 15 계열을 기준으로 한다.
+
+PostgreSQL 15 컨테이너 실행 전 아래를 확인한다.
+
+* Docker daemon이 실행 중인지 확인한다.
+* PostgreSQL data volume 경로가 비어 있는지, 기존 검증 데이터가 남아 있는지 확인한다.
+* 실제 password가 shell history나 Git tracked 파일에 남지 않도록 한다.
+* Primary DB port `5432`가 열려 있는지 확인한다.
+* App 서버 `172.31.28.10/32`와 Replica 서버 `172.31.31.228/32`만 DB 접근 대상으로 둔다.
+
+검증용 컨테이너 실행 예시는 아래 형태를 기준으로 잡는다. 실제 password는 placeholder로만 두고, Git에 커밋하지 않는다.
+
+```bash
+docker run -d \
+  --name xchangepass-aws-primary \
+  -p 5432:5432 \
+  -e POSTGRES_USER='<APP_DB_USER>' \
+  -e POSTGRES_PASSWORD='<APP_DB_PASSWORD>' \
+  -e POSTGRES_DB='xchangepass' \
+  -v xchangepass_aws_primary_data:/var/lib/postgresql/data \
+  postgres:15 \
+  postgres \
+    -c wal_level=replica \
+    -c max_wal_senders=10 \
+    -c max_replication_slots=10 \
+    -c shared_preload_libraries=pg_stat_statements \
+    -c pg_stat_statements.track=all
+```
 
 ### 4.2 PostgreSQL Primary 실행 설정
 
@@ -80,6 +185,26 @@ CREATE ROLE <REPLICATION_USER> WITH REPLICATION LOGIN PASSWORD '<REPLICATION_PAS
 
 `<REPLICATION_USER>`와 `<REPLICATION_PASSWORD>`는 placeholder다. 실제 값은 Git에 커밋하지 않는다.
 
+이미 존재할 수 있는 검증 환경에서는 아래처럼 중복 생성 오류를 피할 수 있다.
+
+```sql
+DO
+$$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_roles
+        WHERE rolname = '<REPLICATION_USER>'
+    ) THEN
+        CREATE ROLE <REPLICATION_USER>
+            WITH REPLICATION
+            LOGIN
+            PASSWORD '<REPLICATION_PASSWORD>';
+    END IF;
+END
+$$;
+```
+
 ### 4.4 접속 허용 설정
 
 `pg_hba.conf`에는 App private IP와 Replica private IP만 허용한다.
@@ -96,6 +221,22 @@ host    replication    <REPLICATION_USER>     172.31.31.228/32    scram-sha-256
 
 검증 편의를 위해 `0.0.0.0/0`을 열지 않는다. Public IP 기반 접속도 기본 경로로 사용하지 않는다.
 
+EC2 검증에서는 아래처럼 넓은 허용을 사용하지 않는다.
+
+```text
+host    replication    <REPLICATION_USER>     all             md5
+host    all            all                    0.0.0.0/0       md5
+```
+
+`pg_hba.conf` 변경 후 PostgreSQL reload 또는 재시작이 필요하다.
+
+```bash
+docker exec xchangepass-aws-primary psql \
+  -U '<APP_DB_USER>' \
+  -d xchangepass \
+  -c "SELECT pg_reload_conf();"
+```
+
 ### 4.5 pg_stat_statements 활성화
 
 DB 생성 후 Primary에서 extension을 생성한다.
@@ -110,7 +251,29 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 SELECT count(*) FROM pg_stat_statements;
 ```
 
+Primary 상태 확인:
+
+```sql
+SELECT pg_is_in_recovery();
+```
+
+기대값:
+
+```text
+false
+```
+
 ## 5. Replica DB 서버 구성 절차
+
+대상 서버:
+
+| 항목 | 값 |
+| --- | --- |
+| Public IP | `43.203.142.49` |
+| Private IP | `172.31.31.228` |
+| Primary private IP | `172.31.19.209` |
+| PostgreSQL port | `5432` |
+| Database | `xchangepass` |
 
 ### 5.1 기본 준비
 
@@ -138,6 +301,50 @@ PGPASSWORD='<REPLICATION_PASSWORD>' pg_basebackup \
 ```
 
 `-R` 옵션은 standby 설정을 생성한다. 실제 컨테이너 경로와 `$PGDATA`는 EC2에서 사용하는 PostgreSQL 실행 방식에 맞춘다.
+
+컨테이너 기반 실행에서는 Replica 컨테이너 안에서 `pg_basebackup`이 실행되어야 하므로, 아래 흐름을 기준으로 한다.
+
+1. Replica data volume이 비어 있는지 확인한다.
+2. Primary `172.31.19.209:5432`에 replication user로 접속 가능한지 확인한다.
+3. `pg_basebackup -R`로 standby 설정을 생성한다.
+4. base backup 완료 후 PostgreSQL을 `hot_standby=on`으로 실행한다.
+
+Replica 컨테이너 실행 흐름 예시는 아래와 같다. 실제 password는 placeholder로만 두고 Git에 커밋하지 않는다.
+
+```bash
+docker run -d \
+  --name xchangepass-aws-replica \
+  -p 5432:5432 \
+  -e PGUSER='<APP_DB_USER>' \
+  -e POSTGRES_PASSWORD='<APP_DB_PASSWORD>' \
+  -e POSTGRES_REPLICATION_USER='<REPLICATION_USER>' \
+  -e POSTGRES_REPLICATION_PASSWORD='<REPLICATION_PASSWORD>' \
+  -v xchangepass_aws_replica_data:/var/lib/postgresql/data \
+  postgres:15 \
+  bash -c '
+    set -e
+    if [ ! -s "$PGDATA/PG_VERSION" ]; then
+      rm -rf "$PGDATA"/*
+      until pg_isready -h 172.31.19.209 -p 5432; do
+        sleep 1
+      done
+      PGPASSWORD="$POSTGRES_REPLICATION_PASSWORD" pg_basebackup \
+        -h 172.31.19.209 \
+        -p 5432 \
+        -D "$PGDATA" \
+        -U "$POSTGRES_REPLICATION_USER" \
+        -Fp \
+        -Xs \
+        -P \
+        -R
+      chown -R postgres:postgres "$PGDATA"
+    fi
+    exec docker-entrypoint.sh postgres \
+      -c hot_standby=on \
+      -c shared_preload_libraries=pg_stat_statements \
+      -c pg_stat_statements.track=all
+  '
+```
 
 ### 5.3 Replica 실행 설정
 
@@ -179,6 +386,13 @@ CREATE TABLE replica_write_check(id bigint);
 
 Replica에서는 read-only transaction 오류가 발생해야 한다. 확인 후 테스트 테이블이 생성되지 않았는지 점검한다.
 
+`INSERT` 실패까지 확인하려면 기존 테이블에 영향을 주지 않는 임시 쓰기 시도를 사용한다. Replica에서는 아래 명령이 read-only 오류로 실패해야 한다.
+
+```sql
+CREATE TEMP TABLE replica_write_check(id bigint);
+INSERT INTO replica_write_check(id) VALUES (1);
+```
+
 ### 5.5 Primary/Replica row count 확인
 
 Primary와 Replica에서 각각 아래를 실행한다.
@@ -189,7 +403,43 @@ SELECT count(*) FROM mv_transaction_monthly_statistics;
 
 두 값이 같아야 본 부하 테스트를 시작한다.
 
+### 5.6 WAL lag 확인
+
+Primary에서 replication 상태를 확인한다.
+
+```sql
+SELECT
+  client_addr,
+  application_name,
+  state,
+  sync_state,
+  pg_wal_lsn_diff(sent_lsn, replay_lsn)::bigint AS byte_lag
+FROM pg_stat_replication;
+```
+
+실행 전 기준으로 `byte_lag`는 0이거나 빠르게 0으로 수렴해야 한다.
+
+Replica에서는 replay 지연을 보조로 확인한다.
+
+```sql
+SELECT
+  pg_last_wal_receive_lsn(),
+  pg_last_wal_replay_lsn(),
+  now() - pg_last_xact_replay_timestamp() AS replay_delay;
+```
+
+`pg_last_xact_replay_timestamp()`는 최근 replay 기록이 없으면 `NULL`일 수 있으므로, WAL byte lag와 함께 해석한다.
+
 ## 6. App 서버 구성 절차
+
+대상 서버:
+
+| 항목 | 값 |
+| --- | --- |
+| Public IP | `3.38.132.108` |
+| Private IP | `172.31.28.10` |
+| Primary DB private IP | `172.31.19.209` |
+| Replica DB private IP | `172.31.31.228` |
 
 ### 6.1 기본 준비
 
@@ -207,6 +457,17 @@ k6를 host에 설치하지 않는 경우 k6 Docker image를 사용할 수 있다
 
 송금 API와 fraud 관련 흐름에서 Redis가 필요하다. App 서버에서 Redis를 실행하고 Spring Boot App이 접근할 수 있게 한다.
 
+검증용 Redis 컨테이너 실행 예시:
+
+```bash
+docker run -d \
+  --name xchangepass-aws-redis \
+  -p 6379:6379 \
+  redis:7
+```
+
+Spring Boot App에 전달할 Redis 환경변수:
+
 ```text
 SPRING_DATA_REDIS_HOST=<REDIS_HOST>
 SPRING_DATA_REDIS_PORT=<REDIS_PORT>
@@ -216,6 +477,18 @@ SPRING_DATA_REDIS_PORT=<REDIS_PORT>
 
 ### 6.3 Spring Boot App 실행
 
+Spring Boot App 실행 전 최소 아래 값을 준비한다.
+
+* Primary DB JDBC URL
+* Primary DB username/password
+* Replica DB JDBC URL
+* Replica DB username/password
+* Redis host/port
+* JWT/OAuth/KMS/application-secrets 관련 값
+* 통계 timing 출력 경로
+
+`application.yaml`은 `application-secrets.yml`을 import한다. App 서버에서 실제 실행하려면 secrets 파일 또는 동일 값을 환경변수로 주입하는 방식을 별도로 준비해야 한다. secrets 파일과 실제 값은 Git에 커밋하지 않는다.
+
 Single DB 조건에서는 Replica datasource를 비활성화한다.
 
 ```bash
@@ -223,7 +496,13 @@ SPRING_DATASOURCE_URL='jdbc:postgresql://172.31.19.209:5432/xchangepass'
 SPRING_DATASOURCE_USERNAME='<APP_DB_USER>'
 SPRING_DATASOURCE_PASSWORD='<APP_DB_PASSWORD>'
 SPRING_DATASOURCE_HIKARI_POOL_NAME='transaction-statistics-primary'
+
+SPRING_DATA_REDIS_HOST='<REDIS_HOST>'
+SPRING_DATA_REDIS_PORT='<REDIS_PORT>'
+
 TRANSACTION_STATISTICS_REPLICA_ENABLED='false'
+TRANSACTION_STATISTICS_TIMING_ENABLED='true'
+TRANSACTION_STATISTICS_TIMING_OUTPUT='<LOCAL_RESULT_DIR>/api-timing.csv'
 ```
 
 Primary + Replica 조건에서는 Replica datasource를 활성화한다.
@@ -234,6 +513,9 @@ SPRING_DATASOURCE_USERNAME='<APP_DB_USER>'
 SPRING_DATASOURCE_PASSWORD='<APP_DB_PASSWORD>'
 SPRING_DATASOURCE_HIKARI_POOL_NAME='transaction-statistics-primary'
 
+SPRING_DATA_REDIS_HOST='<REDIS_HOST>'
+SPRING_DATA_REDIS_PORT='<REDIS_PORT>'
+
 TRANSACTION_STATISTICS_REPLICA_ENABLED='true'
 TRANSACTION_STATISTICS_REPLICA_URL='jdbc:postgresql://172.31.31.228:5432/xchangepass'
 TRANSACTION_STATISTICS_REPLICA_USERNAME='<APP_DB_USER>'
@@ -242,15 +524,34 @@ TRANSACTION_STATISTICS_REPLICA_POOL_NAME='transaction-statistics-replica'
 TRANSACTION_STATISTICS_REPLICA_MAXIMUM_POOL_SIZE='10'
 TRANSACTION_STATISTICS_REPLICA_MINIMUM_IDLE='2'
 TRANSACTION_STATISTICS_REPLICA_CONNECTION_TIMEOUT='30000'
+
+TRANSACTION_STATISTICS_TIMING_ENABLED='true'
+TRANSACTION_STATISTICS_TIMING_OUTPUT='<LOCAL_RESULT_DIR>/api-timing.csv'
 ```
 
 위 환경변수 이름은 현재 코드 기준이다.
 
 * `SPRING_DATASOURCE_*`: Spring Boot 기본 Primary datasource 설정
 * `SPRING_DATASOURCE_HIKARI_POOL_NAME`: Primary Hikari pool name
+* `SPRING_DATA_REDIS_HOST`, `SPRING_DATA_REDIS_PORT`: Redis 접속 설정
 * `TRANSACTION_STATISTICS_REPLICA_*`: `TransactionStatisticsReplicaProperties`의 `transaction.statistics.replica.*` 설정
+* `TRANSACTION_STATISTICS_TIMING_*`: 통계 API 계층 timing CSV 출력 설정
 
 비밀번호, JWT secret, access token, `.env`, `.pem` 파일은 Git에 커밋하지 않는다.
+
+Primary Hikari pool name은 아래 값으로 고정한다.
+
+```bash
+SPRING_DATASOURCE_HIKARI_POOL_NAME='transaction-statistics-primary'
+```
+
+Replica Hikari pool name은 아래 값으로 고정한다.
+
+```bash
+TRANSACTION_STATISTICS_REPLICA_POOL_NAME='transaction-statistics-replica'
+```
+
+두 pool name은 Actuator Hikari metric의 `pool` tag를 분리해서 보기 위한 기준이다.
 
 ### 6.4 통계 timing 수집
 
@@ -283,6 +584,20 @@ auth env 파일에는 access token, sender/receiver 정보가 들어갈 수 있�
 
 ## 7. 환경변수와 secrets 주의
 
+이 문서의 환경변수 이름은 현재 코드 기준과 일치한다.
+
+* Primary datasource: Spring Boot `spring.datasource.*`
+* Primary Hikari pool name: `spring.datasource.hikari.pool-name`
+* Replica datasource: `TransactionStatisticsReplicaProperties`
+* 통계 timing: `TransactionStatisticsTimingRecorder`
+* Redis: `spring.data.redis.*`
+
+`TRANSACTION_STATISTICS_REPLICA_DRIVER_CLASS_NAME`은 기본값이 `org.postgresql.Driver`이므로 필수는 아니다. 필요하면 아래처럼 명시적으로 설정할 수 있다.
+
+```bash
+TRANSACTION_STATISTICS_REPLICA_DRIVER_CLASS_NAME='org.postgresql.Driver'
+```
+
 아래 값은 placeholder로만 문서화한다.
 
 * `<APP_DB_USER>`
@@ -293,6 +608,9 @@ auth env 파일에는 access token, sender/receiver 정보가 들어갈 수 있�
 * `<REDIS_PORT>`
 * `<ACCESS_TOKEN>`
 * `<JWT_SECRET>`
+* OAuth client id/secret
+* KMS key id 또는 KMS 관련 credential
+* `application-secrets.yml` 내부 값
 * `.pem` key
 
 아래 파일과 결과물은 Git에 커밋하지 않는다.
@@ -305,6 +623,8 @@ auth env 파일에는 access token, sender/receiver 정보가 들어갈 수 있�
 * `build/perf/**`
 * DB dump
 * 실제 password가 포함된 compose 파일
+
+실제 값을 문서, shell script, compose 파일, Git tracked 파일에 남기지 않는다. 검증 중 필요한 값은 EC2 서버 로컬 shell, local-only env 파일, 또는 Git에 포함되지 않는 안전한 방식으로 주입한다.
 
 ## 8. Smoke test 체크리스트
 
@@ -324,6 +644,125 @@ auth env 파일에는 access token, sender/receiver 정보가 들어갈 수 있�
 | WAL lag | Primary `pg_stat_replication` | 실행 전 0 또는 catchup 확인 |
 | MV row count | Primary/Replica `count(*)` | 동일 |
 
+### 8.1 DB 연결 확인 명령 예시
+
+App 서버에서 Primary DB 연결을 확인한다.
+
+```bash
+PGPASSWORD='<APP_DB_PASSWORD>' psql \
+  -h 172.31.19.209 \
+  -p 5432 \
+  -U '<APP_DB_USER>' \
+  -d xchangepass \
+  -c 'SELECT 1;'
+```
+
+App 서버에서 Replica DB 연결을 확인한다.
+
+```bash
+PGPASSWORD='<APP_DB_PASSWORD>' psql \
+  -h 172.31.31.228 \
+  -p 5432 \
+  -U '<APP_DB_USER>' \
+  -d xchangepass \
+  -c 'SELECT 1;'
+```
+
+Primary recovery 상태를 확인한다.
+
+```bash
+PGPASSWORD='<APP_DB_PASSWORD>' psql \
+  -h 172.31.19.209 \
+  -p 5432 \
+  -U '<APP_DB_USER>' \
+  -d xchangepass \
+  -c 'SELECT pg_is_in_recovery();'
+```
+
+기대값:
+
+```text
+false
+```
+
+Replica recovery 상태를 확인한다.
+
+```bash
+PGPASSWORD='<APP_DB_PASSWORD>' psql \
+  -h 172.31.31.228 \
+  -p 5432 \
+  -U '<APP_DB_USER>' \
+  -d xchangepass \
+  -c 'SELECT pg_is_in_recovery();'
+```
+
+기대값:
+
+```text
+true
+```
+
+### 8.2 API smoke test 명령 예시
+
+송금 API 1건 성공을 확인한다. 실제 token, idempotency key, 수신자 정보는 검증용 값으로 대체한다.
+
+```bash
+curl -i -X PUT 'http://localhost:8080/api/v1/wallet/transfer' \
+  --cookie 'accessToken=<TRANSFER_ACCESS_TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: <UNIQUE_IDEMPOTENCY_KEY>' \
+  -d '{
+    "receiverName": "<RECEIVER_NAME>",
+    "receiverPhoneNumber": "<RECEIVER_PHONE_NUMBER>",
+    "transferAmount": "1.00",
+    "fromCurrency": "KRW",
+    "toCurrency": "KRW",
+    "transferDatetime": null,
+    "transferType": "GENERAL"
+  }'
+```
+
+기대값:
+
+```text
+HTTP 200
+COMPLETED
+```
+
+`MATERIALIZED_VIEW` 통계 조회를 확인한다.
+
+```bash
+curl -i \
+  --cookie 'accessToken=<STATISTICS_ACCESS_TOKEN>' \
+  'http://localhost:8080/api/v1/transactions/statistics/monthly?userId=<USER_ID>&fromMonth=2026-01&toMonth=2026-12&mode=MATERIALIZED_VIEW'
+```
+
+기대값:
+
+```text
+HTTP 200
+```
+
+### 8.3 datasource_target 확인
+
+Single DB 모드에서 통계 조회 후 `api-timing.csv`에 `datasource_target=primary`가 기록됐는지 확인한다.
+
+```bash
+grep 'statistics.repository.jdbc' '<LOCAL_RESULT_DIR>/api-timing.csv' | tail
+grep ',primary,' '<LOCAL_RESULT_DIR>/api-timing.csv' | tail
+```
+
+Replica 모드에서 통계 조회 후 `api-timing.csv`에 `datasource_target=replica`가 기록됐는지 확인한다.
+
+```bash
+grep 'statistics.repository.jdbc' '<LOCAL_RESULT_DIR>/api-timing.csv' | tail
+grep ',replica,' '<LOCAL_RESULT_DIR>/api-timing.csv' | tail
+```
+
+`api-timing.csv`는 raw 검증 결과이므로 Git에 커밋하지 않는다.
+
+### 8.4 Hikari metric tag 확인
+
 Actuator Hikari metric 예시:
 
 ```text
@@ -335,6 +774,20 @@ Actuator Hikari metric 예시:
 /actuator/metrics/hikaricp.connections.acquire?tag=pool:transaction-statistics-replica
 ```
 
+curl 예시:
+
+```bash
+curl -s \
+  --cookie 'accessToken=<ACTUATOR_ACCESS_TOKEN>' \
+  'http://localhost:8080/actuator/metrics/hikaricp.connections.active?tag=pool:transaction-statistics-primary'
+
+curl -s \
+  --cookie 'accessToken=<ACTUATOR_ACCESS_TOKEN>' \
+  'http://localhost:8080/actuator/metrics/hikaricp.connections.active?tag=pool:transaction-statistics-replica'
+```
+
+### 8.5 WAL lag와 MV row count 확인
+
 WAL lag 확인 예시:
 
 ```sql
@@ -344,6 +797,24 @@ SELECT
   sync_state,
   pg_wal_lsn_diff(sent_lsn, replay_lsn)::bigint AS byte_lag
 FROM pg_stat_replication;
+```
+
+Primary/Replica MV row count 확인:
+
+```bash
+PGPASSWORD='<APP_DB_PASSWORD>' psql \
+  -h 172.31.19.209 \
+  -p 5432 \
+  -U '<APP_DB_USER>' \
+  -d xchangepass \
+  -c 'SELECT count(*) FROM mv_transaction_monthly_statistics;'
+
+PGPASSWORD='<APP_DB_PASSWORD>' psql \
+  -h 172.31.31.228 \
+  -p 5432 \
+  -U '<APP_DB_USER>' \
+  -d xchangepass \
+  -c 'SELECT count(*) FROM mv_transaction_monthly_statistics;'
 ```
 
 ## 9. A/B 실행 계획
@@ -587,7 +1058,29 @@ pool name:
 - Primary/Replica 최종 도입 판단은 반복 실행과 lag 허용 기준 확정 이후로 미룬다.
 ```
 
-## 12. 실행 전 최종 확인
+## 12. 이번 단계에서 아직 만들지 않는 파일
+
+이번 runbook 단계에서는 아래 파일을 만들지 않는다.
+
+```text
+infra/aws/primary/docker-compose.primary.yml
+infra/aws/replica/docker-compose.replica.yml
+infra/aws/app/docker-compose.app.yml
+tools/perf/run-transaction-statistics-replica-aws-ab.sh
+```
+
+위 파일들은 EC2 AMI, Docker 실행 방식, secrets 주입 방식, SSH 수집 방식, 결과 디렉터리 구조를 확정한 뒤 별도 단계에서 만든다.
+
+이번 단계에서는 다음도 하지 않는다.
+
+* EC2 runner 생성
+* compose 파일 생성
+* shell script 생성
+* 코드 수정
+* 실제 secrets 또는 `.env` 커밋
+* raw k6 결과 또는 `build/perf/**` 커밋
+
+## 13. 실행 전 최종 확인
 
 실행 전 아래를 다시 확인한다.
 
