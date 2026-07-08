@@ -1886,3 +1886,223 @@ Hikari 기반 동일 조건 A/B에서 Read Replica 구조는 통계 read burst�
 3. `dataAsOf`와 replica lag 허용 기준 문서화
 4. Primary/Replica pool sizing 후보 정리
 5. 클라우드 또는 별도 서버 환경에서 동일 Hikari A/B 재현
+
+## 29. Replica lag / dataAsOf 정책과 EXPLAIN 근거 보강
+
+### 29.1 목적
+
+이번 섹션은 Hikari 기반 Read Replica 검증 결과를 바탕으로 `MATERIALIZED_VIEW` 월별 통계 조회를 Replica 후보로 둘 때 필요한 최신성 정책을 정리한다.
+
+핵심 질문은 두 가지다.
+
+* 통계 응답이 어느 시점 기준인지 사용자 또는 호출자에게 어떻게 표현할 것인가?
+* Section 28에서 `statistics_mv` SQL 평균 실행 시간이 0.1ms대였던 이유를 `EXPLAIN (ANALYZE, BUFFERS)` 관점에서 어떻게 설명할 것인가?
+
+이번 섹션은 정책/분석 문서화이며, 실제 API DTO 변경이나 routing 범위 변경은 하지 않았다.
+
+### 29.2 Read Replica 최신성 문제
+
+Read Replica는 Primary의 WAL을 재생해 데이터를 따라가는 구조라, 정상 상태에서도 아주 짧은 최신성 차이가 생길 수 있다. 따라서 Replica에서 조회한 통계는 “지금 막 Primary에 반영된 최신 거래까지 반드시 포함한다”라고 표현하면 안 된다.
+
+XChangePass에서 거래 통계는 최신 잔액, 최신 원장, 복구 판단, 정합성 검증에 사용하지 않는 파생 조회 데이터다. 그래서 월별 통계 조회는 Replica 후보가 될 수 있다.
+
+다만 Replica lag가 커질 경우 사용자는 최근 거래가 통계에 아직 반영되지 않은 것처럼 볼 수 있다. 따라서 통계 응답에는 `dataAsOf`, `replicaLagMillis`, `stale` 같은 최신성 정보를 포함하는 방향을 후속 구현 후보로 둔다.
+
+### 29.3 Primary 유지 대상과 Replica 허용 대상
+
+Primary를 유지해야 하는 대상은 아래와 같다.
+
+| 대상 | Primary 유지 이유 |
+| --- | --- |
+| 송금 요청 처리 | 잔액 차감, 잔액 증가, 원장 저장이 하나의 자금 트랜잭션 안에서 처리되어야 함 |
+| 잔액 조회 또는 잔액 기반 검증 | stale read가 잔액 부족/가능 판단을 잘못 만들 수 있음 |
+| 최신 거래 상태 판단 | 직후 상태 확인, 실패/완료 판단은 최신성이 필요함 |
+| `Idempotency-Key` 처리 | 중복 요청 차단은 Primary write model 기준이어야 함 |
+| recovery / reconciliation | 장애 거래와 원장 정합성 판단은 stale read를 허용하면 안 됨 |
+| 장애 거래 상태 판단 | 처리 중인 거래를 오래된 미완료 거래로 오판할 수 있음 |
+| 원장 정합성 판단 | XChangePass의 기준 데이터는 거래 원장이므로 Primary 기준이 필요함 |
+
+Replica 후보는 아래처럼 제한한다.
+
+| 대상 | Replica 후보 이유 |
+| --- | --- |
+| `MATERIALIZED_VIEW` 기반 월별 거래 통계 조회 | 조회용 파생 데이터이며 약간의 지연을 허용할 수 있음 |
+| 과거 기간 통계 조회 | 최신 거래 직후 판단에 직접 사용하지 않음 |
+| 사용자에게 최신성 지연을 안내할 수 있는 read model | `dataAsOf`로 기준 시각을 설명할 수 있음 |
+
+Replica routing 범위는 기존 검증과 동일하게 `mode=MATERIALIZED_VIEW` 월별 통계 조회로 제한한다. `@Transactional(readOnly = true)` 전체를 Replica로 보내는 방식은 사용하지 않는다.
+
+### 29.4 dataAsOf 응답 정책 후보
+
+`dataAsOf`는 응답 데이터가 어느 시점 기준인지 나타내는 값으로 둔다.
+
+정책 후보 응답은 아래 형태다.
+
+```json
+{
+  "mode": "MATERIALIZED_VIEW",
+  "source": "REPLICA",
+  "dataAsOf": "2026-07-08T18:32:15+09:00",
+  "replicaLagMillis": 1200,
+  "stale": false
+}
+```
+
+현재 구현에서 `GROUP_BY`와 `MATERIALIZED_VIEW`의 `dataAsOf`는 서비스 응답 생성 시각에 가깝고, `SUMMARY`는 `transaction_monthly_summary.data_as_of`로 refresh 기준 시각을 row에 담을 수 있다.
+
+후속 구현에서는 `MATERIALIZED_VIEW`도 조회 시각만 표시하기보다 아래 기준 중 하나를 명확히 선택해야 한다.
+
+| 후보 | 의미 | 장점 | 주의점 |
+| --- | --- | --- | --- |
+| 조회 시각 | API가 응답을 만든 시각 | 구현이 단순함 | Replica가 실제로 어디까지 재생했는지 직접 표현하지 못함 |
+| Replica replay 시각 | `pg_last_xact_replay_timestamp()` 기준 | Replica 최신성을 설명하기 좋음 | 트래픽이 없을 때 해석이 애매할 수 있음 |
+| MV refresh 기준 시각 | MV가 마지막으로 refresh된 시각 | 통계 데이터 생성 기준을 설명하기 좋음 | 현재 MV에는 refresh timestamp 컬럼이 없으므로 별도 관리가 필요함 |
+
+월별 통계 API에는 “정확히 현재 시각의 잔액” 같은 의미를 부여하지 않는다. 응답 문구도 최신 잔액이나 최신 원장과 분리해야 한다.
+
+### 29.5 Replica lag 허용 기준 후보
+
+월별 통계 조회는 파생 read model이므로 짧은 지연은 허용할 수 있다. 다만 지연이 커질 때 무조건 Primary로 fallback하면 read burst 상황에서 Primary 보호 효과가 약해진다.
+
+보수적인 정책 후보는 아래와 같다.
+
+| Replica lag | 응답 정책 후보 | 설명 |
+| ---: | --- | --- |
+| `lag <= 5초` | Replica 응답 허용, `stale=false` | 일반적인 월별 통계 조회에는 허용 가능한 범위로 본다 |
+| `5초 < lag <= 30초` | Replica 응답 가능, `stale=true` | 최신 거래가 아직 통계에 반영되지 않을 수 있음을 표시한다 |
+| `lag > 30초` | 통계 일시 지연 응답 또는 제한적 Primary fallback 검토 | Primary 보호가 우선이면 503 또는 통계 지연 안내가 더 안전할 수 있다 |
+
+Primary fallback은 최신 통계를 제공할 수 있다는 장점이 있지만, lag 또는 장애 상황에서 통계 read burst가 Primary로 몰릴 수 있다는 단점이 있다.
+
+따라서 기본 권장 방향은 아래와 같다.
+
+```text
+월별 통계는 Replica + dataAsOf를 기본으로 하고,
+lag가 과도할 때는 무조건 Primary fallback하기보다 stale 표시 또는 통계 일시 지연 응답을 우선 검토한다.
+송금/잔액/최신 거래 상태는 항상 Primary를 사용한다.
+```
+
+이 기준은 후속 구현 전 확정해야 할 정책 후보이며, 현재 코드에 반영한 확정 정책은 아니다.
+
+### 29.6 lag 측정 SQL
+
+Primary에서는 `pg_stat_replication`으로 WAL 전송/재생 상태를 확인할 수 있다.
+
+```sql
+SELECT application_name,
+       state,
+       sync_state,
+       pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS byte_lag,
+       write_lag,
+       flush_lag,
+       replay_lag
+FROM pg_stat_replication;
+```
+
+Replica에서는 recovery 상태와 마지막 replay timestamp를 확인할 수 있다.
+
+```sql
+SELECT pg_is_in_recovery();
+
+SELECT now() - pg_last_xact_replay_timestamp() AS replay_delay;
+```
+
+해석 시 주의점은 아래와 같다.
+
+* `write_lag`, `flush_lag`, `replay_lag`는 항상 값이 있는 것이 아니다.
+* 트래픽이 거의 없으면 `pg_last_xact_replay_timestamp()` 기준 delay가 실제 장애 lag처럼 보일 수 있다.
+* byte lag와 replay timestamp를 함께 봐야 한다.
+* 통계 응답 정책에는 byte lag보다 호출자가 이해할 수 있는 `dataAsOf` 표현이 더 중요할 수 있다.
+
+### 29.7 pg_stat_statements와 EXPLAIN의 역할 차이
+
+`pg_stat_statements`와 `EXPLAIN (ANALYZE, BUFFERS)`는 같은 목적의 도구가 아니다.
+
+| 도구 | 역할 | 이번 검증에서의 의미 |
+| --- | --- | --- |
+| `pg_stat_statements` | 실제 부하 중 누적 SQL 통계 확인 | Section 28의 10분 steady/burst 부하에서 `statistics_mv`가 어느 DB에 얼마나 쌓였는지 보여줌 |
+| `EXPLAIN (ANALYZE, BUFFERS)` | 대표 쿼리 1회 실행 계획 확인 | 낮은 `mean_exec_time`이 index scan, 낮은 buffer read와 맞는지 설명하는 보조 근거 |
+
+따라서 Section 28의 핵심 근거는 `pg_stat_statements`다. EXPLAIN은 해당 SQL이 왜 낮은 실행 시간을 보일 수 있는지 설명하는 보조 근거로 사용한다.
+
+### 29.8 MATERIALIZED_VIEW 조회 EXPLAIN 근거
+
+`MATERIALIZED_VIEW` 월별 통계 조회 SQL은 아래 조건으로 `mv_transaction_monthly_statistics`를 조회한다.
+
+```sql
+SELECT user_id,
+       bucket_month,
+       source_type,
+       transaction_type,
+       currency,
+       direction,
+       amount_sum,
+       transaction_count
+FROM mv_transaction_monthly_statistics
+WHERE user_id = ?
+  AND bucket_month >= ?
+  AND bucket_month < ?
+ORDER BY bucket_month, source_type, transaction_type, currency, direction;
+```
+
+MV에는 아래 unique index가 있다.
+
+```text
+ux_mv_transaction_monthly_statistics
+(user_id, bucket_month, source_type, transaction_type, currency, direction)
+```
+
+기존 EXPLAIN 결과에서 heavy user 12개월 조회는 Primary와 Replica 모두 index scan을 사용했다.
+
+| 출처 | DB | Plan | Rows | Buffers | Execution Time |
+| --- | --- | --- | ---: | --- | ---: |
+| Section 12 | Primary | Index Scan | 397 | shared hit=11 read=6 | 0.125ms |
+| Section 12 | Replica | Index Scan | 397 | shared hit=17 | 0.120ms |
+| Section 18 run 1 | Primary | Index Scan | 397 | shared hit=17 | 0.071ms |
+| Section 18 run 1 | Replica | Index Scan | 397 | shared hit=17 | 0.077ms |
+| Section 18 run 2 | Primary | Index Scan | 397 | shared hit=17 | 0.072ms |
+| Section 18 run 2 | Replica | Index Scan | 397 | shared hit=17 | 0.069ms |
+| Section 18 run 3 | Primary | Index Scan | 397 | shared hit=17 | 0.083ms |
+| Section 18 run 3 | Replica | Index Scan | 397 | shared hit=17 | 0.069ms |
+
+Section 28의 `pg_stat_statements`에서도 `statistics_mv`는 10분 부하 중 낮은 평균 실행 시간으로 관측됐다.
+
+| Condition | Scenario | DB | Calls | Mean exec | Shared hit | Shared read |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| Steady | Single DB + MV | Primary | 60,001.0 | 0.126ms | 396,005.0 | 2.0 |
+| Steady | Primary + Replica + MV Hikari | Replica | 60,000.7 | 0.128ms | 396,004.0 | 0 |
+| Burst | Single DB + MV | Primary | 60,002.7 | 0.101ms | 396,016.0 | 2.0 |
+| Burst | Primary + Replica + MV Hikari | Replica | 60,002.3 | 0.108ms | 396,012.3 | 0 |
+
+이 두 결과를 연결하면 아래처럼 해석할 수 있다.
+
+* MV 조회는 원본 거래 테이블을 다시 집계하지 않고 이미 집계된 `mv_transaction_monthly_statistics`를 읽는다.
+* `user_id`, `bucket_month` 조건이 unique index 선두 컬럼과 맞아 index scan으로 처리된다.
+* 대표 EXPLAIN에서 shared buffer hit 위주로 처리됐고, Section 28의 반복 부하에서도 shared read는 거의 없었다.
+* 그래서 `statistics_mv`의 PostgreSQL 내부 실행 시간은 Primary/Replica 모두 0.1ms대 수준으로 관측됐다.
+
+Replica 구조가 쿼리 plan 자체를 바꾼 것은 아니다. 같은 MV 조회 SQL을 Primary에서 실행하느냐 Replica에서 실행하느냐가 달라진 것이다. Section 28의 핵심은 `statistics_mv` read 부하가 Primary에서 Replica로 이동했다는 점이다.
+
+### 29.9 현재 기준 최종 해석
+
+현재 로컬 검증 기준으로는 아래처럼 정리한다.
+
+* 송금/잔액/원장/idempotency/recovery/reconciliation/latest state 판단은 Primary에 둔다.
+* `MATERIALIZED_VIEW` 월별 통계 조회만 제한적으로 Replica 후보로 둔다.
+* 통계 read는 사용자 화면/분석용 파생 데이터이며 최신 정합성 판단에 사용하지 않는다.
+* Replica 응답에는 후속 구현에서 `dataAsOf`, `replicaLagMillis`, `stale` 같은 최신성 정보를 제공하는 방향을 검토한다.
+* Section 28의 낮은 `statistics_mv` SQL 실행 시간은 MV index scan과 shared buffer hit 중심의 실행 계획으로 설명할 수 있다.
+* Read Replica의 의미는 송금 성능 개선 확정이 아니라, 통계 read 부하를 Primary write path에서 분리하는 후보 구조다.
+
+이 결과는 로컬 Docker 기반 검증이다. 운영 환경 도입 완료나 실제 사용자 트래픽 개선으로 표현하지 않는다.
+
+### 29.10 후속 구현 후보
+
+후속 구현 후보는 아래와 같다.
+
+1. `MATERIALIZED_VIEW` refresh 기준 시각을 별도 metadata table 또는 refresh job 기록으로 관리한다.
+2. 통계 API 응답에 `source`, `dataAsOf`, `replicaLagMillis`, `stale` 필드를 추가할지 결정한다.
+3. Replica lag 측정 query를 health/metric으로 수집하되, 송금 write path에는 연결하지 않는다.
+4. lag 초과 시 정책을 `stale 응답`, `통계 일시 지연 응답`, `제한적 Primary fallback` 중 하나로 확정한다.
+5. `EXPLAIN (ANALYZE, BUFFERS)`를 Section 28과 같은 seed/run 조건에서 다시 수집해 raw 결과를 별도 파일로 보관한다.
+6. 클라우드 또는 분리된 서버 환경 검증은 로컬 경향 재현 용도로 별도 작업에서 진행한다.
