@@ -2318,6 +2318,7 @@ Replica를 직접 갱신하거나 Replica에서 MV를 refresh하는 구조가 �
 | `TransactionStatisticsJdbcRepository.refreshMaterializedView()` | 기본 `JdbcTemplate`으로 일반 MV refresh 실행 |
 | `TransactionStatisticsJdbcRepository.refreshMaterializedViewConcurrently()` | 기본 `JdbcTemplate`으로 concurrent MV refresh 실행 |
 | `TransactionStatisticsService` | 두 refresh 메서드를 repository에 위임 |
+| `TransactionStatisticsMaterializedViewRefreshScheduler` | 설정된 주기로 Primary에서 초기 일반 refresh 및 이후 concurrent refresh 실행 |
 | `TransactionStatisticsK6Seed` | benchmark seed 적재 후 Primary 연결에서 일반 refresh 실행 |
 | `TransactionStatisticsReplicaJdbcConfig` | Replica 조회 전용 HikariCP `JdbcTemplate` 구성 |
 
@@ -2333,7 +2334,17 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY mv_transaction_monthly_statistics;
 
 Replica 전용 `JdbcTemplate`은 `findMonthlyStatisticsFromMaterializedView()`의 조회 경로에서만 선택된다. `GROUP_BY`, `SUMMARY`, MV refresh에는 사용되지 않는다.
 
-현재 코드에는 MV를 주기적으로 갱신하는 전용 `@Scheduled` job이나 외부 공개 refresh API가 없다. 따라서 refresh 주기, 실패 재시도, 마지막 성공 시각 저장은 구현 완료 사항이 아니라 후속 운영 정책으로 남아 있다.
+MV refresh scheduler는 아래 설정을 명시적으로 활성화한 경우에만 동작한다.
+
+```properties
+transaction.statistics.materialized-view.refresh.enabled=true
+transaction.statistics.materialized-view.refresh.fixed-delay=300000
+transaction.statistics.materialized-view.refresh.initial-delay=60000
+```
+
+기본값은 비활성화다. 활성화하면 최초 60초 후 실행하고, 이전 실행이 끝난 시점부터 5분 간격으로 Primary에서 refresh를 수행한다. migration이 MV를 `WITH NO DATA`로 생성하므로 첫 실행은 일반 refresh로 MV를 populate하고, 이후 실행부터 concurrent refresh를 사용한다. 같은 애플리케이션 인스턴스 안에서 이전 refresh가 진행 중이면 다음 실행을 건너뛰며, 성공 시 실행 시간을 기록하고 실패 시 예외 로그를 남긴다.
+
+외부 공개 refresh API는 추가하지 않았다. 마지막 성공 시각의 영속 저장, 여러 애플리케이션 인스턴스 사이의 분산 실행 제어 및 실패 재시도 정책은 후속 운영 기준으로 남아 있다.
 
 ### 31.3 Primary refresh와 WAL replication 흐름
 
@@ -2427,7 +2438,7 @@ MV 조회의 메모리와 CPU 사용은 Replica에서 작게 발생하지만, MV
 refresh 부하가 송금과 직접 경합하지 않도록 실제 적용 전에는 아래 기준을 확정해야 한다.
 
 * refresh 실행 주기와 실행 시간대
-* 동시 refresh 방지
+* 여러 애플리케이션 인스턴스 사이의 동시 refresh 방지
 * refresh timeout과 실패 재시도
 * 마지막 성공 refresh 시각 저장
 * refresh 중 Primary CPU, I/O, temp file 및 WAL 증가량

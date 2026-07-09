@@ -423,6 +423,25 @@ public class TransactionStatisticsJdbcRepository implements TransactionStatistic
     }
 
     @Override
+    public void refreshMaterializedViewForScheduledRun() {
+        Boolean populated = jdbcTemplate.queryForObject(
+                """
+                select ispopulated
+                from pg_matviews
+                where schemaname = current_schema()
+                  and matviewname = 'mv_transaction_monthly_statistics'
+                """,
+                Boolean.class
+        );
+
+        if (Boolean.TRUE.equals(populated)) {
+            refreshMaterializedViewConcurrently();
+            return;
+        }
+        refreshMaterializedView();
+    }
+
+    @Override
     public void refreshMonthlySummary(YearMonth fromMonth, YearMonth toMonth) {
         Timestamp fromTimestamp = toStartTimestamp(fromMonth);
         Timestamp toTimestamp = toExclusiveEndTimestamp(toMonth);

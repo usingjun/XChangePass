@@ -159,6 +159,19 @@ class TransactionStatisticsJdbcRepositoryTest {
     }
 
     @Test
+    void scheduledRefreshPopulatesNewMaterializedViewBeforeUsingConcurrentRefresh() {
+        assertThat(materializedViewPopulated()).isFalse();
+
+        repository.refreshMaterializedViewForScheduledRun();
+
+        assertThat(materializedViewPopulated()).isTrue();
+
+        repository.refreshMaterializedViewForScheduledRun();
+
+        assertThat(materializedViewPopulated()).isTrue();
+    }
+
+    @Test
     void summaryStatisticsMatchDirectGroupByAndMaterializedViewAfterRefresh() {
         User user = persistUser("summary-user@example.com", "summaryuser", "010-7000-7000");
         User receiver = persistUser("summary-receiver@example.com", "summaryrecv", "010-8000-8000");
@@ -734,6 +747,18 @@ class TransactionStatisticsJdbcRepositoryTest {
         ClassPathResource resource = new ClassPathResource(location);
         String sql = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         jdbcTemplate.execute(sql);
+    }
+
+    private boolean materializedViewPopulated() {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                """
+                select ispopulated
+                from pg_matviews
+                where schemaname = current_schema()
+                  and matviewname = 'mv_transaction_monthly_statistics'
+                """,
+                Boolean.class
+        ));
     }
 
     private User persistUser(String email, String nickname, String phoneNumber) {

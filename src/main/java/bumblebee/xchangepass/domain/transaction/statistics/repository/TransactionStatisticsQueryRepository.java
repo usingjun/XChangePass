@@ -19,5 +19,7 @@ public interface TransactionStatisticsQueryRepository {
 
     void refreshMaterializedViewConcurrently();
 
+    void refreshMaterializedViewForScheduledRun();
+
     void refreshMonthlySummary(YearMonth fromMonth, YearMonth toMonth);
 }

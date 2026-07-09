@@ -62,6 +62,10 @@ public class TransactionStatisticsService {
         queryRepository.refreshMaterializedViewConcurrently();
     }
 
+    public void refreshMaterializedViewForScheduledRun() {
+        queryRepository.refreshMaterializedViewForScheduledRun();
+    }
+
     @Transactional
     public void refreshMonthlySummary(YearMonth fromMonth, YearMonth toMonth) {
         validateMonthRange(fromMonth, toMonth);
