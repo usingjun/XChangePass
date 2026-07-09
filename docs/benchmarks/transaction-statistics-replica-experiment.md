@@ -2284,3 +2284,214 @@ Read Replica 기반 통계 조회 구조는 XChangePass 프로젝트에 도입 �
 AWS EC2 3대 환경 재현 검증은 별도 작업에서 진행한다.
 
 해당 결과가 완료되면 로컬 HikariCP 결과와 비교해 후속 섹션에 반영한다.
+
+## 31. MATERIALIZED_VIEW refresh와 Replica 반영 구조
+
+### 31.1 목적
+
+이번 섹션은 `MATERIALIZED_VIEW` 기반 월별 통계를 Primary에서 어떻게 갱신하고, 갱신 결과를 Read Replica에서 어떻게 조회하는지 코드와 로컬 PostgreSQL 구성 기준으로 정리한다.
+
+핵심 구조는 아래와 같다.
+
+```text
+거래 write / 잔액 변경 / 원장 저장 / idempotency 처리
+→ Primary DB
+
+MATERIALIZED_VIEW refresh
+→ Primary DB
+
+Primary 변경사항과 MV refresh 결과
+→ PostgreSQL WAL streaming replication
+
+MATERIALIZED_VIEW 월별 통계 조회
+→ Read Replica DB
+```
+
+Replica를 직접 갱신하거나 Replica에서 MV를 refresh하는 구조가 아니다. 쓰기와 refresh는 Primary에서 수행하고, Replica는 WAL replay를 통해 그 결과를 따라간다.
+
+### 31.2 현재 refresh 구현 확인
+
+현재 refresh 관련 구현은 아래와 같다.
+
+| 위치 | 역할 |
+| --- | --- |
+| `TransactionStatisticsJdbcRepository.refreshMaterializedView()` | 기본 `JdbcTemplate`으로 일반 MV refresh 실행 |
+| `TransactionStatisticsJdbcRepository.refreshMaterializedViewConcurrently()` | 기본 `JdbcTemplate`으로 concurrent MV refresh 실행 |
+| `TransactionStatisticsService` | 두 refresh 메서드를 repository에 위임 |
+| `TransactionStatisticsK6Seed` | benchmark seed 적재 후 Primary 연결에서 일반 refresh 실행 |
+| `TransactionStatisticsReplicaJdbcConfig` | Replica 조회 전용 HikariCP `JdbcTemplate` 구성 |
+
+repository의 refresh SQL은 아래와 같다.
+
+```sql
+REFRESH MATERIALIZED VIEW mv_transaction_monthly_statistics;
+
+REFRESH MATERIALIZED VIEW CONCURRENTLY mv_transaction_monthly_statistics;
+```
+
+두 refresh 메서드는 Replica 전용 `transactionStatisticsReplicaJdbcTemplate`이 아니라 애플리케이션의 기본 `JdbcTemplate`을 사용한다. 로컬 A/B 실행에서 기본 datasource URL은 Primary PostgreSQL을 가리키므로 refresh는 Primary에서 실행된다.
+
+Replica 전용 `JdbcTemplate`은 `findMonthlyStatisticsFromMaterializedView()`의 조회 경로에서만 선택된다. `GROUP_BY`, `SUMMARY`, MV refresh에는 사용되지 않는다.
+
+현재 코드에는 MV를 주기적으로 갱신하는 전용 `@Scheduled` job이나 외부 공개 refresh API가 없다. 따라서 refresh 주기, 실패 재시도, 마지막 성공 시각 저장은 구현 완료 사항이 아니라 후속 운영 정책으로 남아 있다.
+
+### 31.3 Primary refresh와 WAL replication 흐름
+
+로컬 Replica 구성은 `pg_basebackup -R`, `wal_level=replica`, `hot_standby=on`을 사용한 PostgreSQL physical streaming replication이다.
+
+MV 최신화와 조회 흐름은 아래와 같다.
+
+1. 송금 API가 Primary에서 잔액 변경, 원장 저장, 거래 상태 변경을 수행한다.
+2. Primary PostgreSQL이 해당 변경사항을 WAL에 기록한다.
+3. Replica PostgreSQL이 WAL을 수신하고 replay한다.
+4. Primary에서 `REFRESH MATERIALIZED VIEW` 또는 `REFRESH MATERIALIZED VIEW CONCURRENTLY`를 실행한다.
+5. Primary가 MV 갱신 결과를 WAL에 기록한다.
+6. Replica가 해당 WAL을 replay해 갱신된 MV 결과를 따라간다.
+7. 통계 API가 Replica의 `mv_transaction_monthly_statistics`를 unique index 기반으로 조회한다.
+
+```text
+Primary write
+  → Primary WAL
+  → Replica WAL replay
+
+Primary MV refresh
+  → MV 변경 WAL
+  → Replica WAL replay
+  → Replica MV 조회
+```
+
+이 구조에서 Replica의 통계 결과는 두 시점의 영향을 받는다.
+
+* Primary에서 마지막으로 MV를 refresh한 시점
+* 해당 refresh WAL을 Replica가 replay한 시점
+
+따라서 통계 최신성은 Replica lag만으로 결정되지 않는다. 마지막 MV refresh 시각과 Replica replay 지연을 함께 관리해야 한다.
+
+### 31.4 MV refresh 비용과 조회 비용의 분리
+
+이 구조는 통계 계산 비용을 없애는 구조가 아니다. 요청마다 발생하던 원본 거래 테이블의 `GROUP_BY` 비용을 refresh 시점으로 옮기고, 반복되는 통계 read 트래픽을 Replica로 분리하는 구조다.
+
+| 방식 | 요청 시점 비용 | 갱신 비용 | Primary write path와의 경합 |
+| --- | --- | --- | --- |
+| `GROUP_BY` | 요청마다 원본 거래 테이블 집계 | 별도 없음 | 통계 요청이 많으면 Primary에서 직접 경합 |
+| MV + Single DB | Primary의 MV index scan | Primary refresh 비용 | 통계 read가 Primary에 남음 |
+| MV + Read Replica | Replica의 MV index scan | Primary refresh 및 WAL 발생 | 통계 read를 Replica로 분리 |
+
+MV 조회는 이미 집계된 결과를 index scan으로 읽기 때문에 요청 시점 비용이 작다. 반면 MV refresh는 Primary에서 원본 거래 데이터를 읽고 다시 집계하므로 CPU, memory, disk I/O 및 WAL 비용이 발생한다.
+
+따라서 MV + Read Replica 구조의 이점은 아래 두 가지다.
+
+* 요청 시점의 반복 `GROUP_BY`를 MV index scan으로 대체한다.
+* 통계 read 트래픽이 Primary write path와 직접 경합하지 않도록 Replica로 분리한다.
+
+MV refresh 자체가 Primary에 주는 부하는 사라지지 않는다. refresh 주기는 통계 최신성 요구사항과 Primary 여유 자원을 함께 고려해 정해야 한다.
+
+### 31.5 REFRESH MATERIALIZED VIEW CONCURRENTLY 사용 기준
+
+concurrent refresh는 아래 SQL로 실행한다.
+
+```sql
+REFRESH MATERIALIZED VIEW CONCURRENTLY mv_transaction_monthly_statistics;
+```
+
+`CONCURRENTLY`를 사용하려면 MV row를 고유하게 식별할 수 있는 unique index가 필요하다. 현재 migration에는 아래 조합의 unique index가 존재한다.
+
+```text
+ux_mv_transaction_monthly_statistics
+(user_id, bucket_month, source_type, transaction_type, currency, direction)
+```
+
+장점은 refresh 중 기존 MV 조회의 blocking을 줄일 수 있다는 점이다. 조회를 계속 제공해야 하는 Read Replica 통계 구조와도 방향이 맞는다.
+
+다만 아래 한계가 있다.
+
+* 원본 데이터를 읽고 집계하는 계산 비용은 사라지지 않는다.
+* 일반 refresh보다 항상 빠른 방식은 아니다.
+* 갱신 결과가 WAL로 기록되므로 refresh 중 Replica lag가 일시적으로 증가할 수 있다.
+* 동시에 같은 MV에 여러 refresh를 실행하지 않도록 실행 주체를 단일화해야 한다.
+* refresh 주기는 `dataAsOf`와 lag 허용 정책에 맞춰 결정해야 한다.
+
+기존 benchmark에서도 일반 refresh와 concurrent refresh 비용을 별도로 측정했다. 따라서 `CONCURRENTLY`는 “더 빠른 refresh”가 아니라 “조회 가용성을 유지하기 위한 refresh 선택지”로 해석한다.
+
+### 31.6 자원 사용 위치
+
+| 작업 | 실행 위치 | 주요 자원 |
+| --- | --- | --- |
+| 송금 write | Primary | CPU, lock, WAL, disk I/O |
+| MV refresh | Primary | CPU, shared buffers, work memory, temp file 가능성, disk I/O, WAL |
+| WAL replay | Replica | replay CPU, disk I/O |
+| MV 통계 조회 | Replica | buffer cache, index scan, 낮은 CPU |
+
+MV 조회의 메모리와 CPU 사용은 Replica에서 작게 발생하지만, MV refresh의 메모리, CPU 및 WAL 비용은 Primary에서 발생한다.
+
+refresh 부하가 송금과 직접 경합하지 않도록 실제 적용 전에는 아래 기준을 확정해야 한다.
+
+* refresh 실행 주기와 실행 시간대
+* 동시 refresh 방지
+* refresh timeout과 실패 재시도
+* 마지막 성공 refresh 시각 저장
+* refresh 중 Primary CPU, I/O, temp file 및 WAL 증가량
+* refresh 이후 Replica replay lag 회복 시간
+
+### 31.7 Summary Table과 Outbox 기반 후속 확장안
+
+데이터 증가로 전체 MV refresh 비용이나 Replica lag가 커질 경우 아래 방식으로 확장할 수 있다.
+
+#### Summary Table batch/upsert
+
+일정 주기마다 변경된 거래 범위를 읽고 `user/month/currency/direction` 집계 row만 Summary Table에 upsert한다.
+
+장점:
+
+* 전체 MV refresh보다 갱신 범위를 줄일 수 있다.
+* row별 `dataAsOf` 관리가 쉽다.
+
+주의점:
+
+* 중복 반영 방지가 필요하다.
+* batch 실패와 재처리 기준이 필요하다.
+* 원장과 Summary 결과의 정합성 검증이 필요하다.
+
+#### Outbox 기반 비동기 증분 집계
+
+거래 완료 트랜잭션 안에서 Outbox event를 저장하고, 별도 worker가 event를 읽어 월별 Summary Table에 멱등적으로 반영한다.
+
+장점:
+
+* write path와 통계 집계를 분리할 수 있다.
+* 전체 재집계 대신 변경분만 반영할 수 있다.
+* 실패 재처리와 처리 이력을 관리할 수 있다.
+
+주의점:
+
+* event 중복 처리 방지와 멱등성이 필요하다.
+* Outbox 처리 지연이 발생할 수 있다.
+* 누락이나 오차를 보정하는 재집계 job이 필요하다.
+* 현재 MV 구조보다 구현과 운영 복잡도가 커진다.
+
+현재 단계에서는 MV refresh + Replica 조회가 구현 복잡도와 검증 가능성 사이에서 가장 현실적인 구조다. MV refresh 비용이나 Replica lag가 허용 범위를 넘을 때 Summary Table batch/upsert 또는 Outbox 기반 비동기 증분 집계를 검토한다.
+
+### 31.8 최종 포트폴리오 표현
+
+```text
+거래 write는 Primary에서만 처리하고, Read Replica는 PostgreSQL WAL streaming replication으로
+Primary 변경사항을 따라가도록 구성했습니다. 월별 통계는 MATERIALIZED_VIEW를 Primary에서 refresh한 뒤
+Replica에서 조회하도록 분리해, 요청 시점의 GROUP_BY 비용을 줄이고 통계 read 부하가
+Primary write path와 직접 경합하지 않도록 설계했습니다.
+```
+
+```text
+MV 조회는 Replica에서 처리하지만 refresh의 CPU, I/O, WAL 비용은 Primary에서 발생한다는 점을 분리해 분석했습니다.
+refresh 주기와 Replica lag를 dataAsOf 기준으로 관리하고, 데이터 규모가 커질 경우
+Summary Table batch/upsert 또는 Outbox 기반 비동기 증분 집계로 확장할 수 있도록 후속 구조를 정리했습니다.
+```
+
+최종 한 문장:
+
+```text
+MATERIALIZED_VIEW 기반 월별 통계 조회를 Read Replica로 분리하고,
+Primary에서 refresh된 MV 결과를 WAL streaming replication으로 Replica에 반영하는 구조를 도입했습니다.
+이를 통해 요청 시점의 GROUP_BY 비용을 줄이고 통계 read 부하가 Primary write path와 직접 경합하지 않도록 설계했습니다.
+```
+
+이 표현은 XChangePass 프로젝트에 구조를 구현하고 로컬 부하 테스트로 검증했다는 의미다. 실제 운영 서비스 배포 완료 또는 실제 사용자 트래픽 검증 완료를 의미하지 않는다.
