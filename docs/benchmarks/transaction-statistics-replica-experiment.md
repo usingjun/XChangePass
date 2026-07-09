@@ -2107,123 +2107,84 @@ Replica 구조가 쿼리 plan 자체를 바꾼 것은 아니다. 같은 MV 조�
 5. `EXPLAIN (ANALYZE, BUFFERS)`를 Section 28과 같은 seed/run 조건에서 다시 수집해 raw 결과를 별도 파일로 보관한다.
 6. 클라우드 또는 분리된 서버 환경 검증은 로컬 경향 재현 용도로 별도 작업에서 진행한다.
 
-## 30. 로컬 검증 기준 종합 판단
+## 30. Read Replica 도입 결과와 로컬 검증 기준 종합 판단
 
 ### 30.1 목적
 
-이번 섹션은 클라우드 결과를 반영하기 전, 로컬 Docker 기반 Read Replica 검증 결과만으로 현재 판단을 정리한다.
+이번 섹션은 XChangePass에 구현한 Read Replica 기반 통계 조회 구조와 로컬 검증 결과를 포트폴리오에서 설명할 수 있도록 결론 중심으로 정리한다.
 
 핵심 질문은 아래다.
 
 ```text
-로컬 Hikari 기반 검증 기준으로,
-MATERIALIZED_VIEW 월별 통계 조회를 Read Replica 후보로 둘 수 있는가?
-그 근거와 한계는 무엇인가?
-운영/포트폴리오에서 어떤 표현까지 안전한가?
+XChangePass 프로젝트에서 MATERIALIZED_VIEW 기반 월별 통계 조회를
+Read Replica로 분리하는 구조를 도입했고,
+HikariCP 기반 Single DB와 Primary + Replica 조건에서 어떤 결과를 확인했는가?
 ```
 
-이번 섹션은 종합 판단 문서화이며, 새로운 성능 측정이나 코드 변경은 포함하지 않는다.
+여기서 “도입 완료”는 XChangePass 프로젝트에 구조를 구현하고 검증했다는 의미다. 실제 운영 서비스에 배포하거나 실제 사용자 트래픽으로 검증했다는 의미는 아니다.
 
-### 30.2 통계 조회 방식별 최종 역할
+### 30.2 도입한 구조
 
-현재 로컬 검증 기준에서 세 방식의 역할은 아래처럼 구분한다.
+XChangePass는 거래 통계 조회 부하를 Primary write path와 분리하기 위해 Primary PostgreSQL과 Read Replica PostgreSQL을 분리하고, `MATERIALIZED_VIEW` 기반 월별 통계 조회만 Replica로 라우팅하는 구조를 도입했다.
 
-| 방식 | 역할 | 판단 |
-| --- | --- | --- |
-| `GROUP_BY` | baseline, correctness 검증, 소규모 또는 관리자성 확인용 | 원본 거래 테이블을 직접 `UNION ALL + GROUP BY` 하므로 heavy user 장기 조회에서 비용 증가 가능성이 크다 |
-| `MATERIALIZED_VIEW` | 월별 거래 통계 조회의 주 후보 | 이미 집계된 MV를 index scan으로 조회하며, 현재 Read Replica routing 대상이다 |
-| `SUMMARY` | 보조 후보 또는 별도 관리 전략이 필요한 read model | 조회 비용은 낮지만 refresh delete/insert, dead tuple, vacuum/analyze 관리 비용이 있다 |
+Primary datasource는 기존 Spring Boot HikariCP datasource를 사용하고, Replica 통계 조회는 별도 HikariCP datasource와 `JdbcTemplate`으로 분리했다.
 
-`GROUP_BY`는 항상 부적합한 방식이 아니다. 기준 결과 검증과 baseline 측정에는 필요하다. 다만 사용자-facing 월별 통계의 기본 경로로 두기에는 heavy user 장기 조회와 tail latency 부담이 확인됐다.
+Read Replica routing은 전체 `@Transactional(readOnly = true)` 범위에 적용하지 않았다. 최신성을 허용할 수 있는 `mode=MATERIALIZED_VIEW` 월별 통계 조회에만 선택적으로 적용했다.
 
-`MATERIALIZED_VIEW`는 현재 결과 기준으로 조회 안정성, refresh 비용, maintenance 부담의 균형이 가장 좋다. 그래서 Read Replica 후보 routing도 `MATERIALIZED_VIEW` 월별 통계 조회에만 제한한다.
+통계 조회 방식의 역할은 아래처럼 정리한다.
 
-`SUMMARY`는 `dataAsOf` 표현과 조회 안정성 면에서 장점이 있지만, 현재 refresh 방식에서는 delete/insert로 인한 dead tuple과 maintenance 비용이 확인됐다. 따라서 Summary는 조회 성능만 보고 메인 후보로 확정하지 않는다.
-
-### 30.3 Read Replica 적용 범위
-
-Replica 허용 대상은 아래로 제한한다.
-
-| 대상 | 판단 |
+| 방식 | 역할 |
 | --- | --- |
-| `MATERIALIZED_VIEW` 기반 월별 거래 통계 조회 | Replica 후보 |
-| 과거 기간 통계 조회 | 최신 상태 판단과 분리되는 경우 Replica 후보 |
-| 사용자에게 최신성 지연을 안내할 수 있는 read model | `dataAsOf` 정책이 있을 때 Replica 후보 |
+| `GROUP_BY` | 원본 거래 테이블을 직접 집계하는 baseline 및 결과 동일성 검증 기준 |
+| `MATERIALIZED_VIEW` | 월별 거래 통계 조회의 주 방식이자 Read Replica routing 대상 |
+| `SUMMARY` | 조회 비용은 낮지만 refresh와 dead tuple 관리가 필요한 보조 후보 |
 
-Primary 유지 대상은 아래다.
+### 30.3 최종 비교 기준
 
-| 대상 | Primary 유지 이유 |
-| --- | --- |
-| 송금 처리 | 잔액 변경과 원장 저장이 하나의 자금 트랜잭션으로 처리되어야 함 |
-| 잔액 조회/검증 | stale read가 사용자 잔액 판단을 잘못 만들 수 있음 |
-| 최신 거래 상태 판단 | 직후 상태 확인은 최신성이 필요함 |
-| `Idempotency-Key` 처리 | 중복 요청 차단은 Primary write model 기준이어야 함 |
-| recovery / reconciliation | 장애 거래와 원장 정합성 판단에는 stale read를 허용하면 안 됨 |
-| 원장 정합성 판단 | XChangePass의 기준 데이터는 거래 원장이므로 Primary 기준이 필요함 |
-| 장애 거래 판단 | 처리 중인 거래를 오래된 미완료 거래로 오판하면 안 됨 |
+최종 성능 판단은 HikariCP 기반 동일 조건 A/B 결과만 사용한다.
 
-Read Replica 적용은 `readOnly` 전체 routing이 아니라, `MATERIALIZED_VIEW` 월별 통계 조회에 한정한다.
-
-### 30.4 DriverManager 결과와 Hikari 결과의 구분
-
-DriverManagerDataSource 기반 Replica 결과는 최종 성능 비교가 아니라 원인 분석용 결과다.
-
-이전 고부하 검증에서는 PostgreSQL 내부 `statistics_mv` SQL 평균 실행 시간이 Replica에서 낮거나 유사했지만, k6 기준 통계 API HTTP latency는 Replica 조건에서 더 높게 관측됐다. 계층별 timing을 추가하자 증가분 대부분이 `statistics.repository.jdbc` 구간에 집중됐다.
-
-이후 Replica datasource를 HikariDataSource로 전환했고, DriverManager 기반에서 보였던 8ms대 Replica JDBC 병목은 운영형 steady/burst 조건에서 재현되지 않았다.
-
-따라서 최종 성능 비교에는 아래 두 조건만 사용한다.
-
-| 비교 조건 | 사용 여부 | 이유 |
+| 구분 | 조건 | 목적 |
 | --- | --- | --- |
-| DriverManagerDataSource 기반 Primary + Replica | 최종 비교에서 제외 | Replica HTTP latency 원인 분석용 |
-| Hikari 기반 Single DB + MV | 최종 로컬 비교 기준 | Primary 단일 DB에서 MV 통계 조회를 처리하는 기준 |
-| Hikari 기반 Primary + Replica + MV | 최종 로컬 비교 기준 | MV 통계 read를 Replica로 분리한 후보 구조 |
+| Baseline | HikariCP 기반 Single DB + `MATERIALIZED_VIEW` | Primary 단일 DB에서 통계 조회와 송금 처리를 함께 수행하는 기준 |
+| Replica | HikariCP 기반 Primary + Read Replica + `MATERIALIZED_VIEW` | 통계 read를 Replica로 분리한 구조 |
 
-DriverManager 결과는 Replica 구조 자체의 한계로 해석하지 않는다.
+초기 Replica 조건에서 HTTP latency가 높게 관측됐지만, 계층별 timing 분석 결과 증가분이 `statistics.repository.jdbc` 구간에 집중됐다. 원인을 DriverManagerDataSource 기반 connection 처리 비용으로 좁혔고, Replica datasource를 HikariCP로 전환한 뒤 최종 비교를 다시 수행했다.
 
-### 30.5 Hikari 기반 운영형 mixed load 결과 요약
+따라서 DriverManagerDataSource 기반 결과는 초기 Replica latency의 원인 분석을 설명하는 보조 근거로만 사용하며, 최종 성능 비교 표와 결론에서는 제외한다.
 
-Section 28의 운영형 mixed load는 아래 조건으로 실행했다.
+### 30.4 HikariCP 기반 mixed load 검증 결과
+
+Section 28에서는 HikariCP 기반 Single DB와 Primary + Read Replica를 동일한 steady/burst mixed load 조건에서 각각 3회 비교했다.
 
 | 항목 | Steady | Burst |
 | --- | --- | --- |
-| Duration | 10m | 10m |
-| Transfer rate | 10/s | 10/s |
-| Statistics rate | 100/s | 0~4m: 50/s, 4~6m: 300/s, 6~10m: 50/s |
-| 반복 | Single DB 3회, Primary + Replica 3회 | Single DB 3회, Primary + Replica 3회 |
+| 실행 시간 | 10분 | 10분 |
+| 송금 요청률 | 10/s | 10/s |
+| 통계 요청률 | 100/s | 0~4분: 50/s, 4~6분: 300/s, 6~10분: 50/s |
+| 반복 | 조건별 3회 | 조건별 3회 |
 | 통계 mode | `MATERIALIZED_VIEW` | `MATERIALIZED_VIEW` |
 
-핵심 결과는 아래다.
+핵심 API 결과는 아래다.
 
-| Condition | Scenario | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 |
+| 조건 | 구성 | Transfer avg | Transfer p95 | Transfer p99 | Statistics avg | Statistics p95 | Statistics p99 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Steady T10/S100 | Single DB + MV | 19.663ms | 24.920ms | 28.094ms | 4.923ms | 6.649ms | 8.148ms |
-| Steady T10/S100 | Primary + Replica + MV Hikari | 20.162ms | 26.155ms | 29.415ms | 4.553ms | 6.524ms | 8.025ms |
+| Steady T10/S100 | Primary + Replica + MV | 20.162ms | 26.155ms | 29.415ms | 4.553ms | 6.524ms | 8.025ms |
 | Burst T10/S50-S300-S50 | Single DB + MV | 20.696ms | 28.360ms | 32.206ms | 4.108ms | 7.942ms | 9.722ms |
-| Burst T10/S50-S300-S50 | Primary + Replica + MV Hikari | 20.830ms | 29.034ms | 32.369ms | 3.826ms | 7.851ms | 9.721ms |
+| Burst T10/S50-S300-S50 | Primary + Replica + MV | 20.830ms | 29.034ms | 32.369ms | 3.826ms | 7.851ms | 9.721ms |
 
-API timing과 datasource target도 의도대로 관측됐다.
+`pg_stat_statements` 기준 `statistics_mv` query group은 Single DB 조건에서는 Primary에, Primary + Replica 조건에서는 Replica에 누적됐다.
 
-| Condition | Scenario | `datasource_target` | `statistics.repository.jdbc` avg |
-| --- | --- | --- | ---: |
-| Steady | Single DB + MV | `primary` | 0.902ms |
-| Steady | Primary + Replica + MV Hikari | `replica` | 0.935ms |
-| Burst | Single DB + MV | `primary` | 0.765ms |
-| Burst | Primary + Replica + MV Hikari | `replica` | 0.812ms |
+| 조건 | 구성 | 실행 DB | Calls | Mean exec |
+| --- | --- | --- | ---: | ---: |
+| Steady | Single DB + MV | Primary | 60,001.0 | 0.126ms |
+| Steady | Primary + Replica + MV | Replica | 60,000.7 | 0.128ms |
+| Burst | Single DB + MV | Primary | 60,002.7 | 0.101ms |
+| Burst | Primary + Replica + MV | Replica | 60,002.3 | 0.108ms |
 
-`pg_stat_statements` 기준으로도 `statistics_mv` query group은 Single DB 조건에서는 Primary에, Primary + Replica 조건에서는 Replica에 쌓였다.
+Primary write path query group도 큰 악화 없이 유지됐다.
 
-| Condition | Scenario | DB | Query group | Calls | Mean exec |
-| --- | --- | --- | --- | ---: | ---: |
-| Steady | Single DB + MV | Primary | `statistics_mv` | 60,001.0 | 0.126ms |
-| Steady | Primary + Replica + MV Hikari | Replica | `statistics_mv` | 60,000.7 | 0.128ms |
-| Burst | Single DB + MV | Primary | `statistics_mv` | 60,002.7 | 0.101ms |
-| Burst | Primary + Replica + MV Hikari | Replica | `statistics_mv` | 60,002.3 | 0.108ms |
-
-Primary write path query group도 큰 악화 없이 비슷한 수준으로 유지됐다.
-
-| Condition | Query group | Single DB Primary mean | Primary + Replica Primary mean |
+| 조건 | Query group | Single DB Primary mean | Primary + Replica Primary mean |
 | --- | --- | ---: | ---: |
 | Steady | `balance` | 0.579ms | 0.600ms |
 | Steady | `wallet_transfer_request` | 0.042ms | 0.041ms |
@@ -2234,123 +2195,92 @@ Primary write path query group도 큰 악화 없이 비슷한 수준으로 유�
 | Burst | `wallet_transaction` | 0.099ms | 0.099ms |
 | Burst | `idempotency` | 0.087ms | 0.088ms |
 
-보수적으로는 아래처럼 해석한다.
+HikariCP 기반 동일 조건 A/B에서 Read Replica 구조는 `MATERIALIZED_VIEW` 통계 read를 Replica로 분리했고, 통계 API latency는 Single DB와 유사하거나 소폭 낮은 수준으로 확인됐다. 송금 API latency와 Primary write path SQL 지표도 큰 악화 없이 유지됐다.
 
-```text
-Hikari 기반 동일 조건 A/B에서 Read Replica 구조는 통계 read burst를 Replica로 분리하면서,
-통계 API latency를 Single DB와 유사하거나 소폭 낮은 수준으로 유지했다.
-송금 API latency와 Primary write path query group은 큰 악화 없이 유지됐다.
-```
+이를 통해 HikariCP 기반 Read Replica 구조가 통계 read 부하를 Primary write path에서 분리하는 데 유효함을 확인했다. 이 결과는 송금 API 자체의 성능 개선을 의미하지 않는다.
 
-이는 송금 API 성능 개선을 확정했다는 뜻이 아니다.
+### 30.5 Primary 유지 대상과 Replica 분리 대상
 
-### 30.6 dataAsOf / lag 정책 반영 기준
+Replica 분리 대상은 아래로 제한한다.
 
-Replica 통계 조회는 최신성 지연 가능성이 있으므로 응답 정책이 필요하다.
+* `MATERIALIZED_VIEW` 기반 월별 거래 통계 조회
 
-후속 구현 후보는 아래 필드다.
+Primary 유지 대상은 아래다.
 
-| 필드 | 의미 |
-| --- | --- |
-| `source` | `PRIMARY` 또는 `REPLICA` |
-| `dataAsOf` | 응답 데이터가 어느 시점 기준인지 나타내는 값 |
-| `replicaLagMillis` | Replica replay 지연을 호출자가 이해할 수 있는 단위로 표현한 값 |
-| `stale` | 통계가 최신이 아닐 수 있음을 명시하는 값 |
+* 송금 처리
+* 잔액 조회 및 검증
+* 최신 거래 상태 판단
+* `Idempotency-Key` 처리
+* recovery / reconciliation
+* 장애 거래 판단
+* 원장 정합성 판단
 
-lag 정책 후보는 Section 29와 동일하다.
+따라서 이번 Read Replica 도입은 전체 조회 분산이 아니라, 통계 read model에 한정한 선택적 분리다.
+
+### 30.6 dataAsOf / lag 정책
+
+Read Replica 통계 조회는 최신성 지연 가능성이 있으므로, 후속 구현에서는 `source`, `dataAsOf`, `replicaLagMillis`, `stale` 필드를 응답에 포함하는 정책을 검토한다.
 
 | Replica lag | 응답 정책 후보 |
 | ---: | --- |
-| `lag <= 5초` | Replica 응답 허용, `stale=false` |
-| `5초 < lag <= 30초` | Replica 응답 가능, `stale=true` |
+| `lag <= 5초` | Replica 응답, `stale=false` |
+| `5초 < lag <= 30초` | Replica 응답, `stale=true` |
 | `lag > 30초` | 통계 일시 지연 응답 또는 제한적 Primary fallback 검토 |
 
-lag가 커질 때 무조건 Primary fallback하면 read burst 상황에서 Primary 보호 효과가 약해질 수 있다. 따라서 월별 통계는 Replica + `dataAsOf`를 기본으로 하고, 과도한 lag에서는 stale 표시 또는 통계 일시 지연 응답을 우선 검토한다.
+lag가 커질 때 무조건 Primary fallback하면 read burst가 다시 Primary로 몰릴 수 있다. Primary 보호가 필요한 상황에서는 stale 표시 또는 통계 일시 지연 응답을 우선 검토한다.
 
-송금/잔액/최신 거래 상태는 항상 Primary를 사용한다.
+이 정책은 월별 통계와 같은 파생 read model에만 적용한다. 송금, 잔액, 최신 거래 상태, recovery, reconciliation 및 원장 정합성 판단은 Replica lag를 허용하지 않고 Primary를 사용한다.
 
-### 30.7 현재 기준 결론
+### 30.7 결론
 
-현재 로컬 Docker 검증 기준으로, `MATERIALIZED_VIEW` 기반 월별 통계 조회는 Read Replica 후보로 둘 수 있다.
+로컬 Docker 기반 검증 기준으로, XChangePass는 `MATERIALIZED_VIEW` 월별 통계 조회에 한정해 Read Replica 기반 통계 read 분리 구조를 도입 완료했다.
 
-그 근거는 아래다.
+HikariCP 기반 Single DB + MV와 Primary + Read Replica + MV를 동일한 mixed load 조건에서 비교한 결과, 통계 read는 Replica로 정상 분리됐고 통계 API latency는 Single DB와 유사하거나 소폭 낮은 수준으로 확인됐다. 송금 API latency와 Primary write path query group도 큰 악화 없이 유지됐다.
 
-* `GROUP_BY` 대비 `MATERIALIZED_VIEW` 조회가 Java benchmark, EXPLAIN, k6 read에서 안정적인 경향을 보였다.
-* MV 조회는 unique index 기반 index scan으로 처리됐고, `statistics_mv` SQL mean exec가 0.1ms대 수준으로 관측됐다.
-* Hikari 기반 Primary/Replica datasource를 사용하면 `MATERIALIZED_VIEW` 통계 read가 Replica로 라우팅되는 것을 확인했다.
-* 운영형 steady/burst mixed load에서 통계 API latency는 Single DB와 유사하거나 소폭 낮은 수준으로 유지됐다.
-* 송금 API latency와 Primary write path query group은 큰 악화 없이 유지됐다.
-* Hikari pending은 Primary/Replica 모두 0이었다.
-* WAL lag는 실행 중 일시적으로 발생했지만 종료 시점에는 0이었다.
+다만 XChangePass는 실제 운영 서비스가 아니다. 따라서 이 결과는 운영 배포 완료가 아니라 프로젝트 내 구조 도입 및 검증 완료로 표현한다. 클라우드 EC2 3대 환경 재현 결과는 별도 작업에서 추가 반영한다.
 
-다만 이는 로컬 Docker 기반 검증이다. 운영 환경 도입 완료나 실제 사용자 트래픽 개선으로 표현하지 않는다.
-
-### 30.8 단정하지 않는 것
-
-아래 내용은 단정하지 않는다.
-
-* Read Replica 도입 완료라고 말하지 않는다.
-* 운영 환경 검증 완료라고 말하지 않는다.
-* 송금 API 성능이 개선됐다고 단정하지 않는다.
-* 통계 API가 항상 빨라진다고 말하지 않는다.
-* Replica가 Single DB보다 항상 좋다고 말하지 않는다.
-* `dataAsOf` 정책이 구현 완료됐다고 말하지 않는다.
-* 클라우드 검증 결과를 아직 반영하지 않는다.
-* `MATERIALIZED_VIEW`가 모든 통계 요구사항에서 항상 최적이라고 말하지 않는다.
-* `SUMMARY`가 불필요하다고 단정하지 않는다.
-* `GROUP_BY`가 항상 부적합하다고 단정하지 않는다.
-
-현재 결론은 “로컬 검증 기준의 후보 판단”이다.
-
-### 30.9 포트폴리오/면접 표현 후보
-
-사용 가능한 표현 후보는 아래다.
+### 30.8 포트폴리오 표현 후보
 
 ```text
-MATERIALIZED_VIEW 기반 월별 통계 조회를 Read Replica 후보로 제한 routing하고,
-Hikari 기반 Single DB와 Primary+Replica 구조를 동일 조건으로 비교했습니다.
+MATERIALIZED_VIEW 기반 월별 통계 조회를 Read Replica로 분리하는 구조를 도입하고,
+HikariCP 기반 Single DB와 Primary + Replica 조건을 동일 mixed load로 비교했습니다.
 ```
 
 ```text
-운영형 steady/burst 혼합 부하에서 통계 read가 Replica로 이동하는 것을 pg_stat_statements로 확인했고,
-송금 API latency와 Primary write path query group은 큰 악화 없이 유지되는 경향을 확인했습니다.
+운영 상황을 가정한 steady/burst 혼합 부하에서
+statistics_mv query group이 Primary에서 Replica로 이동하는 것을 pg_stat_statements로 확인했고,
+송금 API latency와 Primary write path SQL 지표는 큰 악화 없이 유지됐습니다.
 ```
 
 ```text
-Replica 통계 조회의 HTTP latency 증가 원인을 계층별 timing으로 분해해
+초기 Replica latency 증가 원인을 계층별 timing으로 분해해
 DriverManagerDataSource 기반 JDBC 호출 비용으로 좁혔고,
-Hikari 전환 후 repository.jdbc 병목이 해소되는 것을 확인했습니다.
+Replica datasource를 HikariCP로 전환해 최종 비교 조건을 정리했습니다.
 ```
 
 ```text
-다만 로컬 Docker 기반 검증이므로 운영 도입 완료가 아니라,
-통계 read 부하 분리를 위한 후보 구조로 정리했습니다.
+이를 통해 통계 read 부하를 Primary write path에서 선택적으로 분리하는 구조의 유효성을 검증했습니다.
 ```
+
+### 30.9 피해야 할 표현
 
 피해야 할 표현은 아래다.
 
-```text
-Read Replica를 도입해 송금 API 성능을 개선했습니다.
-Read Replica로 운영 통계 부하를 분리했습니다.
-Replica를 적용해 통계 API가 항상 빨라졌습니다.
-운영 환경에서 검증 완료했습니다.
-```
+* 실제 운영 서비스에 Read Replica를 배포했습니다.
+* 실제 사용자 트래픽에서 운영 검증을 완료했습니다.
+* Read Replica 도입으로 송금 API 성능을 개선했습니다.
+* 모든 조회를 Replica로 분산했습니다.
+* 통계 API가 항상 빨라졌습니다.
 
-XChangePass는 실제 운영 서비스가 아니라 개발 및 검증 프로젝트이므로, 운영 경험처럼 표현하지 않는다.
+대신 아래처럼 프로젝트 구현·검증과 운영 배포를 구분한다.
+
+```text
+Read Replica 기반 통계 조회 구조는 XChangePass 프로젝트에 도입 완료했다.
+다만 실제 운영 서비스 배포 완료로 표현하지 않는다.
+```
 
 ### 30.10 클라우드 결과 반영 예정
 
 AWS EC2 3대 환경 재현 검증은 별도 작업에서 진행한다.
 
-해당 결과가 완료되면 본 문서의 후속 섹션에서 로컬 Section 28 결과와 비교해 반영한다. 클라우드 결과를 반영할 때는 아래 항목을 로컬 결과와 나란히 비교한다.
-
-* 통계 API latency
-* 송금 API latency
-* `statistics_mv` query group 위치와 mean exec
-* Primary write path query group
-* Primary/Replica CPU
-* Hikari pending/acquire
-* WAL lag와 replay delay
-* `dataAsOf` 정책 적용 가능성
-
-클라우드 결과가 나오기 전까지는 로컬 결과를 운영 환경 결과로 확장하지 않는다.
+해당 결과가 완료되면 로컬 HikariCP 결과와 비교해 후속 섹션에 반영한다.
