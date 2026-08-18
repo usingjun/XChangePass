@@ -45,3 +45,19 @@
 - Node 전환 후에도 Claude Code의 Bash 도구가 `~/.zshrc`에 등록된 `fnm`의 셸 훅(`eval "$(fnm env --use-on-cd)"`)을 타지 않아서, `node -v`/`npm -v`가 여전히 Homebrew 시스템 Node(v23.x)를 가리키는 걸 발견했다. 매 명령 앞에 `eval "$(fnm env)"`를 직접 붙여야 한다는 걸 알아내서 `xcp-front-react/CLAUDE.md`에 기록해뒀다.
 
 **아쉬웠던 점**: 승인 요청이 잦았던 건(의존성 목록, 포트, React 버전, 라우터 버전) 결과적으로 다 타당한 이유가 있었지만, `npm audit`/`npm view` 조사를 먼저 다 끝내고 한 번에 종합해서 물어봤으면 왕복 횟수를 줄일 수 있었을 것 같다 — `react-router-dom`의 CVE는 실제로 v6로 한 번 설치를 마친 뒤에야 `npm audit`으로 발견됐는데, 처음 버전을 제안하는 시점에 보안 advisory까지 미리 확인했다면 처음부터 v7로 제안했을 것이다. 또 Bash 도구가 비대화형이라 `fnm`/`nvm` 셸 훅을 안 태운다는 사실은 어디에도 문서화돼 있지 않아서, 실패를 직접 겪고 나서야 알아냈다 — 이런 셸 초기화 차이는 도구 쪽에서 미리 알려줬으면 더 빨리 진단할 수 있었을 부분이다.
+
+---
+
+## 2단계 — PostToolUse Hook으로 lint/typecheck 강제
+
+**사용한 기능**: `.claude/settings.json`의 `PostToolUse` Hook. `Write`/`Edit` 도구 호출이 끝난 직후 하네스(도구 실행 레이어)가 무조건 실행하는 셸 커맨드.
+
+**CLAUDE.md(지시)와 Hook(강제)의 차이**: `xcp-front-react/CLAUDE.md`에는 이미 "코드 수정 후 lint/typecheck 실행"이라는 문구가 있었지만, CLAUDE.md는 모델 컨텍스트에 주입되는 지시문일 뿐이다 — 모델이 그 지시를 매번 스스로 상기하고 "따르기로 판단"해야 실행된다. 컨텍스트가 길어지거나, 한 턴에 여러 파일을 연속으로 고치거나, 대화가 압축(compact)되면 지켜지지 않을 수 있는 권고 수준이다. 반면 Hook은 모델의 판단을 거치지 않는다 — Edit/Write 도구 호출이 성공하면 모델이 그 사실을 "기억"하고 있는지와 무관하게 하네스가 등록된 커맨드를 실행한다. CLAUDE.md는 "이렇게 해줘"이고 Hook은 "이건 무조건 일어난다"는 차이다. 다만 강제되는 건 "실행 여부"뿐이다 — 지금 구성은 lint/typecheck를 그냥 돌리고 종료 코드로 결과를 남기는 수준이라, 실패를 모델이 반드시 그 자리에서 보고 고치게 만드는 것(hook의 `decision: "block"` 출력)까지는 하지 않았다.
+
+**왜 이 시점에 도입했는지**: 직전 세션들(auto/fixed layout 토글, 6.3 가상화)에서 한 요청 안에 `TransactionTable.tsx`/`columns.tsx`/`setupTests.ts`/테스트 파일 여러 개를 연속으로 고치는 멀티파일 변경이 반복됐다. 매번 마지막에 수동으로 `npm run lint && npm run typecheck`를 실행하긴 했지만, 이건 "실행하는 걸 잊지 않았기 때문"이지 구조적으로 보장된 결과가 아니었다 — CLAUDE.md 지시문이 그 세션에서 우연히 지켜진 것이지, 다음 세션·다음 대화에서도 지켜진다는 보장은 없다. 한 턴에 손대는 파일 수가 늘어날수록 "다 고치고 나서 검증을 건너뛸" 여지도 함께 늘어나므로, CLAUDE.md에 지시를 더 강한 문구로 다시 적는 대신 이 시점에 Hook으로 전환해 매 Edit/Write 직후 자동으로 검증되게 만들었다.
+
+**실제로 있었던 일**: `.claude/settings.json`(프로젝트 공유 설정 — git에 커밋되는 파일이라 개인 전용인 `settings.local.json`과는 분리)에 `PostToolUse` Hook을 새로 추가했다(기존에 등록된 Hook은 없었다). 매처는 `Write|Edit`, 커맨드는 `tool_input.file_path`가 `xcp-front-react/` 아래인지 `jq`로 먼저 걸러낸 뒤에만 `cd xcp-front-react && eval "$(fnm env)" && npm run lint && npm run typecheck`를 실행한다 — 그 디렉터리 밖(백엔드 Java, `docs/` 등)을 고칠 때는 아무 것도 실행되지 않는다. `eval "$(fnm env)"`가 필요한 이유는 `xcp-front-react/CLAUDE.md`에 이미 기록돼 있던 것과 같은 문제다: Bash 도구는 비대화형 셸이라 `~/.zshrc`의 `fnm` 훅을 안 타서, 이게 없으면 Homebrew 시스템 Node(v23)로 실행돼 이 프로젝트가 요구하는 Node 24 LTS 전제가 깨진다.
+
+동작 확인은 두 단계로 했다. 먼저 실제 Hook이 받는 것과 같은 JSON을 stdin으로 직접 파이프해 커맨드 자체가 의도대로 동작하는지 확인했고(정상적으로 lint/typecheck 실행, `xcp-front-react/` 밖 파일 경로는 8ms 만에 no-op으로 빠짐), 그다음 커맨드 맨 앞에 sentinel 로깅(`echo ... >> /tmp/claude-hook-check.txt`)을 임시로 붙여 실제 `.gitignore` 파일에 대한 진짜 Edit 도구 호출로 트리거해봤다. 세션 시작 시점에는 `.claude/settings.json` 자체가 존재하지 않았는데도(그 디렉터리에 `settings.local.json`만 있었다) Hook이 곧바로 잡혔다. sentinel과 검증용으로 `.gitignore`에 잠깐 추가했던 주석 줄은 확인 직후 모두 원복했다.
+
+**아쉬웠던 점**: 이 Hook은 파일 하나를 고칠 때마다 lint(전체 파일 대상 ESLint) + typecheck(`tsc -b`, 프로젝트 전체 참조 빌드) 전체를 다시 돈다. 이번 작업 범위(한 턴에 파일 몇 개)에서는 몇 초 수준이라 문제없었지만, 같은 세션에서 짧은 간격으로 훨씬 많은 파일을 연속 수정하게 되면 매번 전체 재검사가 누적돼 체감 지연이 커질 수 있다 — 파일 수가 크게 늘어나면 "이번에 바뀐 파일만" 보는 lint-staged류 구성으로 좁히는 걸 고려할 만하다. 또 지금은 실패해도 그냥 종료 코드만 남기고 넘어가므로, 실패를 사람이 스크롤을 올려 직접 확인해야 알아챈다 — 정말 "강제"하려면 실패 시 `decision: "block"`으로 모델 턴에 사유를 주입해 그 자리에서 고치게 만드는 단계가 다음으로 남아 있다.
