@@ -1,4 +1,4 @@
-import { legacyCreateColumnHelper } from '@tanstack/react-table/legacy'
+import { createColumnHelper, tableFeatures } from '@tanstack/react-table'
 import type {
   CardTransactionType,
   TransactionDirection,
@@ -87,9 +87,14 @@ function renderAmount(row: TransactionResponse): string {
   }
 }
 
-const columnHelper = legacyCreateColumnHelper<TransactionResponse>()
+// sorting/filtering/pagination 등 어떤 v9 feature도 등록하지 않는다 — 이 baseline은
+// row model 그대로 렌더링만 한다. TransactionTable이 useTable에 넘길 때도 이 features를 그대로 써야
+// 컬럼 제네릭(TFeatures)이 일치한다.
+export const features = tableFeatures({})
 
-export const transactionColumns = [
+const columnHelper = createColumnHelper<typeof features, TransactionResponse>()
+
+export const transactionColumns = columnHelper.columns([
   columnHelper.accessor('transactionTime', {
     id: 'transactionTime',
     header: '거래일시',
@@ -115,4 +120,4 @@ export const transactionColumns = [
     id: 'amount',
     header: '금액',
   }),
-]
+])

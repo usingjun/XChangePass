@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { flexRender } from '@tanstack/react-table'
-import { useLegacyTable } from '@tanstack/react-table/legacy'
+import { useTable } from '@tanstack/react-table'
 import type { TransactionResponse } from '../types'
-import { transactionColumns } from './columns'
+import { features, transactionColumns } from './columns'
 
 interface TransactionTableProps {
   data: TransactionResponse[]
@@ -16,9 +15,10 @@ interface TransactionTableProps {
 const SCROLL_CONTAINER_HEIGHT = 640
 
 function TransactionTable({ data, virtualized, onReachEnd }: TransactionTableProps) {
-  const table = useLegacyTable({
-    data,
+  const table = useTable({
+    features,
     columns: transactionColumns,
+    data,
   })
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -62,9 +62,7 @@ function TransactionTable({ data, virtualized, onReachEnd }: TransactionTablePro
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <th key={header.id}>
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
+                  {header.isPlaceholder ? null : <table.FlexRender header={header} />}
                 </th>
               ))}
             </tr>
@@ -73,8 +71,10 @@ function TransactionTable({ data, virtualized, onReachEnd }: TransactionTablePro
         <tbody>
           {table.getRowModel().rows.map((row) => (
             <tr key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+              {row.getAllCells().map((cell) => (
+                <td key={cell.id}>
+                  <table.FlexRender cell={cell} />
+                </td>
               ))}
             </tr>
           ))}
