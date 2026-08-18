@@ -59,3 +59,40 @@ npm run build:benchmark && npm run preview:benchmark
 - 10,000건에서는 Scripting 10% 감소로 효과가 작음 → 데이터가 많을수록 auto layout의 컬럼 폭 재계산 비용이 커진다는 가설과 일치.
 - 다만 fixed 적용 후에도 30,000건 기준 약 7초 정지가 남음 → CSS만으로는 부족하고 DOM 노드 수 자체를 줄여야 한다.
 - 10,000건 Frames가 fixed에서 더 높게 나온 것은 단일 측정이라 노이즈 가능성이 있음.
+
+## 가상화 적용 후
+
+`TransactionTable`의 `virtualized` prop(`@tanstack/react-virtual`, 6.3 가상화)을 켜서 위 "주요 결과" 표와 같은 데이터 볼륨을 다시 측정했다. 전/후 값은 별도의 단발 측정 실행값이며 보정하지 않고 그대로 기록한다.
+
+### 30,000건 (가상화 ON)
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| DOM 행 | 30,000 | 25 |
+| Scripting | 4,067ms | 196ms |
+| Rendering | 2,685ms | 4ms |
+| Painting | 169ms | 6ms |
+| 합계 | 7,160ms | 247ms |
+| Heap | 652MB | 36.0MB |
+
+### 100,000건 (가상화 ON)
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| DOM 행 | 100,000 | 25 |
+| Scripting | 34,949ms | 87ms |
+| Rendering | 12,158ms | 2ms |
+| Painting | 482ms | 3ms |
+| System | 706ms | 55ms |
+| 합계 | 48,295ms | 147ms |
+| Heap | 2,078MB (탭 크래시) | 58.6MB |
+
+### 1,000건
+
+가상화 OFF 시 DOM 행 1,000, ON 시 25로 확인.
+
+### 관찰
+
+- DOM 행 수가 데이터 양(1천~10만)과 무관하게 25로 고정됨.
+- Heap 상위 항목이 브라우저 레이아웃 객체(`LayoutTableCell` 등)에서 JS 데이터 객체(`Object`, `array`, `string`)로 바뀜 → 남은 메모리는 DOM이 아니라 데이터 배열 자체.
+- 100,000건(147ms)이 30,000건(247ms)보다 빠르게 측정된 것은 단일 측정 노이즈이나, 두 경우 모두 DOM 행이 25로 동일해 렌더 비용이 데이터 양과 분리되었음을 보여준다.
