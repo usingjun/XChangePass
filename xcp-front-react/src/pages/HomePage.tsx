@@ -9,9 +9,10 @@ function HomePage() {
           <li>
             <Link to="/transactions">거래내역</Link>
           </li>
-          {import.meta.env.DEV && (
+          {/* router/index.tsx와 동일한 조건 — 공용 상수로 추출하지 않은 이유는 그쪽 주석 참고 */}
+          {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_BENCHMARK === 'true') && (
             <li>
-              <Link to="/dev/transaction-benchmark">거래내역 렌더링 벤치마크 (개발 전용)</Link>
+              <Link to="/dev/transaction-benchmark">거래내역 렌더링 벤치마크 (개발/측정 전용)</Link>
             </li>
           )}
         </ul>

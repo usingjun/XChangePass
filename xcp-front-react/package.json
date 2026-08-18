@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:benchmark": "tsc -b && vite build --mode benchmark --outDir dist-benchmark",
     "preview": "vite preview",
+    "preview:benchmark": "vite preview --outDir dist-benchmark",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
