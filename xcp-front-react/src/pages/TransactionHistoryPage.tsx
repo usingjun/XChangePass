@@ -53,7 +53,9 @@ function TransactionHistoryPage() {
   return (
     <main className="transaction-history-page">
       <h1>거래내역</h1>
-      <TransactionTable data={transactions} virtualized={false} onReachEnd={handleReachEnd} />
+      {/* 무한스크롤로 누적되는 화면이라 데이터가 계속 커진다 — virtualized=true로 DOM 행 수를
+          뷰포트 크기에 묶어둔다(6.3 가상화, docs/benchmarks/frontend-transaction-table-rendering-2026-08-18.md). */}
+      <TransactionTable data={transactions} virtualized onReachEnd={handleReachEnd} />
       {isFetchingNextPage && <p role="status">다음 페이지를 불러오는 중입니다...</p>}
     </main>
   )

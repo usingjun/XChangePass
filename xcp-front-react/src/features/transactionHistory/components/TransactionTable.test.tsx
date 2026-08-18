@@ -21,11 +21,22 @@ describe('TransactionTable', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
-  it('does not render the naive table when virtualized (true path is not implemented yet)', () => {
+  it('renders every row when virtualized but the data fully fits within the viewport + overscan', () => {
     const data = generateTransactionFixtures(3, 7)
 
     render(<TransactionTable data={data} virtualized />)
 
-    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getAllByRole('row')).toHaveLength(data.length + 1) // +1 for header row
+  })
+
+  it('renders far fewer DOM rows than the data volume when virtualized with a large dataset', () => {
+    const data = generateTransactionFixtures(5_000, 11)
+
+    render(<TransactionTable data={data} virtualized />)
+
+    const rowCount = screen.getAllByRole('row').length
+    expect(rowCount).toBeGreaterThan(1) // header + at least some data rows
+    expect(rowCount).toBeLessThan(data.length + 1) // windowed, not the full dataset
   })
 })

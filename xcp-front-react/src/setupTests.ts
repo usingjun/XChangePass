@@ -21,3 +21,16 @@ class IntersectionObserverStub implements IntersectionObserver {
 }
 
 vi.stubGlobal('IntersectionObserver', IntersectionObserverStub)
+
+// jsdom은 실제 CSS 레이아웃 엔진이 없어 offsetHeight가 항상 0이다. @tanstack/react-virtual은
+// 스크롤 컨테이너와 각 행의 세로 크기를 offsetHeight로 측정해 가상 스크롤 범위(어떤 행을 DOM에
+// 마운트할지)를 계산하므로, 0이 계속 나오면 데이터 크기와 무관하게 행이 하나도(또는 거의) 렌더링되지
+// 않아 가상화 테스트가 실제 동작과 무관하게 깨진다. inline style에 height가 있으면(TransactionTable의
+// 스크롤 컨테이너처럼) 그 값을, 없으면(측정 대상인 개별 행) 고정 추정치를 돌려주는 최소 스텁을 건다.
+Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+  configurable: true,
+  get() {
+    const inlineHeight = Number.parseFloat(this.style.height)
+    return Number.isNaN(inlineHeight) ? 36 : inlineHeight
+  },
+})

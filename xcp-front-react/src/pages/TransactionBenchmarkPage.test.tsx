@@ -20,13 +20,15 @@ describe('TransactionBenchmarkPage', () => {
     expect(screen.getAllByRole('row')).toHaveLength(10_000 + 1)
   })
 
-  it('shows the not-yet-implemented placeholder when virtualized is toggled on', async () => {
+  it('renders far fewer DOM rows than the data volume once virtualization is toggled on', async () => {
     const user = userEvent.setup()
     render(<TransactionBenchmarkPage />)
 
     await user.click(screen.getByRole('checkbox', { name: '가상화' }))
 
-    expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.getByText(/가상화 렌더링은 다음 단계에서 구현 예정입니다/)).toBeInTheDocument()
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    const rowCount = screen.getAllByRole('row').length
+    expect(rowCount).toBeGreaterThan(1) // header + at least some data rows
+    expect(rowCount).toBeLessThan(1_000 + 1) // windowed, not the full default volume
   })
 })
