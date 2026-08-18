@@ -59,12 +59,38 @@ Playwright 브라우저 바이너리는 아직 설치 안 했다. 첫 e2e 테스
 - **TypeScript는 5.9.3 고정** (npm `latest` 태그는 7.0.2인 TS7 Go 컴파일러이지만 사용하지 않음): `typescript-eslint`의 peerDependency가 아직 `typescript: '>=4.8.4 <6.1.0'`라 TS7을 지원하지 않는다.
 - **ESLint flat config 함정**: `eslint-plugin-react-hooks@7.x`의 `configs['recommended-latest']`는 legacy eslintrc 스타일(`plugins: ["react-hooks"]` 배열)이라 flat config(ESLint 10)에서 에러가 난다. 반드시 `configs.flat.recommended`(plugins가 객체 형태)를 써야 한다 — `eslint.config.js` 참고.
 
+## TanStack Table 버전 결정 로그 (legacy 브릿지 → v9 네이티브 마이그레이션)
+
+스캐폴딩 시점 `@tanstack/react-table@9.1.2`가 이미 설치돼 있었는데, v9은 v8과 API가 완전히 재설계됐다(`useReactTable` → `useTable`+`tableFeatures()` 조합, atom 기반 상태). 거래내역 baseline 1차 구현은 `@tanstack/react-table/legacy`가 제공하는 v8 호환 브릿지(`useLegacyTable`/`legacyCreateColumnHelper`)로 만들었다(체크포인트 커밋 `2fc7f25`). 이후 v9 네이티브로 마이그레이션했다(체크포인트 커밋 `06ff105`).
+
+**마이그레이션 근거**: 이 프로젝트의 `columns.tsx`/`TransactionTable.tsx`는 sorting/filtering/pagination 등 v9 breaking change가 몰린 기능을 전혀 안 쓴다(`tableFeatures({})`로 충분) — 그래서 마이그레이션 비용이 예외적으로 작았다(2개 파일, 10줄 안팎, `row.getVisibleCells()`→`row.getAllCells()` 한 건만 typecheck에서 걸림. `getVisibleCells()`는 v9에서 `columnVisibilityFeature`를 등록한 테이블에만 존재). 또한 `node_modules/@tanstack/react-table/skills/migrate-v8-to-v9/SKILL.md`(라이브러리가 9.1.2에 직접 동봉한 문서)가 "`useLegacyTable`은 임시 브릿지이며 신규 코드의 종착지로 쓰지 말 것"이라고 명시한다. 마이그레이션 후 프로덕션 번들도 오히려 작아졌다(483.85KB→399.01KB, gzip 149.26KB→128.27KB) — `tableFeatures({})`는 안 쓰는 기능을 트리셰이킹하지만 legacy 브릿지는 v8 호환을 위해 filter/sort/aggregation 레지스트리를 통째로 번들에 넣기 때문으로 보인다.
+
+마이그레이션 중 우연히 드러난, 마이그레이션 자체와는 무관한 기존 테스트 인프라 결함 2건도 같이 고쳤다(`06ff105`): `setupTests.ts`에 `@testing-library/react`의 `cleanup`이 자동 등록 안 돼 있어(vitest `test.globals: false`) 파일당 테스트가 2개 이상이면 DOM이 다음 테스트로 누수되는 문제, jsdom이 `IntersectionObserver`를 구현하지 않아 무한 스크롤 sentinel을 쓰는 컴포넌트를 렌더링만 해도 터지는 문제.
+
+### @tanstack/react-virtual + v9 네이티브 결합 — 문서상 예고가 아니라 실제 동작 코드임을 확인
+
+다음 단계(가상화) 전에, `with-tanstack-virtual` skill이 인용하는 공식 예제 `TanStack/table` 저장소의 `examples/react/virtualized-rows`를 GitHub API로 직접 확인했다(`gh api repos/TanStack/table/contents/...`):
+
+- `package.json`: `@tanstack/react-table: ^9.1.2`, `@tanstack/react-virtual: ^3.14.9` — **이 프로젝트의 `node_modules` 버전과 정확히 일치**.
+- `src/main.tsx`: 20만~100만 행 스트레스 테스트 버튼까지 있는, 동적 행 높이 측정 + sticky header + 정렬/선택 기능을 포함한 완전한 `useTable`+`useVirtualizer` 조합 구현.
+- `tests/e2e/smoke.spec.ts`: 예제를 실제로 빌드해 브라우저로 띄우고 "페이지 에러 없이 테이블이 렌더된다", "Regenerate Data 버튼으로 데이터가 바뀐다"를 검증하는 진짜 Playwright e2e 테스트.
+- 이 e2e는 `.github/workflows/release.yml`의 `audit` job(`pnpm run test:e2e`)에서 **main/alpha/beta 브랜치 push마다 자동 실행**된다. 단 `release` job 뒤에 오는 사후 audit이라 **퍼블리시를 막는 사전 게이트는 아니다** — 실패해도 배포는 막히지 않고 사후에 드러난다.
+
+결론: 가상화 결합은 실행된 적 없는 문서가 아니라, 우리와 정확히 같은 패키지 버전으로 지속적으로(사전 게이트는 아니지만) 실행되는 실제 코드다. 다만 우리 프로젝트 고유 조합(React 19, Vite 8, 우리 컬럼 구조)의 미발견 엣지케이스까지 보장하진 않는다.
+
+### v8 다운그레이드를 폴백으로 남겨두는 이유
+
+v9은 `9.0.0`이 2026-08-04에 처음 stable로 나온, 이 판단 시점(2026-08-18) 기준 **2주짜리 메이저 릴리스**다(`npm view @tanstack/react-table time`으로 확인). 위 검증은 "가상화 자체는 동작하는 코드"까지만 보여주지 그 이상은 보장하지 않는다.
+
+- **폴백 트리거**: `@tanstack/react-virtual` 결합 단계에서 v9 네이티브 특유의 문제(atom 기반 상태와 얽힌 재렌더링 버그, 타입 추론 실패 등)로 막히고 합리적 시간 내에 해결이 안 될 때.
+- **폴백 방법**: `@tanstack/react-table@8.21.3`(2025-04-14 배포, peer `react: >=16.8`로 React 19와 호환)로 다운그레이드. 코드가 이미 한 번 legacy 브릿지(v8 API 형태)로 구현된 이력이 있어서(`2fc7f25`), v8로 되돌리는 diff는 v9 네이티브→legacy로 되돌리는 것보다도 작다 — 패키지 버전 교체 + `useTable`→`useReactTable`, `createColumnHelper<Features, T>()`→`createColumnHelper<T>()` 정도만 되돌리면 된다.
+
 ## 아키텍처 규칙
 
 - 서버 상태(TanStack Query 캐시)와 UI 상태(필터/모달 등 로컬 state)를 분리 유지한다.
-- 컬럼 정의는 feature별로 한 파일(`columns.tsx`)에 모아 관리한다(아직 미작성 — 거래내역 화면 구현 단계에서 추가).
+- 컬럼 정의는 feature별로 한 파일(`columns.tsx`)에 모아 관리한다.
 - 전체 프로젝트 TypeScript로만 작성한다. 새 `.js` 파일을 추가하지 않는다.
-- `src/features/transactionHistory/fixtures/`와 `/dev/...` 벤치마크 라우트는 개발 전용이며 production 빌드/라우팅에서 제외한다(아직 미작성). 벤치마크 결과 수치는 추측으로 채우지 않고 실측값만 `docs/benchmarks/`에 기록한다.
+- `src/features/transactionHistory/fixtures/`와 `/dev/...` 벤치마크 라우트는 개발 전용이며 production 빌드/라우팅에서 제외한다(`router/index.tsx`의 `import.meta.env.DEV` 분기 + `lazy` 동적 import로 실제 프로덕션 번들에서 빠지는 것을 확인함). 벤치마크 결과 수치는 추측으로 채우지 않고 실측값만 `docs/benchmarks/`에 기록한다.
 
 ## 디렉터리
 
