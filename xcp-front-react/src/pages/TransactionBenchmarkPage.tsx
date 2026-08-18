@@ -11,6 +11,8 @@ type Volume = (typeof VOLUMES)[number]
 function TransactionBenchmarkPage() {
   const [volume, setVolume] = useState<Volume>(1_000)
   const [virtualized, setVirtualized] = useState(false)
+  // table-layout: auto(기본값 미지정) vs fixed 비교용 — 같은 데이터로 auto/fixed 렌더 비용을 측정한다.
+  const [fixedLayout, setFixedLayout] = useState(false)
 
   // fixtures는 서버 상태가 아니라 이 페이지의 UI 선택(volume)에서 파생된 값이지만,
   // volume이 바뀌지 않는 한 매 렌더(예: virtualized 토글)마다 최대 10만 건을 다시
@@ -43,8 +45,16 @@ function TransactionBenchmarkPage() {
           />{' '}
           가상화
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={fixedLayout}
+            onChange={(event) => setFixedLayout(event.target.checked)}
+          />{' '}
+          fixed layout
+        </label>
       </div>
-      <TransactionTable data={fixtures} virtualized={virtualized} />
+      <TransactionTable data={fixtures} virtualized={virtualized} fixedLayout={fixedLayout} />
     </main>
   )
 }

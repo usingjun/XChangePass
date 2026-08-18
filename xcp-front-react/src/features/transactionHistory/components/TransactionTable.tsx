@@ -7,6 +7,9 @@ interface TransactionTableProps {
   data: TransactionResponse[]
   // 이번 단계에서는 false 경로만 구현한다. true는 다음 단계(6.3 가상화)에서 채운다.
   virtualized: boolean
+  // 벤치마크 전용: table-layout: auto(기본, 미지정 시)와 fixed를 비교 측정하기 위한 토글.
+  // TransactionHistoryPage는 이 prop을 넘기지 않으므로 실제 화면 동작은 그대로다.
+  fixedLayout?: boolean
   // 스크롤이 하단 sentinel에 도달했을 때 호출된다. 다음 페이지를 더 불러올지는
   // 이 콜백을 넘기는 쪽(서버 상태를 쥔 페이지)의 몫이지 이 컴포넌트의 몫이 아니다.
   onReachEnd?: () => void
@@ -14,7 +17,7 @@ interface TransactionTableProps {
 
 const SCROLL_CONTAINER_HEIGHT = 640
 
-function TransactionTable({ data, virtualized, onReachEnd }: TransactionTableProps) {
+function TransactionTable({ data, virtualized, fixedLayout = false, onReachEnd }: TransactionTableProps) {
   const table = useTable({
     features,
     columns: transactionColumns,
@@ -56,7 +59,14 @@ function TransactionTable({ data, virtualized, onReachEnd }: TransactionTablePro
 
   return (
     <div className="transaction-table__scroll" ref={scrollContainerRef} style={{ height: SCROLL_CONTAINER_HEIGHT }}>
-      <table className="transaction-table">
+      <table className={`transaction-table${fixedLayout ? ' transaction-table--fixed' : ''}`}>
+        {fixedLayout && (
+          <colgroup>
+            {table.getHeaderGroups()[0]?.headers.map((header) => (
+              <col key={header.id} style={{ width: header.getSize() }} />
+            ))}
+          </colgroup>
+        )}
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>

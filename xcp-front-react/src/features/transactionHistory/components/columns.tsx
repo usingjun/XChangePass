@@ -1,4 +1,4 @@
-import { createColumnHelper, tableFeatures } from '@tanstack/react-table'
+import { columnSizingFeature, createColumnHelper, tableFeatures } from '@tanstack/react-table'
 import type {
   CardTransactionType,
   TransactionDirection,
@@ -87,10 +87,11 @@ function renderAmount(row: TransactionResponse): string {
   }
 }
 
-// sorting/filtering/pagination 등 어떤 v9 feature도 등록하지 않는다 — 이 baseline은
-// row model 그대로 렌더링만 한다. TransactionTable이 useTable에 넘길 때도 이 features를 그대로 써야
-// 컬럼 제네릭(TFeatures)이 일치한다.
-export const features = tableFeatures({})
+// sorting/filtering/pagination 등은 여전히 등록하지 않는다 — row model 그대로 렌더링만 한다.
+// columnSizingFeature만 예외로 등록한다: table-layout: fixed 벤치마크 모드(TransactionTable의
+// fixedLayout prop)가 각 컬럼의 header.getSize()를 <colgroup>에 써야 해서 필요하다.
+// TransactionTable이 useTable에 넘길 때도 이 features를 그대로 써야 컬럼 제네릭(TFeatures)이 일치한다.
+export const features = tableFeatures({ columnSizingFeature })
 
 const columnHelper = createColumnHelper<typeof features, TransactionResponse>()
 
@@ -98,11 +99,13 @@ export const transactionColumns = columnHelper.columns([
   columnHelper.accessor('transactionTime', {
     id: 'transactionTime',
     header: '거래일시',
+    size: 180,
     cell: (info) => formatDateTime(info.getValue()),
   }),
   columnHelper.accessor((row) => row.data.transactionType, {
     id: 'transactionType',
     header: '유형',
+    size: 90,
     cell: (info) => {
       const type = info.getValue()
       return (
@@ -115,9 +118,11 @@ export const transactionColumns = columnHelper.columns([
   columnHelper.accessor((row) => renderDetail(row), {
     id: 'detail',
     header: '내용',
+    size: 280,
   }),
   columnHelper.accessor((row) => renderAmount(row), {
     id: 'amount',
     header: '금액',
+    size: 220,
   }),
 ])

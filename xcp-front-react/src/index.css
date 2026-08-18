@@ -31,6 +31,16 @@ body {
   font-size: 14px;
 }
 
+/* auto vs fixed table-layout 벤치마크 비교용. size는 columns.tsx의 columnHelper size로 지정한다. */
+.transaction-table--fixed {
+  table-layout: fixed;
+}
+
+.transaction-table--fixed tbody td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .transaction-table thead th {
   position: sticky;
   top: 0;
