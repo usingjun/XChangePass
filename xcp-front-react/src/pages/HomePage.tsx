@@ -1,8 +1,21 @@
+import { Link } from 'react-router-dom'
+
 function HomePage() {
   return (
     <main>
       <h1>xcp-front-react</h1>
-      <p>스캐폴딩 완료. 거래내역 통합조회 화면은 다음 단계에서 구현한다.</p>
+      <nav>
+        <ul>
+          <li>
+            <Link to="/transactions">거래내역</Link>
+          </li>
+          {import.meta.env.DEV && (
+            <li>
+              <Link to="/dev/transaction-benchmark">거래내역 렌더링 벤치마크 (개발 전용)</Link>
+            </li>
+          )}
+        </ul>
+      </nav>
     </main>
   )
 }

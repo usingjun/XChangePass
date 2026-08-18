@@ -57,3 +57,18 @@ export interface TransactionPageResponse {
   nextCursor: string | null
   hasNext: boolean
 }
+
+// bumblebee.xchangepass.domain.transaction.dto.cond.TransactionSearchCondition 대응.
+// cursor는 여기 포함하지 않는다 — API 클라이언트 계층에서 nextCursor를 echo하는 방식으로만 다룬다.
+export interface TransactionSearchCondition {
+  transactionType?: TransactionType
+  cardTransactionType?: CardTransactionType
+  merchantName?: string
+  minAmount?: string
+  maxAmount?: string
+  currency?: string
+  direction?: TransactionDirection
+  walletTransactionType?: WalletTransactionType
+  startDate?: string
+  endDate?: string
+}
