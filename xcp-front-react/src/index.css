@@ -1,0 +1,89 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.transaction-history-page,
+.transaction-benchmark-page {
+  padding: 24px;
+}
+
+.transaction-benchmark-page__controls {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.transaction-table__scroll {
+  overflow-y: auto;
+  border: 1px solid #d7dbe0;
+  border-radius: 4px;
+}
+
+.transaction-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+/* auto vs fixed table-layout 벤치마크 비교용. size는 columns.tsx의 columnHelper size로 지정한다. */
+.transaction-table--fixed {
+  table-layout: fixed;
+}
+
+.transaction-table--fixed tbody td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.transaction-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f5f6f8;
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid #d7dbe0;
+}
+
+.transaction-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #eceef1;
+  white-space: nowrap;
+}
+
+.transaction-table__empty,
+.transaction-table__placeholder {
+  padding: 24px;
+  color: #6b7280;
+  text-align: center;
+  border: 1px dashed #d7dbe0;
+  border-radius: 4px;
+}
+
+.transaction-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.transaction-badge--wallet {
+  background: #e0edff;
+  color: #1d4ed8;
+}
+
+.transaction-badge--card {
+  background: #ffe8d9;
+  color: #c2410c;
+}
+
+.transaction-badge--exchange {
+  background: #dcfce7;
+  color: #15803d;
+}

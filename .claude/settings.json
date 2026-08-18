@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; if [[ \"$f\" == *\"/xcp-front-react/\"* ]]; then (cd xcp-front-react && eval \"$(fnm env)\" && npm run lint && npm run typecheck); fi; }",
+            "timeout": 120,
+            "statusMessage": "Running lint/typecheck for xcp-front-react"
+          }
+        ]
+      }
+    ]
+  }
+}
